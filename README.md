@@ -6,7 +6,7 @@ writes them, Framio shows them live on an infinite canvas.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/harshit-ybm/framio/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/C-W-D-Harshit/framio/main/install.sh | sh
 ```
 
 Then in any project:

@@ -1,10 +1,10 @@
 #!/bin/sh
-# Framio installer: curl -fsSL https://raw.githubusercontent.com/harshit-ybm/framio/main/install.sh | sh
+# Framio installer: curl -fsSL https://raw.githubusercontent.com/C-W-D-Harshit/framio/main/install.sh | sh
 # Env overrides: FRAMIO_VERSION (tag, default latest), FRAMIO_INSTALL (default ~/.framio), FRAMIO_REPO,
 # FRAMIO_DOWNLOAD_URL (directory holding the release tarballs, for mirrors and testing).
 set -eu
 
-REPO="${FRAMIO_REPO:-harshit-ybm/framio}"
+REPO="${FRAMIO_REPO:-C-W-D-Harshit/framio}"
 VERSION="${FRAMIO_VERSION:-latest}"
 INSTALL_ROOT="${FRAMIO_INSTALL:-$HOME/.framio}"
 BIN_DIR="$INSTALL_ROOT/bin"
