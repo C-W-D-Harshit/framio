@@ -9,6 +9,7 @@ import { findFrame, scanProject, type Frame, type Page } from "./project";
 import { Screenshotter } from "./screenshotter";
 import { buildThemeCss } from "./tailwind";
 import { layoutFrames } from "../ui/layout";
+import { FRAME_CSS } from "../runtime/frame-style";
 
 const FIRST_PORT = 4747;
 
@@ -179,7 +180,7 @@ export async function runServer(root: string) {
 <meta name="viewport" content="width=${frame.meta.width}">
 <title>${frame.meta.name.replace(/</g, "&lt;")}</title>
 <link rel="stylesheet" href="/_theme.css?v=${css.version}">
-<style>:root{--fvh:${fvh}}html,body{margin:0}</style>
+<style>:root{--fvh:${fvh}}${FRAME_CSS}</style>
 <script>window.__FRAMIO_BOOT__=${JSON.stringify(boot).replace(/</g, "\\u003c")}</script>
 <script src="/_runtime.js"></script>
 </head>

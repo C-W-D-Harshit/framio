@@ -127,7 +127,9 @@ function readImage(p: ProjectPaths, page: string, fileName: string): Frame {
       metaError = `Could not parse ${fileName}.json: ${(err as Error).message}`;
     }
   }
-  const natural = imageSize(new Uint8Array(readFileSync(file)), ext) ?? { width: 1440, height: 900 };
+  const detected = imageSize(new Uint8Array(readFileSync(file)), ext);
+  if (!detected) metaError ??= `Could not read dimensions of ${fileName}. Check the image format or file contents.`;
+  const natural = detected ?? { width: 1440, height: 900 };
   const width = Math.max(1, Math.round(side.width ?? (natural.width >= 2400 ? natural.width / 2 : natural.width)));
   const height = Math.max(1, Math.round((natural.height * width) / natural.width));
   return {

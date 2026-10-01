@@ -23,6 +23,46 @@ function design(p: ReturnType<typeof project>, yaml: string) {
 }
 const svg = (attrs: string) => new TextEncoder().encode(`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}></svg>`);
 
+function portraitWebp(chunk: "VP8 " | "VP8L" | "VP8X") {
+  const buf = new Uint8Array(30);
+  const view = new DataView(buf.buffer);
+  buf.set(new TextEncoder().encode("RIFF"));
+  buf.set(new TextEncoder().encode(`WEBP${chunk}`), 8);
+  if (chunk === "VP8 ") {
+    view.setUint16(26, 390, true);
+    view.setUint16(28, 844, true);
+  } else if (chunk === "VP8L") {
+    view.setUint32(21, 389 | (843 << 14), true);
+  } else {
+    view.setUint16(24, 389, true);
+    view.setUint16(27, 843, true);
+  }
+  return buf;
+}
+
+test("raster dimensions follow file signatures rather than filename extensions", () => {
+  for (const chunk of ["VP8 ", "VP8L", "VP8X"] as const) {
+    for (const ext of ["png", "jpg", "webp"]) {
+      expect(imageSize(portraitWebp(chunk), ext)).toEqual({ width: 390, height: 844 });
+    }
+  }
+  const png = new Uint8Array(24);
+  png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  const view = new DataView(png.buffer);
+  view.setUint32(16, 390);
+  view.setUint32(20, 844);
+  expect(imageSize(png, "webp")).toEqual({ width: 390, height: 844 });
+});
+
+test("WebP references saved as PNG keep portrait proportions and width overrides", () => {
+  const p = project();
+  const file = join(p.pages, "01-moodboard", "mobile.png");
+  writeFileSync(file, portraitWebp("VP8 "));
+  expect(scanProject(p)[0]!.frames[0]!.meta).toMatchObject({ width: 390, height: 844 });
+  writeFileSync(`${file}.json`, JSON.stringify({ width: 195 }));
+  expect(scanProject(p)[0]!.frames[0]!.meta).toMatchObject({ width: 195, height: 422 });
+});
+
 test("image dimensions read a viewBox with decimals and preserve its aspect ratio", () => {
   expect(imageSize(svg('viewBox="-10 -20 390.5 844"'), "svg")).toEqual({ width: 390.5, height: 844 });
   expect(imageSize(svg('width="100%" height="100%" viewBox="0,0,4e2,2e2"'), "svg")).toEqual({ width: 400, height: 200 });

@@ -88,7 +88,7 @@ export const FrameNode = memo(function FrameNode({
         }}
       >
         {isImage && visible && (
-          <img src={imageUrl(frame)} alt={frame.meta.name} draggable={false} className="block size-full object-cover" />
+          <img src={imageUrl(frame)} alt={frame.meta.name} draggable={false} className="block size-full object-contain" />
         )}
         {!isImage && visible && useThumbs && (
           <img

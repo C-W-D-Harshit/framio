@@ -64,14 +64,38 @@ skip it and invent a product. Stop for the user's choice at the end of phase 2.
 
 ## Design skills (required)
 
-Load skills with `npx ui-skills get <slug>`, read them fully, and follow them. Load each once per
-session. For any design work, always load:
+Load external skills only when the current phase needs them. During the brief and research,
+read the Framio instructions, understand the request, ask necessary questions, and gather
+references. Do not fetch design or polish skills yet.
+
+Immediately before creating the first designed frame, load the required skills with
+`npx ui-skills get <slug>`, read them fully, and follow them:
 
 `emil-design-eng`, `transitions-dev`, `better-ui`, `shadcn`, `ui-ux-pro-max`
 
-Then add skills for the job (landing page vs. product UI vs. polish). The routing table is in
-`references/skills.md`. When a skill conflicts with Framio's rules (it says to scaffold an app,
+Load each once per session. Add other skills just before their specific work starts, rather
+than fetching the whole routing table up front. See `references/skills.md` for timing.
+For dashboards, load `better-ui` with `npx -y skills use jakubkrehel/skills@better-ui`
+instead of `ui-skills get`, and also load
+`npx -y skills use wshobson/agents@kpi-dashboard-design` before the first dashboard frame.
+When a skill conflicts with Framio's rules (it says to scaffold an app,
 write HTML, or wire real data), Framio's rules win.
+
+## Finish one frame before the next
+
+Work on exactly one frame at a time, including directions, design-system frames, screens,
+and variations. For each frame:
+
+1. Create or edit the frame.
+2. Check `.framio/.state/errors.json`, fix errors, and run `framio screenshot <page>/<frame>`.
+3. Open the PNG and inspect it visually. Check layout, alignment, spacing, typography, colors,
+   contrast, clipping, imagery, and every visible detail. A successful command is not a review.
+4. Fix every issue you find, including minor ones. Screenshot again and inspect the new PNG.
+   Repeat until the frame has no visible mistakes.
+5. Only then move to the next frame.
+
+Never create several frames and review them afterward. Whole-page screenshots are additional
+checks for consistency and flows; they do not replace inspecting each individual frame.
 
 ## Inspiration (Mobbin)
 
@@ -79,6 +103,13 @@ If Mobbin tools are available (`search_flows`, `search_screens`, `search_section
 research and whenever you design a screen type you haven't researched: look at how the best
 products handle that exact flow or screen before designing it. Save the references you rely on to
 the moodboard page (see `references/process.md`).
+
+## Landing-page templates
+
+When asked to make a landing page, consider StyleUI's Axis and Notio templates when they fit
+the brief. See `references/libraries.md` for registry URLs and import commands. Import only
+the chosen template into `.framio`, then customize its sections, content, imagery, and styling
+to DESIGN.md. Use it as a starting point, and visually verify each frame before making the next.
 
 ## Images and illustrations
 
@@ -125,6 +156,18 @@ export default function Frame() {
 - Style with theme tokens (`bg-background`, `text-muted-foreground`, `bg-primary`, `border`,
   `rounded-lg`), DESIGN.md colors (`bg-<name>`), and type styles (`type-display`, `type-body-md`,
   `font-heading`). Never hardcode a color that a token covers.
+
+## Mobile screens
+
+Design the app content directly in a plain rectangular frame, typically 390px wide. Do not
+draw phone hardware or operating-system chrome: no bezels, device shadows, notches, Dynamic
+Island, status bars, fake clocks, battery/Wi-Fi/signal indicators, or OS home/gesture bars.
+Include these only if the user explicitly requests a device presentation. Keep the app's own
+headers, tab bars, and navigation. Do not reserve decorative blank bands for phone chrome.
+
+For a fixed-height screen, keep the app header and navigation in the layout and give the main
+content `flex-1 min-h-0`; avoid stacking fixed-height sections that overflow the screen.
+Framio hides browser scrollbars in frames. Do not draw imitation scrollbars in the mockup.
 
 ## Variations, selection, verification
 

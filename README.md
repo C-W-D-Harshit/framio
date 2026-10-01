@@ -43,6 +43,11 @@ two or three visual directions for you to choose from. It then builds the design
 flows, screens, and their states, and reviews screenshots. Smaller changes use the relevant
 parts of that process.
 
+The agent finishes one frame at a time: create, screenshot, inspect, fix every visible issue,
+and repeat before starting the next frame. External skills load when their phase needs them,
+after the brief and research. Mobile screens show the app's content in a plain frame, without
+phone hardware or operating-system status bars.
+
 The skill loads design guidance through `npx ui-skills get <slug>`, starting with
 `emil-design-eng`, `transitions-dev`, `better-ui`, `shadcn`, and `ui-ux-pro-max`. It adds skills
 for the job, uses Mobbin when available, and recommends image generation for product
@@ -51,6 +56,15 @@ Illustration work also requires
 [`illustration-style`](https://www.skills.sh/owl-listener/designer-skills/illustration-style),
 loaded through `npx skills use owl-listener/designer-skills@illustration-style`. The agent defines
 the illustration style before making assets and records the chosen guide in DESIGN.md.
+
+For landing pages, the agent considers StyleUI's Axis and Notio templates when they fit the
+brief, then customizes them to the product and DESIGN.md. For dashboards, it loads
+`better-ui` and `kpi-dashboard-design` through `npx skills use` before designing:
+
+```sh
+npx -y skills use jakubkrehel/skills@better-ui
+npx -y skills use wshobson/agents@kpi-dashboard-design
+```
 
 The files keep the reasoning alongside the designs:
 
@@ -111,6 +125,8 @@ framio add @react-bits/ShinyText-TS-TW
 framio add @aceternity/spotlight
 framio add @kokonutui/shimmer-text
 framio add @rareui/LiquidMetal
+framio add https://styleui.dev/r/axis.json   # optional landing-page template
+framio add https://styleui.dev/r/notio.json  # alternative landing-page template
 framio install @tabler/icons-react
 ```
 

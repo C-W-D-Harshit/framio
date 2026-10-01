@@ -23,7 +23,7 @@ const inCanvas = boot.canvas && window.parent !== window;
 
 function contentHeight() {
   const root = document.getElementById("root");
-  const h = root ? Math.ceil(root.getBoundingClientRect().height) : 0;
+  const h = root ? Math.ceil(Math.max(root.getBoundingClientRect().height, root.scrollHeight)) : 0;
   return h > 0 ? h : window.innerHeight;
 }
 

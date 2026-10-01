@@ -4,11 +4,12 @@ export function imageSize(buf: Uint8Array, ext: string): { width: number; height
   try {
     let size: { width: number; height: number } | null = null;
     const header = (start: number, end: number) => String.fromCharCode(...buf.subarray(start, end));
-    if (ext === "png" && header(0, 8) === "\x89PNG\r\n\x1a\n") size = { width: view.getUint32(16), height: view.getUint32(20) };
-    if (ext === "gif" && /^GIF8[79]a$/.test(header(0, 6))) size = { width: view.getUint16(6, true), height: view.getUint16(8, true) };
-    if ((ext === "jpg" || ext === "jpeg") && view.getUint16(0) === 0xffd8) size = jpegSize(view);
-    if (ext === "webp" && header(0, 4) === "RIFF" && header(8, 12) === "WEBP") size = webpSize(view);
-    if (ext === "svg") size = svgSize(new TextDecoder().decode(buf.subarray(0, 4096)));
+    // Downloaded references can have a different encoding than their filename suggests.
+    if (header(0, 8) === "\x89PNG\r\n\x1a\n") size = { width: view.getUint32(16), height: view.getUint32(20) };
+    else if (/^GIF8[79]a$/.test(header(0, 6))) size = { width: view.getUint16(6, true), height: view.getUint16(8, true) };
+    else if (header(0, 2) === "\xff\xd8") size = jpegSize(view);
+    else if (header(0, 4) === "RIFF" && header(8, 12) === "WEBP") size = webpSize(view);
+    else if (ext === "svg") size = svgSize(new TextDecoder().decode(buf.subarray(0, 4096)));
     if (size && Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0) return size;
   } catch {}
   return null;
