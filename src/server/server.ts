@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import { existsSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
 import { basename, join, normalize, relative, sep } from "node:path";
 import { runtimeFile, uiFiles } from "../generated/assets.js";
 import { projectPaths } from "../lib/paths";
@@ -12,7 +12,7 @@ import { layoutFrames } from "../ui/layout";
 
 const FIRST_PORT = 4747;
 
-export type SnapshotFrame = Pick<Frame, "id" | "page" | "slug" | "relFile" | "meta" | "parent"> & {
+export type SnapshotFrame = Pick<Frame, "id" | "kind" | "page" | "slug" | "relFile" | "meta" | "parent" | "note" | "source"> & {
   version: number;
   error: string | null;
 };
@@ -46,6 +46,7 @@ export async function runServer(root: string) {
   let css = { text: "", error: null as string | null, version: 0 };
 
   const allFrames = () => pages.flatMap((pg) => pg.frames);
+  const tsxFrames = () => allFrames().filter((f) => f.kind === "tsx");
 
   function snapshot(): Snapshot {
     return {
@@ -60,10 +61,14 @@ export async function runServer(root: string) {
             id: f.id,
             page: f.page,
             slug: f.slug,
+            kind: f.kind,
             relFile: f.relFile,
             meta: f.meta,
             parent: f.parent,
-            version: built?.version ?? 0,
+            note: f.note,
+            source: f.source,
+            // Images version by modification time so replaced files bust the browser cache.
+            version: f.kind === "image" ? Math.round(statSync(f.file).mtimeMs) : (built?.version ?? 0),
             error: f.metaError ?? built?.error ?? runtimeErrors.get(f.id) ?? null,
           };
         }),
@@ -79,7 +84,10 @@ export async function runServer(root: string) {
       const runtime = runtimeErrors.get(f.id);
       return runtime ? [{ frame: f.id, file: f.relFile, kind: "runtime", message: runtime }] : [];
     });
-    if (css.error) errors.unshift({ frame: "", file: ".framio/theme.css", kind: "css", message: css.error });
+    if (css.error) {
+      const file = css.error.startsWith("DESIGN.md") ? ".framio/DESIGN.md" : ".framio/theme.css";
+      errors.unshift({ frame: "", file, kind: "css", message: css.error });
+    }
     const json = JSON.stringify({ errors }, null, 2);
     if (json === lastErrorsJson) return;
     lastErrorsJson = json;
@@ -108,7 +116,7 @@ export async function runServer(root: string) {
   async function fullBuild() {
     const t = performance.now();
     pages = scanProject(p);
-    await Promise.all([bundler.build(allFrames()), rebuildCss()]);
+    await Promise.all([bundler.build(tsxFrames()), rebuildCss()]);
     log(`built ${allFrames().length} frames in ${Math.round(performance.now() - t)}ms`);
   }
 
@@ -123,9 +131,9 @@ export async function runServer(root: string) {
 
     const files = [...changed];
     const codeChanged = files.some((f) => isCode(f) || isDeps(f));
-    const cssChanged = files.some((f) => f.endsWith(".css") || isCode(f));
+    const cssChanged = files.some((f) => f.endsWith(".css") || isCode(f) || f === "DESIGN.md");
     const [rebuilt] = await Promise.all([
-      codeChanged ? bundler.build(frames) : Promise.resolve([]),
+      codeChanged ? bundler.build(tsxFrames()) : Promise.resolve([]),
       cssChanged ? rebuildCss() : null,
     ]);
     for (const id of rebuilt) runtimeErrors.delete(id);
@@ -233,6 +241,7 @@ export async function runServer(root: string) {
   async function handlePageScreenshot(ref: string, scale = 1) {
     const page = pages.find((pg) => pg.id === ref || pg.name.toLowerCase() === ref.toLowerCase());
     if (!page) return json({ results: [{ frame: ref, error: `No page "${ref}". Pages: ${pages.map((pg) => pg.id).join(", ")}` }] });
+    if (!page.frames.length) return json({ results: [{ frame: page.id, error: `Page "${page.name}" has no frames.` }] });
     const shots = await Promise.all(
       page.frames.map(async (f) => {
         const out = join(p.screenshots, f.page, `${f.slug}.png`);
@@ -252,7 +261,10 @@ export async function runServer(root: string) {
         parent: s.frame.parent,
         width: s.frame.meta.width,
         height: s.height,
-        src: s.path ? `/shots/${encodeURIComponent(s.frame.page)}/${encodeURIComponent(s.frame.slug)}.png?t=${Date.now()}` : null,
+        note: s.frame.note,
+        src: !s.path
+          ? null
+          : `/shots/${encodeURIComponent(s.frame.page)}/${encodeURIComponent(s.frame.slug)}.png?t=${Date.now()}`,
       })),
       layoutFrames(snapshot().pages.find((pg) => pg.id === page.id)!.frames, heights, page.positions),
       out,
@@ -326,6 +338,7 @@ export async function runServer(root: string) {
         if (frameMatch) {
           const frame = allFrames().find((f) => f.page === frameMatch[1] && f.slug === frameMatch[2]);
           if (!frame) return new Response("Frame not found", { status: 404 });
+          if (frame.kind === "image") return Response.redirect(`/img/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}`);
           return new Response(frameHtml(frame, url.searchParams.has("canvas")), {
             headers: { "content-type": "text/html; charset=utf-8" },
           });
@@ -345,6 +358,19 @@ export async function runServer(root: string) {
           const frame = allFrames().find((f) => f.page === thumbMatch[1] && f.slug === thumbMatch[2]);
           if (!frame) return new Response("Frame not found", { status: 404 });
           return thumbnail(frame);
+        }
+
+        const imgMatch = /^\/img\/([^/]+)\/([^/]+)$/.exec(path);
+        if (imgMatch) {
+          const frame = allFrames().find((f) => f.kind === "image" && f.page === imgMatch[1] && f.slug === imgMatch[2]);
+          return frame ? new Response(Bun.file(frame.file)) : new Response("Not found", { status: 404 });
+        }
+
+        // Images frames use, e.g. generated illustrations: <img src="/assets/hero.png" />
+        if (path.startsWith("/assets/")) {
+          const file = normalize(join(p.assets, path.slice("/assets/".length)));
+          if (!file.startsWith(p.assets + sep) || !existsSync(file)) return new Response("Not found", { status: 404 });
+          return new Response(Bun.file(file), { headers: { "cache-control": "no-cache" } });
         }
 
         const shotMatch = /^\/shots\/(.+\.png)$/.exec(path);

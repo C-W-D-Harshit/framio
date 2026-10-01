@@ -16,6 +16,7 @@ export type PageShotFrame = {
   width: number;
   height: number;
   src: string | null;
+  note?: string;
 };
 
 /** Keeps one headless browser warm so repeated agent screenshots and thumbnails are fast. */
@@ -61,6 +62,14 @@ export class Screenshotter {
     return this.withPage(async (page) => {
       const { width, height } = frame.meta;
       await page.setViewport({ width, height, deviceScaleFactor: scale });
+      if (frame.kind === "image") {
+        const src = `${this.baseUrl}/img/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}?v=${Date.now()}`;
+        await page.setContent(`<html><body style="margin:0"><img src="${src}" style="display:block;width:${width}px;height:${height}px"></body></html>`);
+        await page.evaluate(async () => { await document.querySelector("img")!.decode(); });
+        mkdirSync(dirname(out), { recursive: true });
+        await page.screenshot({ path: out as `${string}.png` });
+        return { path: out, width, height, error: frame.metaError ?? null };
+      }
       await page.goto(`${this.baseUrl}/f/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}`);
       await page.waitForFunction("window.__framio && (window.__framio.ready || window.__framio.error)", {
         timeout: 20_000,
@@ -82,11 +91,13 @@ export class Screenshotter {
     return this.withPage(async (page) => {
       const PAD = 80;
       const LABEL = 56;
+      const NOTE = 160;
       const boxes = frames.map((f) => ({ ...f, ...positions[f.id]! }));
       const minX = Math.min(...boxes.map((b) => b.x));
       const minY = Math.min(...boxes.map((b) => b.y));
       const width = Math.ceil(Math.max(...boxes.map((b) => b.x + b.width)) - minX + PAD * 2);
-      const height = Math.ceil(Math.max(...boxes.map((b) => b.y + b.height)) - minY + PAD * 2 + LABEL);
+      const hasNotes = boxes.some((b) => b.note);
+      const height = Math.ceil(Math.max(...boxes.map((b) => b.y + b.height)) - minY + PAD * 2 + LABEL + (hasNotes ? NOTE : 0));
       const s = Math.min(scale, PAGE_MAX_WIDTH / width);
       const px = (n: number) => `${Math.round(n)}px`;
       const at = (b: (typeof boxes)[number]) => ({ x: b.x - minX + PAD, y: b.y - minY + PAD + LABEL });
@@ -114,7 +125,9 @@ export class Screenshotter {
             : `<div style="width:${px(b.width)};height:${px(b.height)};background:#3a1d1d"></div>`;
           return `<div style="position:absolute;left:${px(x)};top:${px(y)}">
             <div style="position:absolute;bottom:100%;left:0;padding-bottom:${px(font * 0.5)};font:500 ${px(font)} system-ui,sans-serif;color:#d4d4d4;white-space:nowrap">${esc(b.name)}</div>
-            ${body}</div>`;
+            ${body}
+            ${b.note ? `<div style="position:absolute;top:100%;left:0;width:${px(b.width)};padding-top:${px(font * 0.5)};font:400 ${px(font * 0.85)}/1.4 system-ui,sans-serif;color:#a3a3a3">${esc(b.note)}</div>` : ""}
+            </div>`;
         })
         .join("");
 

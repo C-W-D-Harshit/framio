@@ -16,8 +16,9 @@ framio init     # creates .framio/ (shadcn/ui, theme, agent skill) and installs 
 framio start    # starts the canvas in the background and opens it
 ```
 
-Framio is a single binary. It does not need Node, Bun, npm, or Chrome on the machine: it bundles
-Bun for installs and builds, and downloads its own headless Chromium for screenshots.
+Framio is a single binary. It bundles Bun for installs and builds, and downloads its own
+headless Chromium for screenshots. Node.js is needed for `framio add` and the agent's
+`npx ui-skills` commands. The canvas, package installs, and screenshots work without Node.
 
 ## Commands
 
@@ -28,6 +29,94 @@ Bun for installs and builds, and downloads its own headless Chromium for screens
 | `framio stop` / `status` / `open` | Manage the background server |
 | `framio screenshot <frame>...` | Render frames to PNG (`--page <page>` for a whole page, `--all`, `--scale=2`) |
 | `framio install <package>...` | Add npm packages for frames to use |
+| `framio add <registry-item>... [--overwrite]` | Add shadcn registry components, keeping existing files by default |
+
+## Design with an agent
+
+`framio init` includes shadcn/ui and writes a Framio skill plus its references into
+`.claude/skills/framio/` and `.agents/skills/framio/`. Ask your agent to use it:
+
+> Use Framio to design the onboarding for my invoicing app.
+
+For a new product, the agent asks up to five brief questions, researches references, and shows
+two or three visual directions for you to choose from. It then builds the design system,
+flows, screens, and their states, and reviews screenshots. Smaller changes use the relevant
+parts of that process.
+
+The skill loads design guidance through `npx ui-skills get <slug>`, starting with
+`emil-design-eng`, `transitions-dev`, `better-ui`, `shadcn`, and `ui-ux-pro-max`. It adds skills
+for the job, uses Mobbin when available, and recommends image generation for product
+illustrations and website imagery. These tools and skills are not bundled with Framio.
+Illustration work also requires
+[`illustration-style`](https://www.skills.sh/owl-listener/designer-skills/illustration-style),
+loaded through `npx skills use owl-listener/designer-skills@illustration-style`. The agent defines
+the illustration style before making assets and records the chosen guide in DESIGN.md.
+
+The files keep the reasoning alongside the designs:
+
+- `.framio/BRIEF.md` describes the product, users, jobs, and scope.
+- `.framio/DESIGN.md` records design tokens and the chosen direction in
+  [Google's DESIGN.md format](https://github.com/google-labs-code/design.md).
+- `.framio/pages/` holds moodboards, directions, the design system, and screen flows.
+- `.framio/assets/` holds images used in mockups, served at `/assets/<filename>`.
+
+## Design tokens
+
+Framio layers DESIGN.md tokens over `theme.css` on every save. Color tokens generate Tailwind
+colors, typography tokens generate `type-<name>` utilities, and `rounded` tokens set radii.
+Use shadcn color names such as `primary`, `background`, and `muted` to restyle the bundled
+components. Fonts load from Google Fonts. Spacing and component descriptions guide the agent;
+Framio does not convert them into CSS.
+
+```yaml
+---
+name: My product
+colors:
+  primary: "#B8422E"
+  primary-foreground: "#FFFFFF"
+  primary-dark: "#E0694F"
+typography:
+  body-md:
+    fontFamily: Public Sans
+    fontSize: 15px
+    fontWeight: 400
+rounded:
+  lg: 14px
+---
+```
+
+`primary-dark` applies inside `.dark` frames. See the installed skill's
+`references/design-md.md` for a full template. A malformed DESIGN.md reports an error in
+`.framio/.state/errors.json` while Framio continues using the base theme.
+
+## Moodboards and components
+
+Put PNG, JPEG, WebP, GIF, or SVG files in a page folder to show them as image frames. Add an
+optional sidecar named `<image-filename>.json` for its label, caption, reference link, or display
+width:
+
+```json
+{ "name": "Invoice editor reference", "width": 720, "note": "Borrow the preview beside the form.", "source": "https://example.com" }
+```
+
+Images retain their aspect ratio. Without a width override, images at least 2400px wide display
+at half their natural width. Pages with more than three independent frames use a grid.
+`framio screenshot` renders image frames to PNG too, including `--scale=2`; page screenshots
+include their captions.
+
+Add registry components or icon packages from the project root:
+
+```sh
+framio add @react-bits/ShinyText-TS-TW
+framio add @aceternity/spotlight
+framio add @kokonutui/shimmer-text
+framio add @rareui/LiquidMetal
+framio install @tabler/icons-react
+```
+
+`framio add` runs shadcn inside `.framio/` and uses Framio's bundled Bun to install dependencies.
+Existing component files stay in place unless you pass `--overwrite`. Pick one icon library
+and record library choices in DESIGN.md.
 
 ## Development
 
@@ -37,6 +126,7 @@ bun run build:ui         # builds the canvas UI + frame runtime, regenerates src
 bun src/cli.ts <command> # run the CLI from source
 bun run dev:ui           # rebuild UI on change (restart `framio start` to pick up new UI builds)
 bun run typecheck
+bun run test
 bun run build:binary     # dist/bin/framio-<os>-<arch> and .tar.gz for this platform
 ```
 

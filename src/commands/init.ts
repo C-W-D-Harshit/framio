@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { scaffoldFiles } from "../generated/assets.js";
 import { ensureBrowser, isBrowserInstalled } from "../lib/browser";
@@ -15,12 +15,13 @@ export async function init(args: string[]) {
   if (existsSync(p.framio)) throw new CliError(`${FRAMIO_DIR} already exists here.`);
 
   for (const [rel, file] of Object.entries(scaffoldFiles)) {
-    if (rel === "skill/SKILL.md") {
-      for (const dir of SKILL_DIRS) await Bun.write(join(root, dir, "SKILL.md"), Bun.file(file));
+    if (rel.startsWith("skill/")) {
+      for (const dir of SKILL_DIRS) await Bun.write(join(root, dir, rel.slice("skill/".length)), Bun.file(file));
     } else {
       await Bun.write(join(p.framio, rel === "_gitignore" ? ".gitignore" : rel), Bun.file(file));
     }
   }
+  mkdirSync(p.assets, { recursive: true });
   console.log(`Created ${FRAMIO_DIR}/ with shadcn/ui, a theme, and an example page.`);
   console.log(`Added the framio skill for agents in ${SKILL_DIRS.join(" and ")}.`);
 
@@ -42,5 +43,6 @@ export async function init(args: string[]) {
     console.warn(`Could not download the screenshot browser (${browser.reason}). It will retry on first screenshot.`);
 
   console.log(`Done in ${((performance.now() - t) / 1000).toFixed(1)}s.\n`);
-  console.log("Next: run `framio start`, then ask your agent to design something.");
+  console.log("Next: run `framio start`, then ask your agent to design something, e.g.");
+  console.log('  "Use framio to design the onboarding for my invoicing app"');
 }

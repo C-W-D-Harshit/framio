@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { add } from "./commands/add";
 import { init } from "./commands/init";
 import { install } from "./commands/install";
 import { screenshot } from "./commands/screenshot";
@@ -18,6 +19,7 @@ Usage:
   framio open                      Open the canvas in your browser
   framio screenshot <frame>...     Render frames to PNG (--all, --scale=2)
   framio install <package>...      Add npm packages for frames to use
+  framio add <registry-item>...    Add shadcn registry components (@react-bits, @aceternity, ...)
 `;
 
 const [command = "start", ...args] = process.argv.slice(2);
@@ -44,6 +46,9 @@ try {
       break;
     case "install":
       await install(args);
+      break;
+    case "add":
+      await add(args);
       break;
     case "__serve": {
       const { runServer } = await import("./server/server");

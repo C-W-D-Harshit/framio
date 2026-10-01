@@ -11,6 +11,6 @@
     "noUncheckedIndexedAccess": true,
     "types": ["bun"]
   },
-  "include": ["src", "scripts"],
+  "include": ["src", "scripts", "tests"],
   "exclude": ["src/scaffold"]
 }

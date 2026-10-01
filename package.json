@@ -10,7 +10,8 @@
     "build:ui": "bun run scripts/build-ui.ts",
     "dev:ui": "bun run scripts/build-ui.ts --watch",
     "build:binary": "bun run scripts/build-binary.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests"
   },
   "dependencies": {
     "@puppeteer/browsers": "3.2.3",

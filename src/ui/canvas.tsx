@@ -12,7 +12,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { Snapshot } from "../server/server";
 import { ContextMenu } from "./context-menu";
-import { FrameNode, frameUrl, type FrameNodeType } from "./frame-node";
+import { FrameNode, standaloneUrl, type FrameNodeType } from "./frame-node";
 import { layoutFrames } from "./layout";
 import { Toolbar, type Tool } from "./toolbar";
 
@@ -378,7 +378,7 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
           onClose={closeMenu}
           items={[
             { label: "Zoom to frame", hint: "Double-click", onSelect: () => zoomToFrames([menuFrame.id]) },
-            { label: "Open in new tab", onSelect: () => window.open(frameUrl(menuFrame).replace("canvas=1&", ""), "_blank") },
+            { label: "Open in new tab", onSelect: () => window.open(standaloneUrl(menuFrame), "_blank") },
             { label: "Copy file path", onSelect: () => navigator.clipboard.writeText(menuFrame.relFile) },
           ]}
         />

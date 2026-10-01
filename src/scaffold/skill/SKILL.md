@@ -1,44 +1,105 @@
 ---
 name: framio
-description: Design UI mockups in Framio, the canvas in .framio/. Use when the user asks to design, mock up, redesign, or explore variations of a screen, page, or UI, or refers to a frame or a selection on the Framio canvas.
+description: Design UI in Framio, the design canvas in .framio/. Use whenever the user asks to design, mock up, redesign, or explore a screen, flow, landing page, or product UI, or mentions Framio, frames, variations, the canvas, or "the selected" thing.
 ---
 
 # Framio
 
-Framio is a design canvas made of files. Every design ("frame") is a React + Tailwind
-mockup in `.framio/pages/<page>/<frame>.tsx`. The canvas at the URL printed by
-`framio start` shows every frame live and reloads when files change.
+Framio is a design canvas made of files. Every design ("frame") is a React + Tailwind mockup in
+`.framio/pages/<page>/<frame>.tsx`, shown live on the canvas at the URL printed by `framio start`.
 
-Frames are **mockups**: hardcoded, realistic content. No data fetching, no real logic,
-no routing. Different states (empty, loading, error, dialog open) are separate frames.
+You are the user's product designer, not a code generator. Work the way a senior designer does:
+understand the problem, look at how the best products solve it, pick a direction, define the
+design system, then design screens and critique them. Frames are **mockups**: realistic hardcoded
+content, no data fetching, no real logic. Each state (empty, loading, error, open menu) is its own frame.
 
 ## Commands
 
-- `framio start`: starts the canvas in the background and returns immediately. Run it once
-  before designing. It is safe to run again.
-- `framio screenshot <page>/<frame>`: renders the frame to a PNG and prints its path.
-  **Always look at the screenshot after creating or changing a frame**, then fix what looks off.
-- `framio screenshot --page <page>`: one PNG of the whole page, laid out like the canvas, with
-  variation lines. Use it to compare variations side by side or review a whole flow.
-- `framio install <package>`: adds an npm package for frames to use. Never run npm, pnpm, or
-  yarn inside `.framio`, and never install design packages into the user's project.
+| Command | Use |
+| --- | --- |
+| `framio start` | Start the canvas in the background (returns immediately). Run it before designing. |
+| `framio screenshot <page>/<frame>` | Render one frame to PNG. **Look at it after every change.** |
+| `framio screenshot --page <page>` | One PNG of a whole page as laid out on the canvas, with notes and variation lines. |
+| `framio install <package>` | Add an npm package (icons etc.). Never run npm/pnpm/yarn in `.framio`. |
+| `framio add <registry-item>` | Add a component from a shadcn registry: `@aceternity/…`, `@react-bits/…`, `@kokonutui/…`, `@rareui/…`. |
+| `npx shadcn@latest search @aceternity -q hero` | Browse a registry (run inside `.framio`). |
+| `npx ui-skills get <slug>` | Load a design skill. See "Design skills" below. |
 
 ## Files
 
 ```
 .framio/
-  theme.css              # design system: colors, radius, fonts (Tailwind v4 + shadcn variables)
-  components/ui/*.tsx    # shadcn/ui components (Base UI flavor), import from "@/components/ui/<name>"
-  components/*.tsx       # shared mockup pieces you create (AppHeader, Sidebar...), import "@/components/<Name>"
+  BRIEF.md               # the problem: product, users, jobs, tone (phase 0)
+  DESIGN.md              # the design system: tokens + rationale (phase 3). Framio applies its tokens.
+  theme.css              # Tailwind + shadcn base theme. DESIGN.md tokens are layered on top.
+  assets/                # images frames use (generated illustrations, photos): <img src="/assets/hero.png" />
+  components/ui/*.tsx    # shadcn/ui (Base UI). import { Button } from "@/components/ui/button"
+  components/*.tsx       # shared mockup pieces you create, and components added with `framio add`
   pages/
-    01-onboarding/       # a page = a directory. The number prefix sets the order in the sidebar.
-      signup.tsx         # a frame
-      signup--split.tsx  # a variation of signup
-  .state/selection.json  # what the user has selected on the canvas (read-only for you)
-  .state/errors.json     # current build and runtime errors (read-only for you)
+    01-moodboard/        # a page = a directory; the number prefix orders the sidebar
+      stripe-pricing.png       # images are frames too
+      stripe-pricing.png.json  # optional: { "name", "note", "source", "width" }
+    10-onboarding/
+      welcome.tsx              # a frame
+      welcome--illustrated.tsx # a variation of it
+  .state/selection.json  # what the user selected on the canvas (read-only)
+  .state/errors.json     # build, runtime, and DESIGN.md errors (read-only)
 ```
 
-Do not edit `canvas.json` (frame positions on the canvas) or anything in `.state/`.
+Never edit `canvas.json` (frame positions) or anything in `.state/`. Delete `pages/00-example`
+once real work starts.
+
+## Work like a designer
+
+Read `references/process.md` before starting any phase below. Scale the process to the task:
+
+| Task | Phases |
+| --- | --- |
+| New product, new website, or a redesign | 0 Brief → 1 Research → 2 Directions → 3 Design system → 4 Flows → 5 Screens → 6 Critique |
+| New screen or flow in an existing Framio project | Read BRIEF.md + DESIGN.md → 4 → 5 → 6 |
+| Change to an existing frame | 5 → 6 |
+
+Phase 0 means **asking the user** (at most 5 questions, one message) for a new product. Do not
+skip it and invent a product. Stop for the user's choice at the end of phase 2.
+
+## Design skills (required)
+
+Load skills with `npx ui-skills get <slug>`, read them fully, and follow them. Load each once per
+session. For any design work, always load:
+
+`emil-design-eng`, `transitions-dev`, `better-ui`, `shadcn`, `ui-ux-pro-max`
+
+Then add skills for the job (landing page vs. product UI vs. polish). The routing table is in
+`references/skills.md`. When a skill conflicts with Framio's rules (it says to scaffold an app,
+write HTML, or wire real data), Framio's rules win.
+
+## Inspiration (Mobbin)
+
+If Mobbin tools are available (`search_flows`, `search_screens`, `search_sections`), use them in
+research and whenever you design a screen type you haven't researched: look at how the best
+products handle that exact flow or screen before designing it. Save the references you rely on to
+the moodboard page (see `references/process.md`).
+
+## Images and illustrations
+
+Before creating or revising an illustration, load and follow
+[`illustration-style`](https://www.skills.sh/owl-listener/designer-skills/illustration-style)
+from `owl-listener/designer-skills`. Use `npx -y skills use owl-listener/designer-skills@illustration-style`
+or read the installed copy. See `references/skills.md` for how to apply it. Define the style before
+drawing or prompting an image tool, record the chosen guide in DESIGN.md, and use it consistently.
+
+A landing page without real imagery, or a product without illustrations in empty states and
+onboarding, looks unfinished. If you have an image generation tool, use it: hero images, product
+shots, illustrations, avatars, textures, in a style that matches DESIGN.md. Save them to
+`.framio/assets/` and use `<img src="/assets/<name>.png" />`. Keep one illustration style per
+product and describe it in DESIGN.md. Without an image tool, use a tasteful placeholder (a soft
+gradient or pattern with the image's purpose written small), never a broken image or lorem picsum.
+
+## Libraries
+
+shadcn/ui is the base for everything. Pick one icon set per project and record it in DESIGN.md.
+Add animated or showpiece components from Aceternity, React Bits, Kokonut UI, or RareUI where the
+job calls for it. Read `references/libraries.md` for which to use when and how to install them.
 
 ## Frame format
 
@@ -47,9 +108,9 @@ import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 
 export const meta = {
-  name: "Pricing",          // label shown on the canvas
-  width: 1440,              // viewport width in px (mobile: 390)
-  height: 900,              // viewport height in px; h-screen / min-h-screen equal this
+  name: "Pricing",          // label on the canvas
+  width: 1440,              // viewport width (mobile: 390)
+  height: 900,              // viewport height; h-screen / min-h-screen equal this
   variationOf: "pricing",   // optional: slug of the frame this is a variation of
   theme: "dark",            // optional: render with the .dark theme
 };
@@ -60,28 +121,18 @@ export default function Frame() {
 ```
 
 - `meta` must be a plain object literal (it is read without running the file).
-- The frame grows to fit its content on the canvas. For a full screen, put `min-h-screen`
-  on the root element so it is at least one viewport tall.
-- Use theme tokens (`bg-background`, `text-muted-foreground`, `bg-primary`, `border`,
-  `rounded-lg`...) rather than hardcoded colors, so `theme.css` restyles everything.
-- Icons: `lucide-react`. Components: everything in `.framio/components/ui` (`ls` it).
+- Frames grow to fit their content. Put `min-h-screen` on the root of full screens.
+- Style with theme tokens (`bg-background`, `text-muted-foreground`, `bg-primary`, `border`,
+  `rounded-lg`), DESIGN.md colors (`bg-<name>`), and type styles (`type-display`, `type-body-md`,
+  `font-heading`). Never hardcode a color that a token covers.
 
-## How to work like a designer
+## Variations, selection, verification
 
-1. **Theme first.** For a new product, set colors, radius, and fonts in `theme.css` before
-   designing screens, so it does not look like default shadcn. For a redesign, copy the
-   existing product's tokens into `theme.css` (read the user's code for reference only;
-   frames never import from the user's project).
-2. **Explore with variations, don't overwrite.** When the user wants to try something
-   ("what if the CTA was dark", "try a sidebar layout"), copy the frame to
-   `<frame>--<what-changed>.tsx`, set `variationOf` to the original slug and a new `name`,
-   then change the copy. The canvas places it next to the original with a connecting line.
-   Edit a frame in place only when the user asks to fix or update that frame.
-3. **"This" means the selection.** When the user says "this", "these", "the selected", or
-   "here", read `.framio/.state/selection.json`. `frames` lists the selected frames (name and
-   file). When the user clicked a single element inside a frame, `element` has its tag, text,
-   classes, outer HTML, and a CSS selector; find it in the frame file and change that.
-4. **Shared pieces** (headers, sidebars, nav) go in `.framio/components/` once and are
-   imported by every frame that uses them.
-5. **Verify.** After changes, check `.framio/.state/errors.json` and screenshot the frames you
-   touched.
+- **Explore with variations, don't overwrite.** To try an idea, copy the frame to
+  `<frame>--<what-changed>.tsx`, set `variationOf` and a new `name`, then change the copy. Edit in
+  place only when the user asks to fix or update that frame.
+- **"This" means the selection.** When the user says "this", "these", "here", or "the selected",
+  read `.framio/.state/selection.json`. `frames` lists selected frames; `element` (when a single
+  element was clicked) has its tag, text, classes, HTML, and CSS selector.
+- **Verify.** After changes, check `.framio/.state/errors.json`, screenshot what you touched, and
+  look at the image before saying you're done.

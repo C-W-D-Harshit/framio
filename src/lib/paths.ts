@@ -29,6 +29,8 @@ export function projectPaths(root: string) {
     framio,
     pages: join(framio, "pages"),
     theme: join(framio, "theme.css"),
+    designMd: join(framio, "DESIGN.md"),
+    assets: join(framio, "assets"),
     state,
     entries: join(state, "entries"),
     screenshots: join(state, "screenshots"),

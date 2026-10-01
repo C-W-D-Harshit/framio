@@ -1,6 +1,7 @@
 /*
  * The design system for every frame in .framio.
- * Change the variables below (colors, radius, fonts) to restyle all frames at once.
+ * For a project design system, write tokens in DESIGN.md. Framio layers them over this theme.
+ * The variables below are defaults for projects without DESIGN.md.
  * Load web fonts with @import url(...) at the very top of this file.
  */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");

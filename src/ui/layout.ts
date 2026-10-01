@@ -45,11 +45,26 @@ export function layoutFrames(
       cy += subtreeHeight.get(k.id)! + GAP_Y;
     }
   };
-  let y = 0;
-  for (const r of roots) {
-    measure(r);
-    place(r, 0, y);
-    y += subtreeHeight.get(r.id)! + GAP_Y;
+  if (children.size === 0 && roots.length > 3) {
+    // No variations at all (e.g. a moodboard): a grid reads better than one tall column.
+    const cols = Math.min(4, Math.ceil(Math.sqrt(roots.length)));
+    const colWidth = Math.max(...roots.map((r) => r.meta.width)) + GAP_X;
+    let y = 0;
+    for (let i = 0; i < roots.length; i += cols) {
+      const row = roots.slice(i, i + cols);
+      row.forEach((r, c) => {
+        measure(r);
+        place(r, c * colWidth, y);
+      });
+      y += Math.max(...row.map(h)) + GAP_Y;
+    }
+  } else {
+    let y = 0;
+    for (const r of roots) {
+      measure(r);
+      place(r, 0, y);
+      y += subtreeHeight.get(r.id)! + GAP_Y;
+    }
   }
 
   const final: Record<string, Pos> = {};

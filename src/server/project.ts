@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { ProjectPaths } from "../lib/paths";
+import { imageSize } from "./image-size";
 
 export type FrameMeta = {
   name: string;
@@ -13,10 +14,19 @@ export type FrameMeta = {
   theme?: "light" | "dark";
 };
 
+export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "svg"];
+
 export type Frame = {
   id: string; // "<page>/<slug>"
+  /** "tsx": a React mockup. "image": a reference, moodboard shot, or generated image placed on the canvas. */
+  kind: "tsx" | "image";
   page: string;
+  /** File name without extension for tsx frames, full file name for images. */
   slug: string;
+  /** Images only: a caption shown under the frame, e.g. what to borrow from a reference. */
+  note?: string;
+  /** Images only: where the image came from (Mobbin link, URL). */
+  source?: string;
   file: string; // absolute
   relFile: string; // relative to the project root
   meta: FrameMeta;
@@ -76,6 +86,7 @@ function readFrame(p: ProjectPaths, page: string, fileName: string): Frame {
   }
   return {
     id: `${page}/${slug}`,
+    kind: "tsx",
     page,
     slug,
     file,
@@ -87,6 +98,48 @@ function readFrame(p: ProjectPaths, page: string, fileName: string): Frame {
       width: Number(meta.width) || DEFAULT_META.width,
       height: Number(meta.height) || DEFAULT_META.height,
     },
+    parent: null,
+    metaError,
+  };
+}
+
+/**
+ * Images get their size from the file. Optional sidecar `<file>.json` sets
+ * { name, width, note, source, variationOf }. Images 2400px or wider are assumed to be @2x.
+ */
+function readImage(p: ProjectPaths, page: string, fileName: string): Frame {
+  const file = join(p.pages, page, fileName);
+  const ext = fileName.split(".").pop()!.toLowerCase();
+  let side: { name?: string; width?: number; note?: string; source?: string; variationOf?: string } = {};
+  let metaError: string | undefined;
+  const sidecar = `${file}.json`;
+  if (existsSync(sidecar)) {
+    try {
+      const parsed = JSON.parse(readFileSync(sidecar, "utf8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Expected an object");
+      for (const key of ["name", "note", "source", "variationOf"]) {
+        if (parsed[key] !== undefined && typeof parsed[key] !== "string") throw new Error(`${key} must be a string`);
+      }
+      if (parsed.width !== undefined && (typeof parsed.width !== "number" || !Number.isFinite(parsed.width) || parsed.width <= 0))
+        throw new Error("width must be a positive number");
+      side = parsed;
+    } catch (err) {
+      metaError = `Could not parse ${fileName}.json: ${(err as Error).message}`;
+    }
+  }
+  const natural = imageSize(new Uint8Array(readFileSync(file)), ext) ?? { width: 1440, height: 900 };
+  const width = Math.max(1, Math.round(side.width ?? (natural.width >= 2400 ? natural.width / 2 : natural.width)));
+  const height = Math.max(1, Math.round((natural.height * width) / natural.width));
+  return {
+    id: `${page}/${fileName}`,
+    kind: "image",
+    page,
+    slug: fileName,
+    file,
+    relFile: relative(p.root, file),
+    meta: { name: side.name ?? fileName.replace(/\.[^.]+$/, ""), width, height, variationOf: side.variationOf },
+    note: side.note,
+    source: side.source,
     parent: null,
     metaError,
   };
@@ -111,9 +164,9 @@ export function scanProject(p: ProjectPaths): Page[] {
       id: dir,
       name: prettyPageName(dir),
       frames: readdirSync(join(p.pages, dir))
-        .filter((f) => f.endsWith(".tsx"))
+        .filter((f) => f.endsWith(".tsx") || IMAGE_EXTENSIONS.includes(f.split(".").pop()!.toLowerCase()))
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-        .map((f) => readFrame(p, dir, f)),
+        .map((f) => (f.endsWith(".tsx") ? readFrame(p, dir, f) : readImage(p, dir, f))),
       positions: readPositions(p, dir),
     }));
 

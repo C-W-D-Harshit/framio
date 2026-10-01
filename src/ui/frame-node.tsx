@@ -18,6 +18,10 @@ const THUMB_SCALE = 0.5;
 
 const enc = encodeURIComponent;
 export const frameUrl = (f: SnapshotFrame, version = f.version) => `/f/${enc(f.page)}/${enc(f.slug)}?canvas=1&v=${version}`;
+export const imageUrl = (f: SnapshotFrame) => `/img/${enc(f.page)}/${enc(f.slug)}?v=${f.version}`;
+/** URL to view a frame on its own, outside the canvas. */
+export const standaloneUrl = (f: SnapshotFrame) =>
+  f.kind === "image" ? imageUrl(f) : `/f/${enc(f.page)}/${enc(f.slug)}`;
 const thumbUrl = (f: SnapshotFrame, css: number) => `/thumb/${enc(f.page)}/${enc(f.slug)}.png?v=${f.version}-${css}`;
 
 export const FrameNode = memo(function FrameNode({
@@ -38,7 +42,8 @@ export const FrameNode = memo(function FrameNode({
     const my = s.height * 0.5;
     return left < s.width + mx && left + width * z > -mx && top < s.height + my && top + height * z > -my;
   });
-  const live = visible && (!useThumbs || zoom >= LIVE_ZOOM);
+  const isImage = frame.kind === "image";
+  const live = !isImage && visible && (!useThumbs || zoom >= LIVE_ZOOM);
 
   // Double-buffered reloads: the new version loads hidden and replaces the old one once rendered.
   const [shown, setShown] = useState(frame.version);
@@ -82,7 +87,10 @@ export const FrameNode = memo(function FrameNode({
           boxShadow: "0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25)",
         }}
       >
-        {visible && useThumbs && (
+        {isImage && visible && (
+          <img src={imageUrl(frame)} alt={frame.meta.name} draggable={false} className="block size-full object-cover" />
+        )}
+        {!isImage && visible && useThumbs && (
           <img
             src={thumbUrl(frame, cssVersion)}
             alt=""
@@ -110,6 +118,19 @@ export const FrameNode = memo(function FrameNode({
             />
           ))}
       </div>
+      {(frame.note || frame.source) && (
+        <div
+          className="absolute top-full left-0 flex max-w-full flex-col gap-[0.3em] text-neutral-400"
+          style={{ fontSize: 12 / zoom, paddingTop: 8 / zoom, lineHeight: 1.45 }}
+        >
+          {frame.note && <p className="whitespace-pre-wrap">{frame.note}</p>}
+          {frame.source && (
+            <a data-ui href={frame.source} target="_blank" rel="noreferrer" className="nodrag truncate text-neutral-500 underline hover:text-neutral-200">
+              {frame.source.replace(/^https?:\/\//, "")}
+            </a>
+          )}
+        </div>
+      )}
       <Handle type="target" position={Position.Left} isConnectable={false} className="!opacity-0" />
       <Handle type="source" position={Position.Right} isConnectable={false} className="!opacity-0" />
     </div>
