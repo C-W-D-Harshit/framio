@@ -29,6 +29,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build:ui
       - run: bun run format:check
+      - name: Allow Chromium sandbox user namespaces
+        if: runner.os == 'Linux'
+        # Ubuntu's AppArmor restriction blocks the downloaded Chrome for Testing.
+        # Keep Chromium's sandbox enabled on this ephemeral runner.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: bun run check
       - run: bun run build:binary
       - name: Smoke test
