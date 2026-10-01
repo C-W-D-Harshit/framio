@@ -1,4 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { InvalidInput } from "../domain/errors";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import { DesignTokens } from "../domain/design";
 
 /**
  * Turns the YAML tokens of .framio/DESIGN.md (Google's DESIGN.md format) into CSS that is applied
@@ -16,54 +21,27 @@ import { existsSync, readFileSync } from "node:fs";
  */
 export type DesignCss = { imports: string; rules: string };
 
-type Typography = {
-  fontFamily?: string;
-  fontSize?: string;
-  fontWeight?: string | number;
-  lineHeight?: string | number;
-  letterSpacing?: string;
-  fontFeature?: string;
-  fontVariation?: string;
-};
-type Tokens = {
-  colors?: Record<string, string>;
-  typography?: Record<string, Typography>;
-  rounded?: Record<string, string>;
-};
+type Tokens = typeof DesignTokens.Type;
 
 const SYSTEM_FONTS = /^(system-ui|ui-[a-z-]+|-apple-system|sans-serif|serif|monospace|cursive|inherit|helvetica( neue)?|arial|georgia|times( new roman)?|courier( new)?|sf pro.*|sf mono|menlo|monaco|consolas|segoe ui)$/i;
 
-export function readDesignCss(path: string, themeSource: string): DesignCss | null {
-  if (!existsSync(path)) return null;
-  const text = readFileSync(path, "utf8");
+export const readDesignCss = Effect.fn("Design.readCss")(function*(path: string, themeSource: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const text = yield* fs.readFileString(path).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)));
+  if (text === null) return null;
+  return yield* Effect.try({ try: () => parseDesignCss(text, themeSource), catch: cause => new InvalidInput({ message: cause instanceof Error ? cause.message : String(cause) }) });
+});
+export function parseDesignCss(text: string, themeSource: string): DesignCss | null {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
   if (!match) return null;
+  let parsed: unknown;
+  try { parsed = Bun.YAML.parse(match[1]!) ?? {}; }
+  catch (cause) { throw new Error(`DESIGN.md front matter is not valid YAML: ${String(cause)}`); }
   let tokens: Tokens;
-  try {
-    tokens = (Bun.YAML.parse(match[1]!) ?? {}) as Tokens;
-  } catch (err) {
-    throw new Error(`DESIGN.md front matter is not valid YAML: ${(err as Error).message}`);
-  }
-  if (!isRecord(tokens)) throw new Error("DESIGN.md front matter must be a YAML object");
-  for (const group of ["colors", "rounded", "typography"] as const) {
-    const values = tokens[group];
-    if (values === undefined) continue;
-    if (!isRecord(values)) throw new Error(`DESIGN.md ${group} must be a YAML object`);
-    for (const [name, value] of Object.entries(values)) {
-      if (!ident(name)) throw new Error(`DESIGN.md ${group} contains an empty token name`);
-      if (group === "typography") {
-        if (!isRecord(value)) throw new Error(`DESIGN.md typography.${name} must be a YAML object`);
-        for (const [property, v] of Object.entries(value)) {
-          if (typeof v !== "string" && typeof v !== "number") throw new Error(`DESIGN.md typography.${name}.${property} must be a string or number`);
-          if (property === "fontFamily" && typeof v !== "string") throw new Error(`DESIGN.md typography.${name}.fontFamily must be a string`);
-        }
-      } else if (typeof value !== "string" || !value.trim()) throw new Error(`DESIGN.md ${group}.${name} must be a nonempty string`);
-    }
-  }
+  try { tokens = Schema.decodeUnknownSync(DesignTokens)(parsed); }
+  catch (cause) { throw new Error(`DESIGN.md tokens are invalid: ${String(cause)}`); }
   return generate(tokens, themeSource);
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const ident = (name: string) => name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
 
 function generate(tokens: Tokens, themeSource: string): DesignCss {
@@ -73,8 +51,8 @@ function generate(tokens: Tokens, themeSource: string): DesignCss {
     if (!m) return s;
     const key = `${m[1]}.${m[2]}`;
     if (visited.includes(key)) throw new Error(`DESIGN.md has a circular token reference: ${[...visited, key].join(" -> ")}`);
-    const group = (tokens as Record<string, unknown>)[m[1]!];
-    if (!isRecord(group) || !Object.hasOwn(group, m[2]!)) throw new Error(`DESIGN.md references an unknown token: ${key}`);
+    const group = m[1] === "colors" ? tokens.colors : m[1] === "rounded" ? tokens.rounded : m[1] === "typography" ? tokens.typography : undefined;
+    if (!Predicate.isObject(group) || !Object.hasOwn(group, m[2]!)) throw new Error(`DESIGN.md references an unknown token: ${key}`);
     const value = lookup(group[m[2]!], [...visited, key]);
     return m[1] === "colors" ? `var(--${ident(m[2]!.replace(/-dark$/, ""))})` : value;
   };

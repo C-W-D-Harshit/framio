@@ -1,62 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Snapshot } from "../server/server";
+import { useAtom, useAtomValue } from "@effect/atom-react";
+import { AsyncResult } from "effect/reactivity";
+import { liveAtom, pageAtom, selectionAtom, toolAtom } from "./state";
 import { Canvas, type CanvasSelection } from "./canvas";
 import type { Tool } from "./toolbar";
 
-function useSnapshot() {
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [connected, setConnected] = useState(false);
-  useEffect(() => {
-    let ws: WebSocket;
-    let retry: Timer;
-    let closed = false;
-    const connect = () => {
-      ws = new WebSocket(`ws://${location.host}/ws`);
-      ws.onopen = () => setConnected(true);
-      ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "snapshot") setSnapshot(msg.snapshot);
-      };
-      ws.onclose = () => {
-        setConnected(false);
-        if (!closed) retry = setTimeout(connect, 1000);
-      };
-    };
-    connect();
-    return () => {
-      closed = true;
-      clearTimeout(retry);
-      ws.close();
-    };
-  }, []);
-  return { snapshot, connected };
-}
-
 function useHashPage() {
-  const read = () => decodeURIComponent(location.hash.replace(/^#\/?/, ""));
-  const [page, setPage] = useState(read);
-  useEffect(() => {
-    const onHash = () => setPage(read());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
-  return [page, (id: string) => (location.hash = `/${encodeURIComponent(id)}`)] as const;
+  const page = useAtomValue(pageAtom);
+  return [AsyncResult.isSuccess(page) ? page.value : "", (id: string) => (location.hash = `/${encodeURIComponent(id)}`)] as const;
 }
 
 function useTool() {
-  const [tool, setTool] = useState<Tool>(() => (localStorage.getItem("framio:tool") === "hand" ? "hand" : "select"));
+  const [tool, setTool] = useAtom(toolAtom);
   const set = useCallback((t: Tool) => {
     localStorage.setItem("framio:tool", t);
     setTool(t);
-  }, []);
+  }, [setTool]);
   return [tool, set] as const;
 }
 
 export function App() {
-  const { snapshot, connected } = useSnapshot();
+  const live = useAtomValue(liveAtom);
+  const { snapshot, connected, saveError } = AsyncResult.isSuccess(live) ? live.value : { snapshot: null, connected: false, saveError: null };
   const [pageId, setPageId] = useHashPage();
   const [tool, setTool] = useTool();
-  const [selection, setSelection] = useState<CanvasSelection>({ frames: [], element: null });
+  const [selection] = useAtom(selectionAtom);
 
   const pages = snapshot?.pages ?? [];
   const page = pages.find((p) => p.id === pageId) ?? pages[0];
@@ -88,6 +56,7 @@ export function App() {
         {snapshot?.cssError && (
           <div className="m-2 rounded-md bg-red-500/10 p-2 text-[11px] break-words text-red-300">{snapshot.cssError}</div>
         )}
+        {saveError && <div role="alert" className="m-2 rounded-md bg-red-500/10 p-2 text-[11px] text-red-300">{saveError}</div>}
         <div className="flex items-center gap-2 border-t border-chrome-line px-4 py-2.5 text-[11px] text-neutral-500">
           <span className={`size-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-red-500"}`} />
           {connected ? "Live" : "Disconnected — run `framio start`"}
@@ -107,7 +76,6 @@ export function App() {
             cssVersion={snapshot.cssVersion}
             tool={tool}
             onTool={setTool}
-            onSelection={setSelection}
           />
         )}
 

@@ -1,6 +1,13 @@
 import { Handle, Position, useStore, type Node, type NodeProps } from "@xyflow/react";
-import { memo, useEffect, useRef, useState } from "react";
-import type { SnapshotFrame } from "../server/server";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import { Atom, AsyncResult } from "effect/reactivity";
+import { FrameMessage } from "../contracts/frame-message";
+import { heightsAtom } from "./state";
+import type { SnapshotFrame } from "../contracts/snapshot";
 
 export type FrameNodeData = {
   frame: SnapshotFrame;
@@ -32,6 +39,7 @@ export const FrameNode = memo(function FrameNode({
 }: NodeProps<FrameNodeType>) {
   const { frame, height, cssVersion, useThumbs } = data;
   const { width } = frame.meta;
+  const setHeights = useAtomSet(heightsAtom(frame.page));
   const zoom = useStore((s) => s.transform[2]);
   // Only frames near the viewport mount an iframe; off-screen frames cost nothing.
   const visible = useStore((s) => {
@@ -49,20 +57,23 @@ export const FrameNode = memo(function FrameNode({
   const [shown, setShown] = useState(frame.version);
   const pending = frame.version !== shown ? frame.version : null;
   const pendingRef = useRef<HTMLIFrameElement>(null);
+  const switchAtom = useMemo(() => Atom.make(Effect.gen(function*() {
+    if (pending === null || !live) return pending;
+    yield* Effect.callback<void>(resume => {
+      const onMessage = (event: MessageEvent) => {
+        if (event.source !== pendingRef.current?.contentWindow || event.origin !== location.origin) return;
+        const decoded = Schema.decodeUnknownResult(FrameMessage)(event.data);
+        if (Result.isSuccess(decoded) && (decoded.success.type === "ready" || decoded.success.type === "error")) resume(Effect.void);
+      };
+      window.addEventListener("message", onMessage);
+      return Effect.sync(() => window.removeEventListener("message", onMessage));
+    }).pipe(Effect.timeoutOption("8 seconds"));
+    return pending;
+  })), [pending, live]);
+  const switchResult = useAtomValue(switchAtom);
   useEffect(() => {
-    if (pending === null) return;
-    if (!live) return setShown(pending);
-    const onMessage = (e: MessageEvent) => {
-      if (e.source !== pendingRef.current?.contentWindow || e.data?.source !== "framio") return;
-      if (e.data.type === "ready" || e.data.type === "error") setShown(pending);
-    };
-    const fallback = setTimeout(() => setShown(pending), 8000);
-    window.addEventListener("message", onMessage);
-    return () => {
-      clearTimeout(fallback);
-      window.removeEventListener("message", onMessage);
-    };
-  }, [pending, live]);
+    if (AsyncResult.isSuccess(switchResult) && switchResult.value !== null) setShown(switchResult.value);
+  }, [switchResult]);
 
   const versions = pending === null ? [shown] : [shown, pending];
 
@@ -97,12 +108,10 @@ export const FrameNode = memo(function FrameNode({
             draggable={false}
             className="absolute inset-0 w-full"
             // Frames that never went live still need their real height for layout; report it like an iframe would.
-            onLoad={(e) =>
-              window.postMessage(
-                { source: "framio", type: "size", frame: frame.id, height: Math.round(e.currentTarget.naturalHeight / THUMB_SCALE) },
-                "*",
-              )
-            }
+            onLoad={event => {
+              const height = Math.round(event.currentTarget.naturalHeight / THUMB_SCALE);
+              setHeights(current => current[frame.id] === height ? current : { ...current, [frame.id]: height });
+            }}
           />
         )}
         {live &&

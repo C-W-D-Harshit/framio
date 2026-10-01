@@ -1,4 +1,4 @@
-import type { SnapshotFrame } from "../server/server";
+import type { SnapshotFrame } from "../contracts/snapshot";
 
 type Pos = { x: number; y: number };
 
@@ -11,7 +11,7 @@ const GAP_Y = 200;
  * to its parent, so a new variation of a moved frame still lands next to it.
  */
 export function layoutFrames(
-  frames: SnapshotFrame[],
+  frames: readonly SnapshotFrame[],
   heights: Record<string, number>,
   saved: Record<string, Pos>,
 ): Record<string, Pos> {

@@ -10,7 +10,13 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { Snapshot } from "../server/server";
+import * as Schema from "effect/Schema";
+import * as Result from "effect/Result";
+import { FrameMessage, Viewport as ViewportSchema } from "../contracts/frame-message";
+import { useAtom, useAtomSet } from "@effect/atom-react";
+import { heightsAtom, movedAtom, selectionAtom, saveSelectionAtom, saveCanvasAtom } from "./state";
+import type { ElementInfo as ElementContract } from "../contracts/requests";
+import type { Snapshot } from "../contracts/snapshot";
 import { ContextMenu } from "./context-menu";
 import { FrameNode, standaloneUrl, type FrameNodeType } from "./frame-node";
 import { layoutFrames } from "./layout";
@@ -18,8 +24,8 @@ import { Toolbar, type Tool } from "./toolbar";
 
 type Page = Snapshot["pages"][number];
 type Pos = { x: number; y: number };
-export type ElementInfo = { tag: string; text: string; selector: string };
-export type CanvasSelection = { frames: string[]; element: ElementInfo | null };
+export type ElementInfo = typeof ElementContract.Type;
+export type CanvasSelection = { readonly frames: readonly string[]; readonly element: ElementInfo | null };
 
 const nodeTypes: NodeTypes = { frame: FrameNode };
 const FIT = { padding: 0.15 };
@@ -32,7 +38,6 @@ type Props = {
   cssVersion: number;
   tool: Tool;
   onTool(tool: Tool): void;
-  onSelection(selection: CanvasSelection): void;
 };
 
 export function Canvas(props: Props) {
@@ -52,7 +57,8 @@ function postToFrames(msg: Record<string, unknown>, except?: string) {
 function useSavedViewport(key: string) {
   const [initial] = useState<Viewport | null>(() => {
     try {
-      return JSON.parse(localStorage.getItem(key) ?? "null");
+      const decoded = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.NullOr(ViewportSchema)))(localStorage.getItem(key) ?? "null");
+      return Result.isSuccess(decoded) ? decoded.success : null;
     } catch {
       return null;
     }
@@ -61,14 +67,22 @@ function useSavedViewport(key: string) {
   return [initial, save] as const;
 }
 
-function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection }: Props) {
+function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
   const flow = useReactFlow<FrameNodeType>();
-  const [heights, setHeights] = useState<Record<string, number>>({});
+  const [heights, setHeights] = useAtom(heightsAtom(page.id));
+  const saveSelection = useAtomSet(saveSelectionAtom);
+  const saveCanvas = useAtomSet(saveCanvasAtom);
   const [savedViewport, saveViewport] = useSavedViewport(`framio:viewport:${projectName}/${page.id}`);
 
   // --- Layout ---------------------------------------------------------------
   // Positions dragged in this session, applied before the server echoes canvas.json back.
-  const [moved, setMoved] = useState<Record<string, Pos>>({});
+  const [moved, setMoved] = useAtom(movedAtom(page.id));
+  useEffect(() => {
+    setMoved(current => {
+      const entries = Object.entries(current).filter(([slug, position]) => page.positions[slug]?.x !== position.x || page.positions[slug]?.y !== position.y);
+      return entries.length === Object.keys(current).length ? current : Object.fromEntries(entries);
+    });
+  }, [page.positions, setMoved]);
   const saved = useMemo(() => ({ ...page.positions, ...moved }), [page.positions, moved]);
   const useThumbs = page.frames.length > THUMB_THRESHOLD;
 
@@ -117,16 +131,15 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
   }, [laidOut, flow]);
 
   // --- Selection ------------------------------------------------------------
-  const [selection, setSelection] = useState<CanvasSelection>({ frames: [], element: null });
+  const [selection, setSelection] = useAtom(selectionAtom);
   const selectFrames = useCallback(
-    (ids: string[]) => setNodes((ns) => ns.map((n) => ({ ...n, selected: ids.includes(n.id) }))),
+    (ids: readonly string[]) => { const selected = new Set(ids); setNodes(ns => ns.map(n => ({ ...n, selected: selected.has(n.id) }))); },
     [setNodes],
   );
 
   useEffect(() => {
-    onSelection(selection);
     postToFrames({ type: "clear-selection" }, selection.element ? selection.frames[0] : undefined);
-  }, [selection, onSelection]);
+  }, [selection]);
 
   // selection.json is what the agent reads; skip the initial empty state so reloads don't wipe it.
   const firstSave = useRef(true);
@@ -135,19 +148,12 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
       firstSave.current = false;
       return;
     }
-    const t = setTimeout(() => {
-      fetch("/api/selection", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(selection),
-      });
-    }, 150);
-    return () => clearTimeout(t);
-  }, [selection]);
+    saveSelection(selection);
+  }, [selection, saveSelection]);
 
   // --- Navigation helpers ---------------------------------------------------
   const zoomToFrames = useCallback(
-    (ids: string[]) => ids.length && flow.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.1, duration: 250 }),
+    (ids: readonly string[]) => ids.length && flow.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.1, duration: 250 }),
     [flow],
   );
 
@@ -243,13 +249,16 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [flow, page.frames, onTool, selectFrames, zoomToFrames, endPan]);
+  }, [flow, page.frames, onTool, selectFrames, zoomToFrames, endPan, setSelection]);
 
   // --- Messages from frame iframes ------------------------------------------
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
-      const msg = e.data;
-      if (msg?.source !== "framio") return;
+      const decoded = Schema.decodeUnknownResult(FrameMessage)(e.data);
+      if (Result.isFailure(decoded)) return;
+      const msg = decoded.success;
+      const iframe = [...document.querySelectorAll<HTMLIFrameElement>("iframe[data-frame]")].find(iframe => iframe.dataset.frame === msg.frame && iframe.contentWindow === e.source);
+      if (!iframe || e.origin !== location.origin) return;
       const frame: string = msg.frame;
       switch (msg.type) {
         case "size":
@@ -294,7 +303,7 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [selectFrames, zoomToFrames, startPan, movePan, endPan]);
+  }, [selectFrames, zoomToFrames, startPan, movePan, endPan, setHeights, setSelection]);
 
   // Restyle frames in place when theme.css changes, instead of reloading every iframe.
   const firstCss = useRef(cssVersion);
@@ -337,11 +346,7 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
             if (frame) positions[frame.slug] = { x: Math.round(n.position.x), y: Math.round(n.position.y) };
           }
           setMoved((m) => ({ ...m, ...positions }));
-          fetch("/api/canvas", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ page: page.id, positions }),
-          });
+          saveCanvas({ page: page.id, positions });
         }}
         onMoveStart={() => {
           if (!autoFitting.current) userMoved.current = true;

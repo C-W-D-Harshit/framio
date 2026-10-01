@@ -2,10 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { getRunningServer, isAlive, readServerInfo } from "../src/lib/server-state";
-import { projectPaths } from "../src/lib/paths";
+import { Effect, Layer } from "effect";
+import { BunFileSystem } from "@effect/platform-bun";
+import { FetchHttpClient } from "effect/http";
+import { ServerRegistry, isAlive } from "../../src/services/server-registry";
+import { projectPaths } from "../../src/lib/paths";
 
-const cli = resolve(import.meta.dir, "../src/cli.ts");
+const cli = resolve(import.meta.dir, "../../src/cli.ts");
 const projects: string[] = [];
 const children: ReturnType<typeof Bun.spawn>[] = [];
 function project() {
@@ -61,8 +64,32 @@ test("foreground start stays attached and Ctrl+C stops its server", async () => 
   child.kill("SIGINT");
   expect(await child.exited).toBe(0);
   await gone(info.pid);
-  expect(readServerInfo(projectPaths(root))).toBeNull();
+  expect(await readServerInfo(projectPaths(root))).toBeNull();
   expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(false);
+}, 20_000);
+
+test("an older healthy server cannot be borrowed but can still be stopped", async () => {
+  const root = project();
+  const state = join(root, ".framio/.state");
+  mkdirSync(state, { recursive: true });
+  const fixture = join(root, "old-server.ts");
+  writeFileSync(fixture, `
+    const root = ${JSON.stringify(root)};
+    const server = Bun.serve({hostname:"127.0.0.1",port:0,fetch:() => Response.json({ok:true,root,pid:process.pid})});
+    await Bun.write(${JSON.stringify(join(state, "server.json"))}, JSON.stringify({pid:process.pid,port:server.port,url:"http://127.0.0.1:"+server.port,startedAt:new Date().toISOString()}));
+    process.on("SIGTERM", () => {server.stop(true);process.exit(0)});
+  `);
+  const child = Bun.spawn([process.execPath, fixture], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  children.push(child);
+  for (let attempt = 0; attempt < 100 && !existsSync(join(state, "server.json")); attempt++) await Bun.sleep(20);
+  expect(existsSync(join(state, "server.json"))).toBe(true);
+  const status = await run(root, ["status"]);
+  expect(status.code).toBe(1);
+  expect(status.output).toContain("older internal protocol");
+  const stopped = await run(root, ["stop"]);
+  expect(stopped.code).toBe(0);
+  expect(await child.exited).toBe(0);
+  await gone(child.pid);
 }, 20_000);
 
 test("concurrent background starts create one server, list it, and stop --all works outside a project", async () => {
@@ -88,19 +115,19 @@ test("screenshots clean up a temporary server on success and failure", async () 
   const root = project();
   const success = await run(root, ["screenshot", "--all"]);
   expect(success.code).toBe(0);
-  expect(readServerInfo(projectPaths(root))).toBeNull();
+  expect(await readServerInfo(projectPaths(root))).toBeNull();
   expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(false);
   const failure = await run(root, ["screenshot", "missing/frame"]);
   expect(failure.code).toBe(1);
   expect(failure.output).toContain("error");
-  expect(readServerInfo(projectPaths(root))).toBeNull();
+  expect(await readServerInfo(projectPaths(root))).toBeNull();
   expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(false);
 }, 30_000);
 
 test("screenshots reuse an existing server without stopping it, and open does not launch one", async () => {
   const root = project();
   expect((await run(root, ["open"])).code).toBe(1);
-  expect(readServerInfo(projectPaths(root))).toBeNull();
+  expect(await readServerInfo(projectPaths(root))).toBeNull();
   expect((await run(root, ["start", "--background", "--no-open"])).code).toBe(0);
   const info = await ready(root);
   expect((await run(root, ["screenshot", "--all"])).code).toBe(0);
@@ -121,3 +148,7 @@ test("a crashed server's stale lock is recovered without duplicate launches", as
   expect(restarts.filter(r => r.output.includes("running in the background"))).toHaveLength(1);
   expect((await ready(root)).pid).not.toBe(crashed.pid);
 }, 20_000);
+
+const RegistryLayer = ServerRegistry.layer.pipe(Layer.provide(Layer.merge(BunFileSystem.layer, FetchHttpClient.layer)));
+function getRunningServer(p: ReturnType<typeof projectPaths>) { return Effect.runPromise(Effect.flatMap(ServerRegistry, registry => registry.running(p)).pipe(Effect.provide(RegistryLayer))); }
+function readServerInfo(p: ReturnType<typeof projectPaths>) { return Effect.runPromise(Effect.flatMap(ServerRegistry, registry => registry.read(p)).pipe(Effect.provide(RegistryLayer))); }

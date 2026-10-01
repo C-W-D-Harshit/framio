@@ -4,7 +4,13 @@
  * - shows build/runtime errors inside the frame and reports them to the server
  * - in canvas mode: element hover/selection, and forwards wheel events to the canvas
  */
-type Boot = { id: string; canvas: boolean; error: string | null };
+import * as Effect from "effect/Effect";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Result from "effect/Result";
+import { CanvasMessage } from "../contracts/frame-message";
+const BootSchema = Schema.Struct({ id: Schema.String, canvas: Schema.Boolean, error: Schema.NullOr(Schema.String), version: Schema.optional(Schema.Finite) });
+type Boot = typeof BootSchema.Type;
 
 declare global {
   interface Window {
@@ -18,7 +24,54 @@ declare global {
   }
 }
 
-const boot = window.__FRAMIO_BOOT__;
+Effect.runFork(Effect.scoped(Effect.gen(function*() {
+const controller = yield* Effect.acquireRelease(Effect.sync(() => new AbortController()), controller => Effect.sync(() => controller.abort()));
+const observers: ResizeObserver[] = [];
+yield* Effect.addFinalizer(() => Effect.sync(() => { for (const observer of observers) observer.disconnect(); }));
+const windowEvents = {
+  addEventListener<K extends keyof WindowEventMap>(type: K, listener: (event: WindowEventMap[K]) => void, options?: boolean | AddEventListenerOptions) {
+    window.addEventListener(type, listener, { ...(typeof options === "boolean" ? { capture: options } : options), signal: controller.signal });
+  },
+};
+const documentEvents = {
+  addEventListener<K extends keyof DocumentEventMap>(type: K, listener: (event: DocumentEventMap[K]) => void, options?: boolean | AddEventListenerOptions) {
+    document.addEventListener(type, listener, { ...(typeof options === "boolean" ? { capture: options } : options), signal: controller.signal });
+  },
+};
+const observe = (callback: ResizeObserverCallback) => { const observer = new ResizeObserver(callback); observers.push(observer); return observer; };
+const statuses = yield* Queue.sliding<string | null>(1);
+const cssVersions = yield* Queue.sliding<number>(1);
+let latestCssVersion = -1;
+yield* Effect.forever(Effect.gen(function*() {
+  const version = yield* Queue.take(cssVersions);
+  yield* Effect.callback<void>(resume => {
+    const previous = [...document.querySelectorAll<HTMLLinkElement>('link[href^="/_theme.css"]')];
+    if (!previous.length) { resume(Effect.void); return; }
+    const next = previous[0]!.cloneNode() as HTMLLinkElement;
+    // Load without applying until the newest requested stylesheet is ready.
+    next.media = "not all";
+    next.href = `/_theme.css?v=${version}`;
+    let committed = false;
+    const dispose = () => {
+      next.onload = null;
+      next.onerror = null;
+      if (!committed) next.remove();
+    };
+    next.onload = () => {
+      if (version === latestCssVersion) {
+        next.media = previous[0]!.media;
+        committed = true;
+        for (const link of previous) link.remove();
+      }
+      dispose();
+      resume(Effect.void);
+    };
+    next.onerror = () => { dispose(); resume(Effect.void); };
+    previous[0]!.after(next);
+    return Effect.sync(dispose);
+  }).pipe(Effect.timeout("8 seconds"), Effect.catch(() => Effect.void));
+})).pipe(Effect.forkScoped);
+const boot = yield* Schema.decodeUnknownEffect(BootSchema)(window.__FRAMIO_BOOT__);
 const inCanvas = boot.canvas && window.parent !== window;
 
 function contentHeight() {
@@ -31,13 +84,11 @@ function postParent(msg: Record<string, unknown>) {
   if (inCanvas) window.parent.postMessage({ source: "framio", frame: boot.id, ...msg }, "*");
 }
 
-function reportStatus(error: string | null) {
-  fetch("/api/frame-status", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: boot.id, error }),
-  }).catch(() => {});
-}
+function reportStatus(error: string | null) { Queue.offerUnsafe(statuses, error); }
+yield* Effect.forever(Effect.gen(function*() {
+  const error = yield* Queue.take(statuses);
+  yield* Effect.tryPromise({ try: signal => fetch("/api/frame-status", { method: "POST", signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ id: boot.id, version: boot.version, error }) }), catch: cause => cause }).pipe(Effect.catch(() => Effect.void));
+})).pipe(Effect.forkScoped);
 
 function showError(message: string) {
   let el = document.getElementById("__framio_error");
@@ -78,38 +129,33 @@ window.__framio = {
   },
 };
 
-window.addEventListener("error", (e) => window.__framio.reportError(e.error ?? e.message));
-window.addEventListener("unhandledrejection", (e) => window.__framio.reportError(e.reason));
+windowEvents.addEventListener("error", (e) => window.__framio.reportError(e.error ?? e.message));
+windowEvents.addEventListener("unhandledrejection", (e) => window.__framio.reportError(e.reason));
 
 if (boot.error) {
-  document.addEventListener("DOMContentLoaded", () => showError(boot.error!));
+  documentEvents.addEventListener("DOMContentLoaded", () => showError(boot.error!));
   postParent({ type: "error", error: boot.error });
 }
 
 // --- Readiness: rendered, fonts loaded, images decoded, two frames painted ---
-async function waitForReady() {
-  const root = await new Promise<HTMLElement>((resolve) => {
-    const check = () => {
-      const el = document.getElementById("root");
-      if (el && el.childNodes.length > 0) return resolve(el);
-      requestAnimationFrame(check);
-    };
-    check();
-  });
-  await document.fonts.ready;
-  await Promise.all(
-    [...root.querySelectorAll("img")].map((img) => (img.complete ? null : img.decode().catch(() => null))),
-  );
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-}
-
-if (!boot.error) {
-  waitForReady().then(() => {
+const painted = Effect.callback<void>(resume => {
+  const id = requestAnimationFrame(() => resume(Effect.void));
+  return Effect.sync(() => cancelAnimationFrame(id));
+});
+const waitForReady = Effect.gen(function*() {
+  let root = document.getElementById("root");
+  while (!root || root.childNodes.length === 0) { yield* painted; root = document.getElementById("root"); }
+  yield* Effect.tryPromise(() => document.fonts.ready);
+  yield* Effect.forEach([...root.querySelectorAll("img")], img => Effect.tryPromise({ try: () => img.decode(), catch: () => new Error(`Image failed to decode: ${img.getAttribute("src") ?? "unknown source"}`) }), { concurrency: 8, discard: true });
+  yield* painted;
+  yield* painted;
+  if (!window.__framio.error) {
     window.__framio.ready = true;
-    if (!window.__framio.error) reportStatus(null);
+    reportStatus(null);
     postParent({ type: "ready", height: contentHeight() });
-  });
-}
+  }
+}).pipe(Effect.timeout("20 seconds"), Effect.catch(error => Effect.sync(() => window.__framio.reportError(error))));
+if (!boot.error) yield* Effect.forkScoped(waitForReady);
 
 // --- Canvas mode ---
 if (inCanvas) {
@@ -121,8 +167,8 @@ if (inCanvas) {
       postParent({ type: "size", height });
     }
   };
-  document.addEventListener("DOMContentLoaded", () => {
-    const ro = new ResizeObserver(sendSize);
+  documentEvents.addEventListener("DOMContentLoaded", () => {
+    const ro = observe(sendSize);
     ro.observe(document.documentElement);
     const root = document.getElementById("root");
     if (root) ro.observe(root);
@@ -138,7 +184,7 @@ if (inCanvas) {
   };
 
   // Wheel events inside an iframe never reach the canvas, so re-dispatch them on the iframe element.
-  window.addEventListener(
+  windowEvents.addEventListener(
     "wheel",
     (e) => {
       e.preventDefault();
@@ -166,7 +212,7 @@ if (inCanvas) {
 
   // Canvas shortcuts (V, H, Space, Shift+1, Cmd+=...) must work while the pointer is over a frame.
   for (const phase of ["keydown", "keyup"] as const) {
-    window.addEventListener(phase, (e) => {
+    windowEvents.addEventListener(phase, (e) => {
       const zoomKey = (e.metaKey || e.ctrlKey) && ["=", "+", "-", "0"].includes(e.key);
       if (e.code === "Space" || zoomKey || (e.metaKey && e.key === "a")) e.preventDefault();
       postParent({
@@ -185,10 +231,10 @@ if (inCanvas) {
 
   // Middle-button drag pans the canvas, even when it starts over a frame.
   let middleDown = false;
-  window.addEventListener("pointermove", (e) => {
+  windowEvents.addEventListener("pointermove", (e) => {
     if (middleDown) postParent({ type: "pan-move", screenX: e.screenX, screenY: e.screenY });
   });
-  window.addEventListener("pointerup", (e) => {
+  windowEvents.addEventListener("pointerup", (e) => {
     if (middleDown && e.button === 1) {
       middleDown = false;
       postParent({ type: "pan-end" });
@@ -206,7 +252,7 @@ if (inCanvas) {
       "style",
       `position:absolute;pointer-events:none;z-index:2147483646;box-sizing:border-box;border:${border};background:${background};display:none`,
     );
-    document.addEventListener("DOMContentLoaded", () => document.documentElement.appendChild(el));
+    documentEvents.addEventListener("DOMContentLoaded", () => document.documentElement.appendChild(el));
     return el;
   }
 
@@ -227,19 +273,19 @@ if (inCanvas) {
 
   const isOwn = (el: Element | null) => !el || el === document.documentElement || el === document.body || el.id === "root";
 
-  document.addEventListener("mousemove", (e) => {
+  documentEvents.addEventListener("mousemove", (e) => {
     const el = document.elementFromPoint(e.clientX, e.clientY);
     place(hover, isOwn(el) ? null : el);
   });
-  document.addEventListener("mouseleave", () => place(hover, null));
+  documentEvents.addEventListener("mouseleave", () => place(hover, null));
 
   for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "submit", "auxclick"]) {
-    window.addEventListener(type, (e) => {
+    windowEvents.addEventListener(type as "pointerdown" | "mousedown" | "pointerup" | "mouseup" | "submit" | "auxclick", (e) => {
       e.preventDefault();
       e.stopPropagation();
     }, true);
   }
-  window.addEventListener(
+  windowEvents.addEventListener(
     "pointerdown",
     (e) => {
       if (e.button !== 1) return;
@@ -248,7 +294,7 @@ if (inCanvas) {
     },
     true,
   );
-  window.addEventListener(
+  windowEvents.addEventListener(
     "dblclick",
     (e) => {
       e.preventDefault();
@@ -257,7 +303,7 @@ if (inCanvas) {
     },
     true,
   );
-  window.addEventListener(
+  windowEvents.addEventListener(
     "contextmenu",
     (e) => {
       e.preventDefault();
@@ -267,7 +313,7 @@ if (inCanvas) {
     },
     true,
   );
-  window.addEventListener(
+  windowEvents.addEventListener(
     "click",
     (e) => {
       e.preventDefault();
@@ -280,22 +326,22 @@ if (inCanvas) {
     },
     true,
   );
-  window.addEventListener("message", (e) => {
-    if (e.data?.source !== "framio-canvas") return;
-    if (e.data.type === "clear-selection") {
+  windowEvents.addEventListener("message", (e) => {
+    if (e.source !== window.parent || e.origin !== location.origin) return;
+    const decoded = Schema.decodeUnknownResult(CanvasMessage)(e.data);
+    if (Result.isFailure(decoded)) return;
+    const message = decoded.success;
+    if (message.type === "clear-selection") {
       selectedEl = null;
       place(selected, null);
     }
-    if (e.data.type === "css") {
-      const link = document.querySelector<HTMLLinkElement>('link[href^="/_theme.css"]');
-      if (!link) return;
-      const next = link.cloneNode() as HTMLLinkElement;
-      next.href = `/_theme.css?v=${e.data.version}`;
-      next.onload = () => link.remove();
-      link.after(next);
+    if (message.type === "css") {
+      if (message.version <= latestCssVersion) return;
+      latestCssVersion = message.version;
+      Queue.offerUnsafe(cssVersions, message.version);
     }
   });
-  new ResizeObserver(() => place(selected, selectedEl)).observe(document.documentElement);
+  observe(() => place(selected, selectedEl)).observe(document.documentElement);
 }
 
 function cssPath(el: Element): string {
@@ -328,4 +374,11 @@ function describe(el: Element) {
   };
 }
 
+// Host unload only signals the scope; fibers, RAFs, observers and listeners release there.
+yield* Effect.callback<void>(resume => {
+  const done = () => resume(Effect.void);
+  window.addEventListener("pagehide", done, { once: true });
+  return Effect.sync(() => window.removeEventListener("pagehide", done));
+});
+})).pipe(Effect.catch(error => Effect.logError("Frame runtime failed", error))));
 export {};
