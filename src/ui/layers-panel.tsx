@@ -171,9 +171,9 @@ function FrameLayers({
       <div className="px-2 pb-2 text-xs text-neutral-300">
         {frame.meta.name}
       </div>
-      {report?.warnings.map((warning, index) => (
+      {report?.warnings.map((warning) => (
         <p
-          key={index}
+          key={`${warning.path}:${warning.message}`}
           className="mb-2 rounded bg-amber-500/10 p-2 text-[11px] text-amber-200"
         >
           {warning.message}
