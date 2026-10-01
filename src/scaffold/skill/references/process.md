@@ -75,6 +75,10 @@ Screens and flows to design now.
   reference frame before adding the next. After all references pass,
   `framio screenshot --page moodboard` and summarize the patterns you'll use for the user.
 
+For a redesign, capture the current app during research with
+`framio screenshot --url <app-url> --into 01-moodboard`. Review the image and edit its sidecar
+note to record what to keep or change. See `references/handoff.md`.
+
 ## Phase 2: Directions
 
 **Goal:** let the user choose a visual direction before you build a system around it.
