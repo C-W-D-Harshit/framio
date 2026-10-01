@@ -196,6 +196,27 @@ function FrameLayers({
           <div
             key={row.key}
             role="treeitem"
+            tabIndex={0}
+            aria-level={row.depth + 1}
+            aria-label={row.label}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                postLayer(frame.id, "layer-select", row.node.path);
+              } else if (
+                event.key === "ArrowRight" ||
+                event.key === "ArrowLeft"
+              ) {
+                event.preventDefault();
+                setExpanded((current) => {
+                  const next = new Set(current);
+                  if (event.key === "ArrowRight") next.add(row.key);
+                  else next.delete(row.key);
+                  return next;
+                });
+              }
+            }}
             aria-selected={selection.layer?.path === row.node.path}
             aria-expanded={row.expandable ? expanded.has(row.key) : undefined}
             data-layer-row={row.key}
