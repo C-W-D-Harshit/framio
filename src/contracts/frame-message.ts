@@ -17,6 +17,8 @@ export const FrameMessage = Schema.Union([
     ...base,
     type: Schema.Literal("select"),
     element: Schema.NullOr(ElementInfo),
+    x: Schema.optional(Schema.Finite),
+    y: Schema.optional(Schema.Finite),
   }),
   Schema.Struct({ ...base, type: Schema.Literals(["dblclick", "pan-end"]) }),
   Schema.Struct({

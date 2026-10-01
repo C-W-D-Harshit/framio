@@ -35,7 +35,8 @@ body {
 
 /* Hand tool / Space held / middle-drag: frames stop taking input so the whole canvas pans. */
 .tool-hand iframe,
-.is-panning iframe {
+.is-panning iframe,
+.is-dragging iframe {
   pointer-events: none;
 }
 .tool-hand .react-flow__pane,

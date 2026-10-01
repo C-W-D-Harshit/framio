@@ -75,6 +75,14 @@ export function App() {
             {snapshot.cssError}
           </div>
         )}
+        {snapshot?.commentsError && (
+          <div
+            role="alert"
+            className="m-2 rounded-md bg-red-500/10 p-2 text-xs text-red-300"
+          >
+            {snapshot.commentsError}
+          </div>
+        )}
         {saveError && (
           <div
             role="alert"
@@ -110,6 +118,8 @@ export function App() {
             cssVersion={snapshot.cssVersion}
             tool={tool}
             onTool={setTool}
+            comments={snapshot.comments ?? []}
+            commentsError={snapshot.commentsError ?? null}
           />
         )}
 
@@ -134,7 +144,8 @@ export function App() {
               )}
             </span>
             <span className="shrink-0 text-neutral-500">
-              · your agent can see this
+              {selection.width ? `${selection.width}px · ` : ""}your agent can
+              see this
             </span>
           </div>
         )}
