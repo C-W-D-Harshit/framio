@@ -19,7 +19,7 @@ export function viewports(meta: FrameMeta, width?: number) {
   );
 }
 export function viewportId(id: string, meta: FrameMeta, width: number) {
-  return meta.widths ? `${id}@${width}` : id;
+  return meta.widths ? `__viewport__/${id}/${width}` : id;
 }
 export function groupWidth(meta: FrameMeta) {
   return viewports(meta).reduce((sum, v, i) => sum + v.width + (i ? 80 : 0), 0);

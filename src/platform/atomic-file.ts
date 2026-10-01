@@ -1,3 +1,4 @@
+import * as Predicate from "effect/Predicate";
 import * as Effect from "effect/Effect";
 import { readFileSync, renameSync, unlinkSync } from "node:fs";
 import { InvalidInput } from "../domain/errors";
@@ -13,7 +14,8 @@ export const publishIfUnchanged = (
       try {
         current = readFileSync(file, "utf8");
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        if (!Predicate.hasProperty(error, "code") || error.code !== "ENOENT")
+          throw error;
         current = null;
       }
       if (current !== expected) {

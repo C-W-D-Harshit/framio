@@ -4,6 +4,9 @@ export const Author = Schema.Literals(["user", "agent"]);
 const Body = Schema.String.pipe(Schema.check(Schema.isPattern(/\S/)));
 const Timestamp = Schema.String.pipe(
   Schema.check(
+    Schema.isPattern(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
+    ),
     Schema.makeFilter((value) => Number.isFinite(Date.parse(value)), {
       message: "Expected an ISO timestamp",
     }),
