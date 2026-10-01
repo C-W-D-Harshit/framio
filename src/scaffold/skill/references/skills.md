@@ -40,7 +40,7 @@ Keep the required skills for design work; defer their loading until design work 
 
 | Job | Load |
 | --- | --- |
-| Landing page, marketing site, portfolio, launch page | `frontend-design`, `gpt-tasteskill`, `landing-page`; `pricing-page` when there's pricing. Consider Axis or Notio from `references/libraries.md` when a template fits. |
+| Landing page, marketing site, portfolio, launch page | `frontend-design`, `gpt-tasteskill`, `landing-page`; `pricing-page` when there's pricing. Use Tailark free components as required by `references/libraries.md`; consider Axis or Notio as starting templates when they fit the brief. |
 | Product UI: web app, SaaS, admin, internal tool | `interface-design`, `apple-design`. Spend the effort on UX: flows, states, density, forms, feedback. |
 | Dashboard or KPI/analytics screen | Product-UI skills plus `better-ui` and `kpi-dashboard-design` through `npx skills use`; see the dashboard commands below. |
 | Exploring directions or variants (phase 2, "show me options") | `prototype`; follow Framio's one-frame review loop even if the skill suggests building variants together |

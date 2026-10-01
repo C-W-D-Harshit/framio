@@ -62,6 +62,8 @@ Screens and flows to design now.
   "onboarding with workspace setup") and `search_screens` / `search_sections` for key screens and
   landing sections. Search one flow or screen per query, with concrete UI words.
 - Without Mobbin: use web search or what you know of category leaders, and say so.
+- For landing pages, browse Tailark's free pages and blocks during research and shortlist
+  components for the brief. See `references/libraries.md`; install selected items on demand.
 - Pick 6–12 references that are genuinely good and relevant. Add each reference one at a time:
   download the
   high-resolution `image_url` (it expires; never hotlink) into `.framio/pages/01-moodboard/` and
@@ -89,8 +91,9 @@ note to record what to keep or change. See `references/handoff.md`.
   of the same thing.
 - Finish and visually verify each direction frame before creating the next. Load the required
   and job-specific design skills immediately before creating the first direction.
-- For landing pages, consider Axis or Notio when their structure suits the brief; see
-  `references/libraries.md`. Customize any template to the product and chosen direction.
+- For landing pages, use Tailark's free components in each direction. Use Axis or Notio
+  when their structure fits the brief, pairing them with Tailark sections. Follow the import and
+  React adaptation workflow in `references/libraries.md`, then customize to the product.
 - For dashboards, load `better-ui` and `kpi-dashboard-design` through the `npx skills use`
   commands in `references/skills.md` before designing the first dashboard frame.
 - Each direction frame is a style tile: palette swatches with hex values, a type specimen
@@ -130,7 +133,8 @@ first, then change what the brief calls for.
   structure, no color or decoration) to agree on layout and hierarchy, then build hi-fi frames
   as variations of them.
 - Landing pages: decide the section order and the job of each section (hook, proof, explain,
-  convert) before building sections.
+  convert), then map sections to reusable Tailark blocks. Search other React + Tailwind libraries
+  for missing pieces before custom-building; restyle selected components for the product.
 
 ## Phase 5: Screens
 

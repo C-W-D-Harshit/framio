@@ -25,7 +25,7 @@ content, no data fetching, no real logic. Each state (empty, loading, error, ope
 | `framio inspect <page>/<frame> [--layer "<path>"]` | Print layer geometry, styles, child spacing, and automatic checks as JSON. |
 | `framio screenshot --page <page>` | One PNG of a whole page as laid out on the canvas, with notes and variation lines. |
 | `framio install <package>` | Add an npm package (icons etc.). Never run npm/pnpm/yarn in `.framio`. |
-| `framio add <registry-item>` | Add a component from a shadcn registry: `@aceternity/…`, `@react-bits/…`, `@kokonutui/…`, `@rareui/…`. |
+| `framio add <registry-item>` | Add a component from a shadcn registry: `@tailark-oss/…`, `@aceternity/…`, `@react-bits/…`, `@kokonutui/…`, `@rareui/…`. |
 | `npx shadcn@latest search @aceternity -q hero` | Browse a registry (run inside `.framio`). |
 | `npx ui-skills get <slug>` | Load a design skill. See "Design skills" below. |
 
@@ -124,10 +124,15 @@ the moodboard page (see `references/process.md`).
 
 ## Landing-page templates
 
-When asked to make a landing page, consider StyleUI's Axis and Notio templates when they fit
-the brief. See `references/libraries.md` for registry URLs and import commands. Import only
-the chosen template into `.framio`, then customize its sections, content, imagery, and styling
-to DESIGN.md. Use it as a starting point, and visually verify each frame before making the next.
+Every landing page must use Tailark's free components. Avoid building landing-page components
+from scratch: find suitable Tailark blocks first, then restyle and adapt them to the product.
+For pieces Tailark does not cover, search other React + Tailwind libraries before custom-building.
+Choose a complete page or compose blocks; install only selected items on demand with `framio add`.
+See `references/libraries.md` for discovery, registry setup, and the import workflow.
+Use Axis or Notio as a starting template when it fits the brief, and pair it with Tailark sections.
+Adapt Next.js imports and assets into ordinary React frames using the same workflow as those
+templates, customize to DESIGN.md, and visually verify each frame before making the next.
+Build a custom component only when no suitable reusable option exists or the user requests one.
 
 ## Images and illustrations
 

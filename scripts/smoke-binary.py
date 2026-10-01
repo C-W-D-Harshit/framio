@@ -25,15 +25,16 @@ with TemporaryDirectory(prefix="framio-binary-init-") as directory:
         timeout=30,
     )
     count = 0
-    # Compare intentional layer examples and skill updates against the checked-out sources.
-    updated_examples = {
+    # Compare intentional registry, layer example and skill updates against checkout sources.
+    updated_scaffold = {
+        "src/scaffold/components.json",
         "src/scaffold/pages/00-example/sign-in.tsx",
         "src/scaffold/pages/00-example/sign-in--split.tsx",
     }
     expected_files = {
         source: expected
         for source, expected in baseline["scaffold"].items()
-        if not source.startswith("src/scaffold/skill/") and source not in updated_examples
+        if not source.startswith("src/scaffold/skill/") and source not in updated_scaffold
     }
     expected_files.update(
         {
@@ -47,7 +48,7 @@ with TemporaryDirectory(prefix="framio-binary-init-") as directory:
     expected_files.update(
         {
             source: hashlib.sha256((repo / source).read_bytes()).hexdigest()
-            for source in updated_examples
+            for source in updated_scaffold
         }
     )
     for source, expected in expected_files.items():

@@ -18,20 +18,73 @@ Never mix icon sets in one product, and never use emoji as icons.
 **shadcn/ui** (Base UI) is already in `components/ui/` and is the base for every product. Restyle
 it through DESIGN.md tokens rather than editing component files.
 
-## Landing-page templates
+## Landing pages: Tailark required
 
-When asked for a landing page, consider these StyleUI templates before building from scratch.
-Use one when its structure fits the brief and chosen direction; a template is optional, not a
-reason to change the product or force the same layout on every page.
+Every landing page must use [Tailark's free components](https://github.com/tailark/blocks).
+Avoid building landing-page components from scratch. Find suitable Tailark blocks, then adapt
+and restyle their layout, content, imagery, and tokens for the product. If a needed piece is
+missing, search other React + Tailwind libraries or registries before implementing it yourself.
+Build a custom component only when no suitable reusable option exists or the user requests one.
+Choose a complete Dusk page when it fits the brief, or compose individual Dusk, Mist, or Veil
+blocks. Use only the free collection; the main Tailark site's premium illustrations and
+pages are outside this workflow. Install selected items on demand, as with our existing
+templates. Do not bundle the upstream library or install every block.
+
+### Discover and install
+
+The Base UI registry matches Framio's component base. New projects include this entry in
+`.framio/components.json`. For older projects, merge it into `registries`, preserving other
+entries:
+
+```json
+{
+  "registries": {
+    "@tailark-oss": "https://oss.tailark.com/r/{name}"
+  }
+}
+```
+
+Browse the [free registry index](https://oss.tailark.com/r/registry.json) or search and inspect
+items inside `.framio/` before importing:
+
+```sh
+cd .framio
+npx shadcn@latest search @tailark-oss -q hero
+npx shadcn@latest view @tailark-oss/dusk-landing-1
+```
+
+From the project root, add only the selected page or blocks. Framio's wrapper preserves
+existing component files by default:
+
+```sh
+framio add @tailark-oss/dusk-landing-1
+# Or compose selected sections:
+framio add @tailark-oss/dusk-hero-section-1 @tailark-oss/dusk-features-7
+```
+
+The direct equivalent runs inside `.framio/`:
+
+```sh
+npx shadcn@latest add @tailark-oss/dusk-landing-1
+```
+
+If discovery needs more context, inspect the source in `https://github.com/tailark/blocks`
+with btca-local when available. Read the selected block's code and dependencies, including
+any extra packages, theme tokens, and assets.
+
+### Existing templates
+
+Axis and Notio are encouraged when their structure fits the brief and direction. Use their
+page composition and existing sections as a starting point, and incorporate selected Tailark
+blocks where they serve the product. Restyle both together so the page feels consistent.
+A complete Tailark page or a composition of Tailark blocks is also a valid starting point.
 
 | Template | Registry |
 | --- | --- |
 | Axis | `https://styleui.dev/r/axis.json` |
 | Notio | `https://styleui.dev/r/notio.json` |
 
-Inspect the registry's code before importing. Add only the template you intend to use, when
-landing-page design begins. From the project root, prefer Framio's wrapper, which keeps
-existing component files by default:
+Inspect the code, then import only the chosen template from the project root:
 
 ```sh
 framio add https://styleui.dev/r/axis.json
@@ -39,27 +92,24 @@ framio add https://styleui.dev/r/axis.json
 framio add https://styleui.dev/r/notio.json
 ```
 
-The direct shadcn commands are also available. Run them inside `.framio/`, where dependencies
-and registry files belong, and preserve existing customized components:
+### Adapt imports into Framio frames
 
-```sh
-cd .framio
-bunx --bun shadcn@latest add https://styleui.dev/r/axis.json
-# Or:
-bunx --bun shadcn@latest add https://styleui.dev/r/notio.json
-```
+Use the same workflow for Tailark and StyleUI. Adapt imported sections into static React
+frame components in `pages/`; do not create an application or wire routes and backend services.
+Customize the hierarchy, sections, copy, imagery, typography, colors, spacing, and responsive
+layout to the brief and DESIGN.md. Preserve existing customized components during imports.
 
-Adapt the imported sections into static React frame components in `pages/`; do not create an
-application or wire routes and backend services. Customize the hierarchy, sections, copy,
-imagery, typography, colors, spacing, and responsive layout to the brief and DESIGN.md.
-Replace placeholder content and adapt framework-specific imports to the Framio environment.
-These registries include Next.js `app/` pages, layouts, theme providers, and `public/` assets.
-Reuse their section components in a frame instead of treating the generated `app/` as an entry
-point. Replace Next.js image/link/navigation imports with suitable React equivalents, adapt
-theme providers and CSS to DESIGN.md, and copy needed `public/` assets into `.framio/assets/`
-with references changed to `/assets/...`. Check that every image loads in the frame.
+These imports can contain Next.js `app/` pages, layouts, theme providers, and references to
+`public/` assets. Reuse their section components in a frame instead of treating generated
+`app/` files as entry points. Replace Next.js image/link/navigation imports with suitable
+React equivalents and adapt theme providers and CSS to DESIGN.md. Copy needed assets into
+`.framio/assets/` with references changed to `/assets/...`; if the registry does not ship a
+referenced asset, retrieve it from the free source or replace it with product-specific imagery.
+Check that every image loads and all imported component paths resolve.
+
 Finish the screenshot-and-fix loop for one frame before making another. Record the selected
-template and meaningful adaptations in DESIGN.md's `## Libraries` section.
+Tailark items, any starting template, and meaningful adaptations in DESIGN.md's `## Libraries`
+section. Preserve the upstream MIT copyright and license notice when copying Tailark source.
 
 ## Registry components
 
@@ -79,8 +129,9 @@ framio add @aceternity/hero-parallax                          # add it (keeps yo
 | RareUI | Unusual animated pieces (LiquidMetal, Book3D, GlassShimmerButton…). Accents only. | `framio add @rareui/<Name>` |
 
 Rules:
-- **Landing pages:** consider Axis or Notio when suitable; Aceternity for the hero and big sections, plus one or two React Bits or
-  RareUI moments. Restraint: one showpiece per screen, everything else calm.
+- **Landing pages:** Tailark free components are required. Use Axis or Notio when their structure
+  fits the brief; use Aceternity, React Bits, or RareUI for additional accents when useful.
+  Restraint: one showpiece per screen, everything else calm.
 - **Product UI:** shadcn first. Animated components only where delight helps (onboarding, empty
   states, success moments), never in dense working screens.
 - Read a component's code before using it, and restyle it with DESIGN.md tokens so it belongs.
