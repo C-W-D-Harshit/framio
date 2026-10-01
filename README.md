@@ -74,9 +74,46 @@ them up. Fonts load from Google Fonts. The file follows
 | `framio stop` | Stop the canvas (`--all` for every project) |
 | `framio status` / `list` | Show this server / all servers |
 | `framio open` | Open a running canvas in the browser |
-| `framio screenshot <frame>` | Save frames as PNG (`--page`, `--all`, `--scale=2`) |
+| `framio screenshot <frame>` | Save frames and top-level layer crops (`--page`, `--all`, `--scale=2`) |
+| `framio screenshot <frame> --layer "<path>"` | Capture a named layer with context; repeat for several layers |
+| `framio inspect <frame> [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON |
 | `framio add <component>` | Add a shadcn registry component |
 | `framio install <package>` | Add an npm package for designs to use |
+
+## Layers
+
+Name meaningful parts of a design with plain JSX:
+
+```tsx
+<div className="min-h-screen">
+  <header data-layer="Header">…</header>
+  <main data-layer="Content">
+    <section data-layer="Balance Card">…</section>
+  </main>
+</div>
+```
+
+The Layers panel sits below Pages. Select a frame to see its tree, hover to outline a layer,
+and click to select it. Clicking inside a frame reveals the nearest named layer. Repeated
+siblings group into one row; paths such as `Content/Transaction Row[2]` select an instance.
+An omitted index means the first match. Avoid `/`, `[` and `]` in names.
+
+Double-click a name to rename its JSX string literal, including in shared components. A mapped
+list shares one source name, so renaming updates every instance. Expression names and stale
+or ambiguous source locations are refused.
+
+Name every direct child of the frame root. Missing names produce non-blocking warnings on
+the canvas, in the panel, in `.framio/.state/errors.json`'s additive `warnings` array, and in
+screenshot output. Selection keeps its existing fields and adds `layer: { path, name }`.
+
+Full-frame screenshots also save top-level crops under `<slug>.layers/` and print the layer
+tree with sizes. Layer crops include 8px of surrounding context and use 1–2× scale to approach
+1,500px on the longest side. For very tall layers, screenshot a child layer.
+
+`framio inspect` checks text and child overflow, stack gaps, near alignment, the 4px spacing
+grid, text contrast, and interactive target sizes. These geometry checks guide review; text
+contrast assumes the measured flat background and cannot judge images, gradients, or overlays.
+Build and review one layer at a time, then finish with a full-frame screenshot.
 
 ## Development
 

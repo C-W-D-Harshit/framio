@@ -20,7 +20,9 @@ content, no data fetching, no real logic. Each state (empty, loading, error, ope
 | `framio start` | Run the canvas in a persistent terminal. Ctrl+C stops it. Run it before designing. |
 | `framio start --background` | Explicit background mode when a persistent terminal is unavailable. Stop it with `framio stop` when finished. |
 | `framio list` / `framio stop --all` | List or stop servers across projects. |
-| `framio screenshot <page>/<frame>` | Render one frame to PNG. **Look at it after every change.** |
+| `framio screenshot <page>/<frame>` | Save the full frame, top-level layer crops, and the layer tree. |
+| `framio screenshot <page>/<frame> --layer "Content/Balance card"` | Screenshot a layer with context. Repeat `--layer` for several crops. |
+| `framio inspect <page>/<frame> [--layer "<path>"]` | Print layer geometry, styles, child spacing, and automatic checks as JSON. |
 | `framio screenshot --page <page>` | One PNG of a whole page as laid out on the canvas, with notes and variation lines. |
 | `framio install <package>` | Add an npm package (icons etc.). Never run npm/pnpm/yarn in `.framio`. |
 | `framio add <registry-item>` | Add a component from a shadcn registry: `@aceternity/…`, `@react-bits/…`, `@kokonutui/…`, `@rareui/…`. |
@@ -45,7 +47,7 @@ content, no data fetching, no real logic. Each state (empty, loading, error, ope
       welcome.tsx              # a frame
       welcome--illustrated.tsx # a variation of it
   .state/selection.json  # what the user selected on the canvas (read-only)
-  .state/errors.json     # build, runtime, and DESIGN.md errors (read-only)
+  .state/errors.json     # errors and non-blocking layer warnings (read-only)
 ```
 
 Never edit `canvas.json` (frame positions) or anything in `.state/`. Delete `pages/00-example`
@@ -88,8 +90,8 @@ write HTML, or wire real data), Framio's rules win.
 Work on exactly one frame at a time, including directions, design-system frames, screens,
 and variations. For each frame:
 
-1. Create or edit the frame.
-2. Check `.framio/.state/errors.json`, fix errors, and run `framio screenshot <page>/<frame>`.
+1. Build one meaningful layer, screenshot it with `--layer`, inspect the crop, and fix it before the next layer. Finish with the full frame.
+2. Run `framio inspect` first in critique and fix its findings, then review the layer crops. Check `.framio/.state/errors.json`, fix errors, and run `framio screenshot <page>/<frame>`.
 3. Open the PNG and inspect it visually. Check layout, alignment, spacing, typography, colors,
    contrast, clipping, imagery, and every visible detail. A successful command is not a review.
 4. Fix every issue you find, including minor ones. Screenshot again and inspect the new PNG.
@@ -157,7 +159,13 @@ export const meta = {
 };
 
 export default function Frame() {
-  return <div className="min-h-screen bg-background">…</div>;
+  return <div className="min-h-screen bg-background">
+    <header data-layer="Header">…</header>
+    <main data-layer="Content">
+      <section data-layer="Pricing Plans">…</section>
+    </main>
+    <footer data-layer="Footer">…</footer>
+  </div>;
 }
 ```
 
@@ -166,6 +174,18 @@ export default function Frame() {
 - Style with theme tokens (`bg-background`, `text-muted-foreground`, `bg-primary`, `border`,
   `rounded-lg`), DESIGN.md colors (`bg-<name>`), and type styles (`type-display`, `type-body-md`,
   `font-heading`). Never hardcode a color that a token covers.
+
+## Layers
+
+Give every direct child of the frame root and every meaningful section `data-layer`.
+Name by purpose in Title Case: "Balance Card", not "Blue Box". Use one singular name for
+repeated items ("Transaction Row"). Name sections, cards, rows, and button groups as deeply
+as you would discuss them with someone; skip decorative spans. This is plain JSX, including
+in shared components.
+
+Paths follow named DOM ancestors: `Content/Balance Card`. Repeated siblings get indexes:
+`Content/Transaction Row[2]`; omitting the index selects the first. Use `/`, `[` and `]` only
+as path syntax, not in names. Literal names can be renamed in the canvas; expressions cannot.
 
 ## Mobile screens
 
@@ -186,6 +206,8 @@ Framio hides browser scrollbars in frames. Do not draw imitation scrollbars in t
   place only when the user asks to fix or update that frame.
 - **"This" means the selection.** When the user says "this", "these", "here", or "the selected",
   read `.framio/.state/selection.json`. `frames` lists selected frames; `element` (when a single
-  element was clicked) has its tag, text, classes, HTML, and CSS selector.
+  element was clicked) has its tag, text, classes, HTML, and CSS selector. `layer`, when present,
+  has `{ path, name }`. "This" or "here" with a selected layer means that layer; use its path
+  with `--layer` for screenshots.
 - **Verify.** After changes, check `.framio/.state/errors.json`, screenshot what you touched, and
   look at the image before saying you're done.
