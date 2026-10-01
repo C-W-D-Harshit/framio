@@ -13,7 +13,7 @@ Then in any project:
 
 ```sh
 framio init     # creates .framio/ (shadcn/ui, theme, agent skill) and installs its packages
-framio start    # starts the canvas in the background and opens it
+framio start    # runs the canvas and opens it; Ctrl+C stops it
 ```
 
 Framio is a single binary. It bundles Bun for installs and builds, and downloads its own
@@ -25,11 +25,17 @@ headless Chromium for screenshots. Node.js is needed for `framio add` and the ag
 | Command | |
 | --- | --- |
 | `framio init` | Create `.framio/` in the current directory |
-| `framio start [--no-open]` | Start the canvas server in the background (default command) |
-| `framio stop` / `status` / `open` | Manage the background server |
+| `framio start [--no-open]` | Run the canvas in the foreground (default command); Ctrl+C stops it |
+| `framio start --background` | Explicitly run the canvas in the background |
+| `framio list` / `stop --all` | List or stop servers across projects |
+| `framio stop` / `status` / `open` | Stop, inspect, or open an existing server |
 | `framio screenshot <frame>...` | Render frames to PNG (`--page <page>` for a whole page, `--all`, `--scale=2`) |
 | `framio install <package>...` | Add npm packages for frames to use |
 | `framio add <registry-item>... [--overwrite]` | Add shadcn registry components, keeping existing files by default |
+
+Screenshot commands reuse an existing server. If none is running, they start a temporary
+server and stop it afterward, including when rendering fails. `framio open` requires a
+running server. Background servers stay alive until stopped.
 
 ## Design with an agent
 
@@ -149,7 +155,7 @@ bun run build:binary     # dist/bin/framio-<os>-<arch> and .tar.gz for this plat
 Layout:
 
 - `src/cli.ts`, `src/commands/`: CLI
-- `src/server/`: background server (Bun.build bundling, Tailwind, file watching, screenshots)
+- `src/server/`: canvas server (Bun.build bundling, Tailwind, file watching, screenshots)
 - `src/runtime/`: script injected into every frame iframe (selection, sizing, input forwarding)
 - `src/ui/`: the canvas (React + React Flow)
 - `src/scaffold/`: what `framio init` writes into `.framio/`, including the agent skill

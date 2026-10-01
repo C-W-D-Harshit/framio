@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -22,6 +22,7 @@ export function findProjectRoot(from = process.cwd()): string | null {
 export type ProjectPaths = ReturnType<typeof projectPaths>;
 
 export function projectPaths(root: string) {
+  root = realpathSync(root);
   const framio = join(root, FRAMIO_DIR);
   const state = join(framio, ".state");
   return {

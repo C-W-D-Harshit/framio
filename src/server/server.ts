@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, writeFile
 import { basename, join, normalize, relative, sep } from "node:path";
 import { runtimeFile, uiFiles } from "../generated/assets.js";
 import { projectPaths } from "../lib/paths";
-import type { ServerInfo } from "../lib/server-state";
+import { registerServer, type ServerInfo } from "../lib/server-state";
 import { FrameBundler } from "./bundler";
 import { findFrame, scanProject, type Frame, type Page } from "./project";
 import { Screenshotter } from "./screenshotter";
@@ -36,7 +36,7 @@ const mimeType = (path: string) => MIME[path.slice(path.lastIndexOf("."))];
 
 const log = (...args: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...args);
 
-export async function runServer(root: string) {
+export async function runServer(root: string, onReady?: (url: string) => void) {
   const p = projectPaths(root);
   mkdirSync(p.state, { recursive: true });
 
@@ -289,7 +289,7 @@ export async function runServer(root: string) {
         const path = decodeURIComponent(url.pathname);
 
         if (path === "/ws") return server.upgrade(req) ? undefined : new Response("Upgrade failed", { status: 400 });
-        if (path === "/api/health") return json({ ok: true, root });
+        if (path === "/api/health") return json({ ok: true, root, pid: process.pid });
         if (path === "/api/project") return json(snapshot());
 
         if (path === "/api/selection" && req.method === "POST") {
@@ -416,6 +416,7 @@ export async function runServer(root: string) {
   };
   screenshotter = new Screenshotter(info.url);
   writeFileSync(p.serverFile, JSON.stringify(info, null, 2) + "\n");
+  registerServer(p, info);
   writeErrorsFile();
   log(`framio running at ${info.url} for ${root}`);
 
@@ -429,4 +430,5 @@ export async function runServer(root: string) {
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
+  onReady?.(info.url);
 }

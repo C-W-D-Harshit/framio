@@ -17,7 +17,9 @@ content, no data fetching, no real logic. Each state (empty, loading, error, ope
 
 | Command | Use |
 | --- | --- |
-| `framio start` | Start the canvas in the background (returns immediately). Run it before designing. |
+| `framio start` | Run the canvas in a persistent terminal. Ctrl+C stops it. Run it before designing. |
+| `framio start --background` | Explicit background mode when a persistent terminal is unavailable. Stop it with `framio stop` when finished. |
+| `framio list` / `framio stop --all` | List or stop servers across projects. |
 | `framio screenshot <page>/<frame>` | Render one frame to PNG. **Look at it after every change.** |
 | `framio screenshot --page <page>` | One PNG of a whole page as laid out on the canvas, with notes and variation lines. |
 | `framio install <package>` | Add an npm package (icons etc.). Never run npm/pnpm/yarn in `.framio`. |
@@ -131,6 +133,14 @@ gradient or pattern with the image's purpose written small), never a broken imag
 shadcn/ui is the base for everything. Pick one icon set per project and record it in DESIGN.md.
 Add animated or showpiece components from Aceternity, React Bits, Kokonut UI, or RareUI where the
 job calls for it. Read `references/libraries.md` for which to use when and how to install them.
+
+For maps, globes, animated backgrounds, and other creative SVG-style visuals, use web search
+to find an existing React component before implementing it. Prefer React Bits when it has a
+suitable component; also check other React libraries and registries for the specific visual.
+Read the component's docs and code, then reuse and style it to DESIGN.md instead of drawing
+the visual by hand with SVG or HTML. Use `framio add` for registry components and
+`framio install` for packages. Build a custom visual only when no suitable component exists
+or the user explicitly requests one.
 
 ## Frame format
 

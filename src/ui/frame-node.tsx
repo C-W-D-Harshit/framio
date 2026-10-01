@@ -70,7 +70,7 @@ export const FrameNode = memo(function FrameNode({
     <div style={{ width }}>
       <div
         className="frame-drag absolute bottom-full left-0 flex max-w-full cursor-default items-baseline gap-[0.5em] truncate whitespace-nowrap"
-        style={{ fontSize: 12 / zoom, paddingBottom: 6 / zoom }}
+        style={{ fontSize: 12, paddingBottom: 6 }}
         title="Drag to move · Double-click to zoom · Right-click for more"
       >
         {frame.error && <span className="inline-block size-[0.6em] shrink-0 self-center rounded-full bg-red-500" />}
@@ -121,7 +121,7 @@ export const FrameNode = memo(function FrameNode({
       {(frame.note || frame.source) && (
         <div
           className="absolute top-full left-0 flex max-w-full flex-col gap-[0.3em] text-neutral-400"
-          style={{ fontSize: 12 / zoom, paddingTop: 8 / zoom, lineHeight: 1.45 }}
+          style={{ fontSize: 12, paddingTop: 8, lineHeight: 1.45 }}
         >
           {frame.note && <p className="whitespace-pre-wrap">{frame.note}</p>}
           {frame.source && (

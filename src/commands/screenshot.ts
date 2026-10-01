@@ -30,21 +30,23 @@ export async function screenshot(argv: string[]) {
   const frames = args.filter((a) => !a.startsWith("--"));
   if (!page && !frames.length && !args.includes("--all")) throw new CliError(USAGE);
 
-  const { info } = await ensureServer(p);
-  const res = await fetch(`${info.url}/api/screenshot`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ frames, page, scale }),
-  });
-  const { results } = (await res.json()) as { results: Result[] };
+  const { info, cleanup } = await ensureServer(p, true);
+  try {
+    const res = await fetch(`${info.url}/api/screenshot`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ frames, page, scale }),
+    });
+    const { results } = (await res.json()) as { results: Result[] };
 
-  let failed = false;
-  for (const r of results) {
-    if (r.path) console.log(`${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`);
-    if (r.error) {
-      failed = true;
-      console.error(`error in ${r.frame}:\n${r.error}\n`);
+    let failed = false;
+    for (const r of results) {
+      if (r.path) console.log(`${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`);
+      if (r.error) {
+        failed = true;
+        console.error(`error in ${r.frame}:\n${r.error}\n`);
+      }
     }
-  }
-  if (failed) process.exitCode = 1;
+    if (failed) process.exitCode = 1;
+  } finally { await cleanup(); }
 }

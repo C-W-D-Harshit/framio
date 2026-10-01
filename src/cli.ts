@@ -3,7 +3,7 @@ import { add } from "./commands/add";
 import { init } from "./commands/init";
 import { install } from "./commands/install";
 import { screenshot } from "./commands/screenshot";
-import { open, start, status, stop } from "./commands/server";
+import { list, open, openBrowser, start, status, stop } from "./commands/server";
 import { CliError } from "./commands/shared";
 
 declare const FRAMIO_VERSION: string | undefined;
@@ -13,8 +13,10 @@ const HELP = `framio: a design canvas for coding agents
 
 Usage:
   framio init                      Create .framio/ in this directory
-  framio start [--no-open]         Start the canvas in the background (default command)
-  framio stop                      Stop the background server
+  framio start [--no-open]         Run the canvas in the foreground (Ctrl+C stops it)
+  framio start --background        Run the canvas in the background
+  framio stop [--all]              Stop this project or all registered servers
+  framio list                      List running servers across projects
   framio status                    Show whether the canvas is running
   framio open                      Open the canvas in your browser
   framio screenshot <frame>...     Render frames to PNG (--all, --scale=2)
@@ -33,7 +35,10 @@ try {
       await start(args);
       break;
     case "stop":
-      await stop();
+      await stop(args);
+      break;
+    case "list":
+      await list();
       break;
     case "status":
       await status();
@@ -52,7 +57,14 @@ try {
       break;
     case "__serve": {
       const { runServer } = await import("./server/server");
-      await runServer(args[0]!);
+      const { acquireServerLock, getRunningServer } = await import("./lib/server-state");
+      const { projectPaths } = await import("./lib/paths");
+      const p = projectPaths(args[0]!);
+      if (await getRunningServer(p)) break;
+      const release = acquireServerLock(p);
+      if (!release) break;
+      try { await runServer(p.root, args.includes("--open") ? openBrowser : undefined); }
+      catch (err) { release(); throw err; }
       break;
     }
     case "--version":
