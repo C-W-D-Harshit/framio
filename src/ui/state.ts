@@ -34,7 +34,11 @@ export const movedAtom = Atom.family((page: string) =>
   Atom.make<Record<string, { x: number; y: number }>>({}),
 );
 export const toolAtom = Atom.make<Tool>(
-  localStorage.getItem("framio:tool") === "hand" ? "hand" : "select",
+  localStorage.getItem("framio:tool") === "hand"
+    ? "hand"
+    : localStorage.getItem("framio:tool") === "comment"
+      ? "comment"
+      : "select",
 );
 
 const readHash = () => {
@@ -51,4 +55,9 @@ export const pageAtom = Atom.make(
       Stream.map(readHash),
     ),
   ),
+);
+
+export const saveCommentAtom = runtime.fn(
+  (payload: import("../contracts/comments").CommentOperation) =>
+    Effect.flatMap(ProjectClient, (client) => client.comment(payload)),
 );

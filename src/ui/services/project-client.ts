@@ -88,7 +88,36 @@ const make = Effect.gen(function* () {
     Effect.retry(Schedule.spaced("1 second")),
     Effect.forkScoped,
   );
-  return { changes: SubscriptionRef.changes(state), ...persistence };
+  const comment = Effect.fn("ProjectClient.comment")(
+    (payload: import("../../contracts/comments").CommentOperation) =>
+      (payload.type === "create"
+        ? api.project.comments({ payload })
+        : payload.type === "reply"
+          ? api.project.comments({ payload })
+          : payload.type === "status"
+            ? api.project.comments({ payload })
+            : api.project.comments({ payload })
+      ).pipe(
+        Effect.tap((response) =>
+          SubscriptionRef.update(state, (current) => ({
+            ...current,
+            saveError: response.error ?? null,
+          })),
+        ),
+        Effect.catch((error) =>
+          SubscriptionRef.update(state, (current) => ({
+            ...current,
+            saveError: "Could not save your comment. Try again.",
+          })).pipe(
+            Effect.as({
+              ok: false,
+              error: "Could not save your comment. Try again.",
+            }),
+          ),
+        ),
+      ),
+  );
+  return { comment, changes: SubscriptionRef.changes(state), ...persistence };
 });
 export class ProjectClient extends Context.Service<
   ProjectClient,
