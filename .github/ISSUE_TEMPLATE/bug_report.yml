@@ -1,0 +1,39 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. framio init
+        2. framio start
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: Framio version
+      description: Output of `framio --version`
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 15 (arm64)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or errors
+      description: Terminal output, or `.framio/.state/errors.json` if it exists.
+      render: shell
