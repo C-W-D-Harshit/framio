@@ -10,7 +10,7 @@ import type {
 } from "../contracts/requests";
 import type { Frame } from "../domain/project";
 import { Policies } from "../domain/policies";
-import { viewports, viewportId } from "../domain/viewports";
+import { frameViewports, viewportId } from "../domain/viewports";
 import { validateScreenshot } from "../domain/screenshot";
 import type { ProjectPaths } from "../lib/paths";
 import { ProjectState, projectSnapshot } from "./project-state";
@@ -87,7 +87,7 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                 meta: {
                   ...found.meta,
                   width,
-                  height: viewports(found.meta, width)[0]!.height,
+                  height: frameViewports(found, width)[0]!.height,
                 },
               };
             }
@@ -209,7 +209,7 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
           const frames = found.flatMap((frame) =>
             "error" in frame
               ? []
-              : viewports(frame.meta, body.width).map((v) => ({
+              : frameViewports(frame, body.width).map((v) => ({
                   ...frame,
                   meta: { ...frame.meta, ...v },
                 })),
@@ -237,12 +237,12 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                     ...frame,
                     meta: {
                       ...frame.meta,
-                      ...viewports(frame.meta, body.width)[0]!,
+                      ...frameViewports(frame, body.width)[0]!,
                       ...(frame.meta.widths
                         ? {
                             widths: [body.width],
                             heights: [
-                              viewports(frame.meta, body.width)[0]!.height,
+                              frameViewports(frame, body.width)[0]!.height,
                             ],
                           }
                         : {}),

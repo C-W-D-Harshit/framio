@@ -58,11 +58,14 @@ test("URL handoff, compare, imports, and responsive captures render actual PNGs"
   const app = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
-    fetch: () =>
-      new Response(
-        '<html><body style="margin:0;height:1300px;background:#336699"><h1>Real implementation</h1></body></html>',
+    fetch: (request) => {
+      if (new URL(request.url).pathname.endsWith(".png"))
+        return new Response("Missing image", { status: 404 });
+      return new Response(
+        '<html><body style="margin:0;height:1300px;background:#336699"><h1>Real implementation</h1><img src="/missing.png" width="10" height="10"><img loading="lazy" src="/lazy.png" width="10" height="10" style="position:absolute;top:1200px"></body></html>',
         { headers: { "content-type": "text/html" } },
-      ),
+      );
+    },
   });
   try {
     await Effect.runPromise(
@@ -196,6 +199,45 @@ test("URL handoff, compare, imports, and responsive captures render actual PNGs"
     rmSync(root, { recursive: true, force: true });
   }
 }, 120_000);
+
+test("image width captures and thumbnails preserve the source aspect ratio", async () => {
+  const root = fixture();
+  writeFileSync(
+    join(root, ".framio/pages/01-test/portrait.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="400"><rect width="200" height="400" fill="red"/></svg>',
+  );
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { info } = yield* runServer(root);
+          yield* Effect.promise(async () => {
+            const result = await post(info.url, "screenshot", {
+              frames: ["01-test/portrait.svg"],
+              width: 100,
+            });
+            expect(result.results[0].error).toBeNull();
+            expect(
+              imageSize(
+                new Uint8Array(readFileSync(result.results[0].path)),
+                "png",
+              ),
+            ).toEqual({ width: 100, height: 200 });
+            const thumbnail = await fetch(
+              `${info.url}/thumb/01-test/portrait.svg.png?width=100`,
+            );
+            expect(thumbnail.status).toBe(200);
+            expect(
+              imageSize(new Uint8Array(await thumbnail.arrayBuffer()), "png"),
+            ).toEqual({ width: 50, height: 100 });
+          });
+        }),
+      ).pipe(Effect.provide(BunServices.layer)),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test("comments round trip UI and agent edits, pins follow layout, viewport groups move and select", async () => {
   const root = fixture();

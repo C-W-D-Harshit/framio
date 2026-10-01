@@ -1,4 +1,4 @@
-import type { FrameMeta } from "./project";
+import type { Frame, FrameMeta } from "./project";
 
 export function viewports(meta: FrameMeta, width?: number) {
   const heightAt = (w: number) => {
@@ -23,4 +23,21 @@ export function viewportId(id: string, meta: FrameMeta, width: number) {
 }
 export function groupWidth(meta: FrameMeta) {
   return viewports(meta).reduce((sum, v, i) => sum + v.width + (i ? 80 : 0), 0);
+}
+
+export function frameViewports(
+  frame: Pick<Frame, "kind" | "meta">,
+  width?: number,
+) {
+  return viewports(frame.meta, width).map((viewport) =>
+    frame.kind === "image"
+      ? {
+          ...viewport,
+          height: Math.max(
+            1,
+            Math.round((frame.meta.height * viewport.width) / frame.meta.width),
+          ),
+        }
+      : viewport,
+  );
 }

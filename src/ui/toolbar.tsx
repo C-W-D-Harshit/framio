@@ -69,7 +69,6 @@ export function Toolbar({
           active={showComments}
           onClick={onToggleComments}
           label="Comments panel"
-          shortcut=""
         >
           <PanelRight className="size-4" />
         </ToolButton>
@@ -114,14 +113,16 @@ function ToolButton(props: {
   active?: boolean;
   onClick(): void;
   label: string;
-  shortcut: string;
+  shortcut?: string;
   children: ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
-      title={`${props.label} (${props.shortcut})`}
+      title={
+        props.shortcut ? `${props.label} (${props.shortcut})` : props.label
+      }
       aria-label={props.label}
       aria-pressed={props.active}
       className={`flex size-8 items-center justify-center rounded-lg ${

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { viewports, viewportId } from "../domain/viewports";
+import { frameViewports, viewports, viewportId } from "../domain/viewports";
 import { makeScreenshotHandler } from "../services/screenshot-request";
 import { makeComments } from "../services/comments";
 import { publishIfUnchanged } from "../platform/atomic-file";
@@ -346,7 +346,7 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
               ...frame,
               meta: {
                 ...frame.meta,
-                ...viewports(frame.meta, width)[0]!,
+                ...frameViewports(frame, width)[0]!,
               },
             },
             join(p.state, "thumbs", frame.page, `${frame.slug}@${width}.png`),

@@ -212,8 +212,10 @@ export class Screenshots extends Context.Service<
                   yield* chromiumOperation(() =>
                     page.evaluate(async () => {
                       await document.fonts.ready;
-                      await Promise.all(
-                        [...document.images].map((img) => img.decode()),
+                      await Promise.allSettled(
+                        [...document.images]
+                          .filter((img) => img.complete && img.naturalWidth > 0)
+                          .map((img) => img.decode()),
                       );
                       await new Promise<void>((resolve) =>
                         requestAnimationFrame(() =>
