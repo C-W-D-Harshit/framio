@@ -39,6 +39,7 @@ Everything lives in `.framio/`:
 | `BRIEF.md` | The product, its users, and the scope |
 | `DESIGN.md` | Colors, fonts, and radii (see below) |
 | `pages/` | One folder per canvas page: moodboards, screens, flows |
+| `comments.json` | Pinned feedback, replies, and open/resolved status |
 | `assets/` | Images used in designs, served at `/assets/<file>` |
 
 Drop images into a page folder to use them as a moodboard.
@@ -76,7 +77,10 @@ them up. Fonts load from Google Fonts. The file follows
 | `framio open` | Open a running canvas in the browser |
 | `framio screenshot <frame>` | Save frames and top-level layer crops (`--page`, `--all`, `--scale=2`) |
 | `framio screenshot <frame> --layer "<path>"` | Capture a named layer with context; repeat for several layers |
-| `framio inspect <frame> [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON |
+| `framio inspect <frame> [--width <n>] [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON |
+| `framio screenshot --url <url>` | Capture an app or website (`--width=1440`, `--height=900`, `--scale=1`) |
+| `framio screenshot --url <url> --compare <page>/<frame>` | Design left, implementation right, plus both single PNGs |
+| `framio screenshot --url <url> --into <page>` | Add the current app to a moodboard with a URL sidecar |
 | `framio add <component>` | Add a shadcn registry component |
 | `framio install <package>` | Add an npm package for designs to use |
 
@@ -106,14 +110,63 @@ Name every direct child of the frame root. Missing names produce non-blocking wa
 the canvas, in the panel, in `.framio/.state/errors.json`'s additive `warnings` array, and in
 screenshot output. Selection keeps its existing fields and adds `layer: { path, name }`.
 
-Full-frame screenshots also save top-level crops under `<slug>.layers/` and print the layer
-tree with sizes. Layer crops include 8px of surrounding context and use 1–2× scale to approach
+Full-frame screenshots also save top-level crops under `<slug>.layers/`, or
+`<slug>@<width>.layers/` for responsive frames, and print the layer tree with sizes. Layer crops include 8px of surrounding context and use 1–2× scale to approach
 1,500px on the longest side. For very tall layers, screenshot a child layer.
 
 `framio inspect` checks text and child overflow, stack gaps, near alignment, the 4px spacing
 grid, text contrast, and interactive target sizes. These geometry checks guide review; text
 contrast assumes the measured flat background and cannot judge images, gradients, or overlays.
+Use `--width` with screenshot or inspect to review one responsive viewport. Layer crops
+require frame arguments; they cannot be combined with URL, page, or all-frame captures.
 Build and review one layer at a time, then finish with a full-frame screenshot.
+
+## Responsive frames
+
+Use one component at several sizes:
+
+```tsx
+export const meta = {
+  name: "Invoices",
+  widths: [1440, 768, 390],
+  height: 900,
+  // heights: [900, 1024, 844], // optional overrides in widths order
+};
+```
+
+The first width is primary. Viewports appear side by side, largest first, and move as a group.
+Select any viewport individually; the agent's selection includes its width. Desktop heights
+use `meta.height`, tablet widths 600–1023 use 1024, and widths below 600 use 844. Frames still
+grow to fit content. Existing frames with `width` and `height` behave as before.
+
+`framio screenshot <page>/<frame>` captures all widths as `<slug>@<width>.png`.
+Use `--width <n>` for one viewport; page screenshots include all viewports.
+
+## Comments
+
+Press **C** or choose Comment, then click a frame to pin feedback. Enter saves; Escape cancels.
+Pins follow the clicked element and stay the same size when you zoom. The right comments panel
+lists the page's open feedback. Click a pin or list entry to reply, resolve, reopen, or delete.
+Open pins stay visible in Select and Hand; enable "Show resolved" to see resolved pins.
+
+Comments live in `.framio/comments.json`, alongside the designs. Tell your agent to "address the
+comments": it reads the file, fixes the frames, replies as `agent`, and resolves verified fixes.
+File edits appear live. Invalid comments are reported in the canvas and `.state/errors.json`;
+the server preserves the broken file and refuses UI writes until it is fixed.
+
+## Building your app
+
+Ask your agent to build the chosen design in your real app. The Framio skill guides it to port
+DESIGN.md tokens and shared components into your app's conventions, replace mock data, and
+compare every screen, including its smallest width:
+
+```sh
+framio screenshot --url http://localhost:3000/invoices --compare 11-invoices/list --width 390
+```
+
+URL captures use managed Chromium, capture the full page, and save to
+`.framio/.state/screenshots/urls/`. To capture a redesign's current app on the moodboard, add
+`--into 01-moodboard`. It creates an image frame with an editable `{ name, source, note }` sidecar.
 
 ## Development
 

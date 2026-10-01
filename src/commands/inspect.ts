@@ -10,6 +10,7 @@ import { InvalidInput } from "../domain/errors";
 export const inspect = Effect.fn("inspect")(function* (options: {
   frame: string;
   layer: Option.Option<string>;
+  width: Option.Option<number>;
 }) {
   const p = projectPaths(yield* requireProject);
   const { info } = yield* (yield* ServerLauncher).ensure(p, true);
@@ -17,6 +18,7 @@ export const inspect = Effect.fn("inspect")(function* (options: {
   const response = yield* client.project.inspect({
     payload: {
       frame: options.frame,
+      width: Option.getOrUndefined(options.width),
       layer: Option.getOrUndefined(options.layer),
     },
   });

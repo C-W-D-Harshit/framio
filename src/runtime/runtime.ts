@@ -14,6 +14,8 @@ import { CanvasMessage } from "../contracts/frame-message";
 const BootSchema = Schema.Struct({
   id: Schema.String,
   canvas: Schema.Boolean,
+  width: Schema.optional(Schema.Finite),
+  viewportId: Schema.optional(Schema.String),
   error: Schema.NullOr(Schema.String),
   version: Schema.optional(Schema.Finite),
 });
@@ -140,7 +142,7 @@ Effect.runFork(
       function postParent(msg: Record<string, unknown>) {
         if (inCanvas)
           window.parent.postMessage(
-            { source: "framio", frame: boot.id, ...msg },
+            { source: "framio", frame: boot.viewportId ?? boot.id, ...msg },
             "*",
           );
       }
@@ -159,6 +161,7 @@ Effect.runFork(
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({
                   id: boot.id,
+                  width: boot.width,
                   version: boot.version,
                   error,
                   warnings: window.__framio?.ready
@@ -514,6 +517,8 @@ Effect.runFork(
                       name: selectedEl.getAttribute("data-layer"),
                     }
                   : undefined,
+              x: e.clientX,
+              y: e.clientY,
             });
           },
           true,

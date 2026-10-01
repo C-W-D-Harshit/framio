@@ -1,3 +1,4 @@
+import { publishIfUnchanged } from "../../platform/atomic-file";
 import ts from "typescript";
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
@@ -177,11 +178,16 @@ export const makeLayerRenamer = Effect.gen(function* () {
             .pipe(Effect.catch(() => Effect.void)),
         );
         yield* fs.writeFileString(temporary, next);
-        if ((yield* fs.readFileString(file)) !== text)
+        if (
+          !(yield* publishIfUnchanged(file, temporary, text).pipe(
+            Effect.mapError(
+              (error) => new RenameFailed({ message: error.message }),
+            ),
+          ))
+        )
           return yield* new RenameFailed({
             message: "Source changed during rename. Try again after rebuild.",
           });
-        yield* fs.rename(temporary, file);
       }),
     );
   }, lock.withPermit);

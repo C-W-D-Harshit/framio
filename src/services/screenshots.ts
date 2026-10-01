@@ -20,6 +20,11 @@ import { BrowserUnavailable, CaptureFailed } from "../domain/errors";
 
 type Shot = LayerShot;
 type CaptureError = CaptureFailed | BrowserUnavailable;
+type CaptureOptions = {
+  layers?: readonly string[];
+  inspectOnly?: boolean;
+  emitLayers?: boolean;
+};
 export class Screenshots extends Context.Service<
   Screenshots,
   {
@@ -27,11 +32,21 @@ export class Screenshots extends Context.Service<
       frame: Frame,
       out: string,
       scale?: number,
-      layers?: readonly string[],
-      width?: number,
-      inspectOnly?: boolean,
-      emitLayers?: boolean,
+      options?: CaptureOptions,
     ) => Effect.Effect<Shot, CaptureError>;
+    captureUrl: (
+      url: string,
+      out: string,
+      width: number,
+      height: number,
+      scale?: number,
+    ) => Effect.Effect<Shot, CaptureError>;
+    compare: (
+      design: Shot,
+      implementation: Shot,
+      out: string,
+      scale?: number,
+    ) => Effect.Effect<Omit<Shot, "error">, CaptureError>;
     compose: (
       frames: readonly PageShotFrame[],
       positions: Record<string, { x: number; y: number }>,
@@ -89,19 +104,23 @@ export class Screenshots extends Context.Service<
             frame: Frame,
             out: string,
             scale = 1,
-            layers: readonly string[] = [],
-            viewportWidth = frame.meta.width,
-            inspectOnly = false,
-            emitLayers = true,
+            {
+              layers = [],
+              inspectOnly = false,
+              emitLayers = true,
+            }: CaptureOptions = {},
           ) =>
             resources.withPage((page) =>
               Effect.gen(function* () {
-                const { height } = frame.meta;
-                const width = viewportWidth; // TODO responsive frames: wire CLI --width and per-width filenames.
+                const { width, height } = frame.meta;
                 yield* chromiumOperation(() =>
                   page.setViewport({ width, height, deviceScaleFactor: scale }),
                 );
                 if (frame.kind === "image") {
+                  if (layers.length)
+                    return yield* new CaptureFailed({
+                      message: "Image frames have no DOM layers.",
+                    });
                   const src = `${baseUrl}/img/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}?v=${Date.now()}`;
                   yield* chromiumOperation(() =>
                     page.setContent(
@@ -128,7 +147,7 @@ export class Screenshots extends Context.Service<
                 }
                 yield* chromiumOperation(() =>
                   page.goto(
-                    `${baseUrl}/f/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}`,
+                    `${baseUrl}/f/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}?width=${frame.meta.width}&height=${frame.meta.height}`,
                   ),
                 );
                 yield* chromiumOperation(() =>
@@ -179,6 +198,126 @@ export class Screenshots extends Context.Service<
             ),
         );
 
+        const captureUrl = Effect.fn("Screenshots.captureUrl")(
+          (
+            url: string,
+            out: string,
+            width: number,
+            height: number,
+            scale = 1,
+          ) =>
+            resources
+              .withPage((page) =>
+                Effect.gen(function* () {
+                  yield* chromiumOperation(() =>
+                    page.setViewport({
+                      width,
+                      height,
+                      deviceScaleFactor: scale,
+                    }),
+                  );
+                  const response = yield* chromiumOperation(() =>
+                    page.goto(url, { waitUntil: "load", timeout: 20_000 }),
+                  );
+                  if (response && response.status() >= 400)
+                    return yield* new CaptureFailed({
+                      message: `URL returned HTTP ${response.status()}: ${url}`,
+                    });
+                  yield* chromiumOperation(() =>
+                    page.evaluate(async () => {
+                      await document.fonts.ready;
+                      await Promise.allSettled(
+                        [...document.images]
+                          .filter((img) => img.complete && img.naturalWidth > 0)
+                          .map((img) => img.decode()),
+                      );
+                      await new Promise<void>((resolve) =>
+                        requestAnimationFrame(() =>
+                          requestAnimationFrame(() => resolve()),
+                        ),
+                      );
+                    }),
+                  ).pipe(
+                    Effect.timeout("20 seconds"),
+                    Effect.mapError(
+                      (error) =>
+                        new CaptureFailed({
+                          message: `URL did not become ready: ${url}: ${error.message}`,
+                        }),
+                    ),
+                  );
+                  const fullHeight = yield* chromiumOperation(() =>
+                    page.evaluate(() =>
+                      Math.max(
+                        innerHeight,
+                        document.documentElement.scrollHeight,
+                        document.body?.scrollHeight ?? 0,
+                      ),
+                    ),
+                  );
+                  yield* write(
+                    out,
+                    yield* chromiumOperation(() =>
+                      page.screenshot({ type: "png", fullPage: true }),
+                    ),
+                  );
+                  return { path: out, width, height: fullHeight, error: null };
+                }),
+              )
+              .pipe(
+                Effect.mapError(
+                  (error) =>
+                    new CaptureFailed({
+                      message: `Could not capture ${url}: ${error.message}`,
+                    }),
+                ),
+              ),
+        );
+        const compare = Effect.fn("Screenshots.compare")(
+          function* (
+            design: Shot,
+            implementation: Shot,
+            out: string,
+            scale = 1,
+          ) {
+            const sources = yield* Effect.forEach(
+              [design, implementation],
+              (shot) => fs.readFile(shot.path),
+            );
+            return yield* resources.withPage((page) =>
+              Effect.gen(function* () {
+                const width = design.width + implementation.width + 48;
+                const height =
+                  Math.max(design.height, implementation.height) + 64;
+                const html = `<html><body style="margin:0;background:#262626;color:white;font:16px system-ui;display:flex;gap:16px;padding:16px">${[design, implementation].map((shot, i) => `<div><div style="height:32px">${i === 0 ? "Design" : "Implementation"}</div><img style="display:block;width:${shot.width}px;height:${shot.height}px" src="data:image/png;base64,${Buffer.from(sources[i]!).toString("base64")}"></div>`).join("")}</body></html>`;
+                yield* chromiumOperation(() =>
+                  page.setViewport({ width, height, deviceScaleFactor: scale }),
+                );
+                yield* chromiumOperation(() =>
+                  page.setContent(html, { waitUntil: "load" }),
+                );
+                yield* chromiumOperation(() =>
+                  page.evaluate(async () => {
+                    await Promise.all(
+                      [...document.images].map((img) => img.decode()),
+                    );
+                  }),
+                );
+                yield* write(
+                  out,
+                  yield* chromiumOperation(() =>
+                    page.screenshot({ type: "png" }),
+                  ),
+                );
+                return { path: out, width, height };
+              }),
+            );
+          },
+          Effect.mapError(
+            (error) => new CaptureFailed({ message: error.message }),
+          ),
+        );
+
         const compose = Effect.fn("Screenshots.compose")(
           (
             frames: readonly PageShotFrame[],
@@ -218,7 +357,7 @@ export class Screenshots extends Context.Service<
               }),
             ),
         );
-        return Screenshots.of({ capture, compose });
+        return Screenshots.of({ capture, captureUrl, compare, compose });
       }),
     );
   }

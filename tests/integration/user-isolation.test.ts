@@ -8,6 +8,7 @@ test("scaffold changes are limited to layer examples and agent guidance, with no
   const layerUpdates = new Set([
     "src/scaffold/skill/SKILL.md",
     "src/scaffold/skill/references/process.md",
+    "src/scaffold/skill/references/skills.md",
     "src/scaffold/pages/00-example/sign-in.tsx",
     "src/scaffold/pages/00-example/sign-in--split.tsx",
   ]);
@@ -18,9 +19,10 @@ test("scaffold changes are limited to layer examples and agent guidance, with no
         "utf8",
       );
       expect(content).not.toMatch(/from ["'](?:effect|@effect\/)/);
-      expect(content).toContain(
-        file.includes("process.md") ? "framio inspect" : "data-layer",
-      );
+      if (!file.endsWith("skills.md"))
+        expect(content).toContain(
+          file.includes("process.md") ? "framio inspect" : "data-layer",
+        );
       continue;
     }
     expect(

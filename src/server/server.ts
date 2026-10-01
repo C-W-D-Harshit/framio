@@ -1,4 +1,9 @@
-import { makeLayersApi, type LayerObservation } from "./layers/api";
+import { makeLayersApi } from "./layers/api";
+import { randomUUID } from "node:crypto";
+import { frameViewports, viewports, viewportId } from "../domain/viewports";
+import { makeScreenshotHandler } from "../services/screenshot-request";
+import { makeComments } from "../services/comments";
+import { publishIfUnchanged } from "../platform/atomic-file";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
@@ -30,7 +35,7 @@ import type {
 } from "../contracts/requests";
 import type { ServerInfo } from "../contracts/server-info";
 import type { Frame } from "../domain/project";
-import { CanvasFile } from "../domain/project";
+import { CanvasFile, PositiveNumber } from "../domain/project";
 import { Policies } from "../domain/policies";
 import { PortOccupied, ServerStartupFailed } from "../domain/errors";
 import { runtimeFile, uiFiles } from "../generated/assets.js";
@@ -42,8 +47,6 @@ import {
   type ProjectGeneration,
 } from "../services/project-state";
 import { Screenshots } from "../services/screenshots";
-import { layoutFrames } from "../ui/layout";
-import { findFrame } from "./project";
 export type { Snapshot, SnapshotFrame } from "../contracts/snapshot";
 
 const MIME: Record<string, string> = {
@@ -59,6 +62,8 @@ function frameHtml(frame: Frame, canvas: boolean, state: ProjectGeneration) {
   const boot = {
     id: frame.id,
     canvas,
+    width: frame.meta.widths ? frame.meta.width : undefined,
+    viewportId: viewportId(frame.id, frame.meta, frame.meta.width),
     version: built?.version ?? 0,
     error: frame.metaError ?? built?.error ?? null,
   };
@@ -117,141 +122,36 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
   );
 
   const layers = yield* makeLayersApi(p.framio, project, shots);
-  const screenshot = Effect.fn("Server.screenshot")(function* (
-    body: typeof ScreenshotRequest.Type,
-  ): Effect.fn.Return<typeof ScreenshotResponse.Type> {
-    const reports: LayerObservation[] = [];
-    const result = yield* project.withStableState((state) =>
-      Effect.gen(function* () {
-        const capture = (
-          frame: Frame,
-          scale = 1,
-        ): Effect.Effect<typeof ScreenshotResult.Type> =>
-          shots
-            .capture(
-              frame,
-              join(p.screenshots, frame.page, `${frame.slug}.png`),
-              scale,
-              body.layers,
-            )
-            .pipe(
-              Effect.tap((shot) =>
-                Effect.sync(() => {
-                  if (shot.report)
-                    reports.push({
-                      id: frame.id,
-                      version:
-                        state.artifacts.frames.get(frame.id)?.version ?? 0,
-                      report: shot.report,
-                    });
-                }),
-              ),
-              Effect.map((shot) => ({
-                frame: frame.id,
-                file: frame.relFile,
-                ...shot,
-              })),
-              Effect.catch((error) =>
-                Effect.succeed({
-                  frame: frame.id,
-                  file: frame.relFile,
-                  error: `Screenshot failed: ${error.message}`,
-                }),
-              ),
-            );
-        if (!body.page) {
-          const refs = body.frames?.length
-            ? body.frames
-            : state.pages.flatMap((page) =>
-                page.frames.map((frame) => frame.id),
-              );
-          const results = yield* Effect.forEach(
-            refs,
-            (ref): Effect.Effect<typeof ScreenshotResult.Type> => {
-              const frame = findFrame(state.pages, ref);
-              return "error" in frame
-                ? Effect.succeed({ frame: ref, error: frame.error })
-                : capture(frame, body.scale);
-            },
-            { concurrency: Policies.captureConcurrency },
+  const screenshot = yield* makeScreenshotHandler(
+    root,
+    p,
+    project,
+    shots,
+    fs,
+    layers.warnings,
+  );
+  const commentsFile = join(p.framio, "comments.json");
+  const comments = yield* makeComments({
+    read: fs
+      .readFileString(commentsFile)
+      .pipe(
+        Effect.catchReason("PlatformError", "NotFound", () =>
+          Effect.succeed(null),
+        ),
+      ),
+    commit: (previous, next) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const temporary = `${commentsFile}.${randomUUID()}.tmp`;
+          yield* Effect.addFinalizer(() =>
+            fs
+              .remove(temporary, { force: true })
+              .pipe(Effect.catch((error) => Effect.logWarning(error.message))),
           );
-          return { results };
-        }
-        const page = state.pages.find(
-          (page) =>
-            page.id === body.page ||
-            page.name.toLowerCase() === body.page!.toLowerCase(),
-        );
-        if (!page)
-          return {
-            results: [
-              {
-                frame: body.page,
-                error: `No page "${body.page}". Pages: ${state.pages.map((page) => page.id).join(", ")}`,
-              },
-            ],
-          };
-        if (!page.frames.length)
-          return {
-            results: [
-              { frame: page.id, error: `Page "${page.name}" has no frames.` },
-            ],
-          };
-        const captures = yield* Effect.forEach(
-          page.frames,
-          (frame) => capture(frame),
-          { concurrency: Policies.captureConcurrency },
-        );
-        const heights = Object.fromEntries(
-          page.frames.map((frame, i) => [
-            frame.id,
-            captures[i]!.height ?? frame.meta.height,
-          ]),
-        );
-        const out = join(p.screenshots, `${page.id}.png`);
-        const overview = yield* shots
-          .compose(
-            page.frames.map((frame, i) => {
-              const shot = captures[i]!;
-              return {
-                id: frame.id,
-                name: frame.meta.name,
-                parent: frame.parent,
-                width: frame.meta.width,
-                height: heights[frame.id] ?? frame.meta.height,
-                note: frame.note,
-                src:
-                  "path" in shot
-                    ? `/shots/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}.png?g=${state.generation}`
-                    : null,
-              };
-            }),
-            layoutFrames(
-              projectSnapshot(root, { ...state, pages: [page] }).pages[0]!
-                .frames,
-              heights,
-              page.positions,
-            ),
-            out,
-            body.scale,
-          )
-          .pipe(Effect.result);
-        return {
-          results: [
-            overview._tag === "Success"
-              ? {
-                  frame: page.id,
-                  file: `.framio/pages/${page.id}`,
-                  ...overview.success,
-                }
-              : { frame: page.id, error: overview.failure.message },
-            ...captures.filter((shot) => shot.error),
-          ],
-        };
-      }),
-    );
-    yield* layers.warnings(reports);
-    return result;
+          yield* fs.writeFileString(temporary, next);
+          return yield* publishIfUnchanged(commentsFile, temporary, previous);
+        }),
+      ),
   });
   const Handlers = HttpApiBuilder.group(Api, "project", (handlers) =>
     handlers.handleAll({
@@ -266,6 +166,14 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
         }),
       snapshot: () =>
         project.get.pipe(Effect.map((state) => projectSnapshot(root, state))),
+      comments: ({ payload }) =>
+        comments.apply(payload).pipe(
+          Effect.andThen(project.notify("comments.json")),
+          Effect.as({ ok: true }),
+          Effect.catch((error) =>
+            Effect.succeed({ ok: false, error: error.message }),
+          ),
+        ),
       selection: ({ payload }) =>
         Effect.gen(function* () {
           const state = yield* project.get;
@@ -281,8 +189,14 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
                   frame: frame.id,
                   name: frame.meta.name,
                   file: frame.relFile,
+                  ...(payload.width !== undefined
+                    ? { width: payload.width }
+                    : {}),
                 })),
                 element: frames.length === 1 ? payload.element : null,
+                ...(frames.length === 1 && payload.width !== undefined
+                  ? { width: payload.width }
+                  : {}),
                 ...(frames.length === 1 && payload.layer
                   ? { layer: payload.layer }
                   : {}),
@@ -337,19 +251,25 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
                 built.version !== payload.version)
             )
               return state;
+            const frame = state.pages
+              .flatMap((page) => page.frames)
+              .find((frame) => frame.id === payload.id);
+            const id =
+              frame && payload.width
+                ? viewportId(payload.id, frame.meta, payload.width)
+                : payload.id;
             if (
-              (state.runtimeErrors.get(payload.id) ?? null) === payload.error &&
+              (state.runtimeErrors.get(id) ?? null) === payload.error &&
               (payload.warnings === undefined ||
-                JSON.stringify(state.layerWarnings?.get(payload.id) ?? []) ===
+                JSON.stringify(state.layerWarnings?.get(id) ?? []) ===
                   JSON.stringify(payload.warnings))
             )
               return state;
             const runtimeErrors = new Map(state.runtimeErrors);
-            if (payload.error) runtimeErrors.set(payload.id, payload.error);
-            else runtimeErrors.delete(payload.id);
+            if (payload.error) runtimeErrors.set(id, payload.error);
+            else runtimeErrors.delete(id);
             const layerWarnings = new Map(state.layerWarnings);
-            if (payload.warnings)
-              layerWarnings.set(payload.id, payload.warnings);
+            if (payload.warnings) layerWarnings.set(id, payload.warnings);
             return { ...state, runtimeErrors, layerWarnings };
           })
           .pipe(Effect.as({ ok: true as const })),
@@ -426,7 +346,15 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
     lookup: (key: string) =>
       project.withStableState((state) =>
         Effect.gen(function* () {
-          const id = key.slice(0, key.lastIndexOf("|"));
+          const [id, width] = yield* Schema.decodeUnknownEffect(
+            Schema.fromJsonString(
+              Schema.Tuple([Schema.String, PositiveNumber]),
+            ),
+          )(key.slice(0, key.lastIndexOf("|"))).pipe(
+            Effect.mapError(
+              (error) => new ServerStartupFailed({ message: error.message }),
+            ),
+          );
           const frame = state.pages
             .flatMap((page) => page.frames)
             .find((frame) => frame.id === id);
@@ -435,13 +363,16 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
               message: "Frame not found",
             });
           return yield* shots.capture(
-            frame,
-            join(p.state, "thumbs", frame.page, `${frame.slug}.png`),
+            {
+              ...frame,
+              meta: {
+                ...frame.meta,
+                ...frameViewports(frame, width)[0]!,
+              },
+            },
+            join(p.state, "thumbs", frame.page, `${frame.slug}@${width}.png`),
             0.5,
-            [],
-            undefined,
-            false,
-            false,
+            { emitLayers: false },
           );
         }),
       ),
@@ -470,6 +401,27 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
         return HttpServerResponse.uint8Array(runtimeFile, {
           contentType: "text/javascript; charset=utf-8",
         });
+      if (
+        (path.startsWith("/f/") || path.startsWith("/thumb/")) &&
+        (url.searchParams.has("width") || url.searchParams.has("height"))
+      ) {
+        const input = Object.fromEntries(
+          ["width", "height"]
+            .filter((key) => url.searchParams.has(key))
+            .map((key) => [key, Number(url.searchParams.get(key))]),
+        );
+        const dimensions = Schema.decodeUnknownResult(
+          Schema.Struct({
+            width: Schema.optional(PositiveNumber),
+            height: Schema.optional(PositiveNumber),
+          }),
+        )(input);
+        if (dimensions._tag === "Failure")
+          return HttpServerResponse.text(
+            "Viewport width and height must be positive finite numbers",
+            { status: 400 },
+          );
+      }
       const frameMatch = /^\/f\/([^/]+)\/([^/]+)$/.exec(path);
       if (frameMatch) {
         const frame = all.find(
@@ -486,7 +438,23 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
             },
           });
         return HttpServerResponse.text(
-          frameHtml(frame, url.searchParams.has("canvas"), state),
+          frameHtml(
+            {
+              ...frame,
+              meta: {
+                ...frame.meta,
+                ...viewports(
+                  frame.meta,
+                  Number(url.searchParams.get("width") ?? frame.meta.width),
+                )[0]!,
+                ...(url.searchParams.has("height")
+                  ? { height: Number(url.searchParams.get("height")) }
+                  : {}),
+              },
+            },
+            url.searchParams.has("canvas"),
+            state,
+          ),
           { contentType: "text/html; charset=utf-8" },
         );
       }
@@ -528,7 +496,7 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
         );
         if (!frame)
           return HttpServerResponse.text("Frame not found", { status: 404 });
-        const key = `${frame.id}|${frame.kind === "image" ? state.imageVersions.get(frame.id) : state.artifacts.frames.get(frame.id)?.version}-${state.css.version}`;
+        const key = `${JSON.stringify([frame.id, Number(url.searchParams.get("width") ?? frame.meta.width)])}|${frame.kind === "image" ? state.imageVersions.get(frame.id) : state.artifacts.frames.get(frame.id)?.version}-${state.css.version}`;
         return yield* Cache.get(thumbnails, key).pipe(
           Effect.flatMap((shot) => staticFile(shot.path, "image/png")),
           Effect.catch((error) =>

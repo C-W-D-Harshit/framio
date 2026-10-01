@@ -1,3 +1,4 @@
+import { viewportId, viewports } from "../domain/viewports";
 import { LayersPanel } from "./layers-panel";
 import { useCallback, useEffect, useState } from "react";
 import { useAtom, useAtomValue } from "@effect/atom-react";
@@ -40,6 +41,20 @@ export function App() {
   const selectedFrames =
     page?.frames.filter((f) => selection.frames.includes(f.id)) ?? [];
 
+  const selectedFrame =
+    selectedFrames.length === 1 ? selectedFrames[0] : undefined;
+  const layerFrame =
+    selectedFrame && selection.width !== undefined && selectedFrame.meta.widths
+      ? {
+          ...selectedFrame,
+          frameId: selectedFrame.id,
+          id: viewportId(selectedFrame.id, selectedFrame.meta, selection.width),
+          meta: {
+            ...selectedFrame.meta,
+            ...viewports(selectedFrame.meta, selection.width)[0]!,
+          },
+        }
+      : selectedFrame;
   return (
     <div className="flex h-full">
       <aside className="flex w-60 shrink-0 flex-col border-r border-chrome-line bg-chrome">
@@ -72,12 +87,20 @@ export function App() {
           ))}
         </nav>
         <LayersPanel
-          frame={selectedFrames.length === 1 ? selectedFrames[0] : undefined}
+          frame={layerFrame}
           project={snapshot?.projectName ?? "Framio"}
         />
         {snapshot?.cssError && (
           <div className="m-2 rounded-md bg-red-500/10 p-2 text-[11px] break-words text-red-300">
             {snapshot.cssError}
+          </div>
+        )}
+        {snapshot?.commentsError && (
+          <div
+            role="alert"
+            className="m-2 rounded-md bg-red-500/10 p-2 text-xs text-red-300"
+          >
+            {snapshot.commentsError}
           </div>
         )}
         {saveError && (
@@ -115,6 +138,8 @@ export function App() {
             cssVersion={snapshot.cssVersion}
             tool={tool}
             onTool={setTool}
+            comments={snapshot.comments ?? []}
+            commentsError={snapshot.commentsError ?? null}
           />
         )}
 
@@ -139,7 +164,8 @@ export function App() {
               )}
             </span>
             <span className="shrink-0 text-neutral-500">
-              · your agent can see this
+              {selection.width ? `${selection.width}px · ` : ""}your agent can
+              see this
             </span>
           </div>
         )}

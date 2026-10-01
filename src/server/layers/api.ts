@@ -1,3 +1,4 @@
+import { viewportId, frameViewports } from "../../domain/viewports";
 import * as Effect from "effect/Effect";
 import type {
   InspectRequest,
@@ -12,6 +13,7 @@ import { makeLayerRenamer } from "./source";
 export type LayerObservation = {
   id: string;
   version: number;
+  width?: number;
   report: LayerReport;
 };
 export const makeLayersApi = Effect.fn("Layers.api")(function* (
@@ -24,8 +26,20 @@ export const makeLayersApi = Effect.fn("Layers.api")(function* (
     project.update((state) => {
       const layerWarnings = new Map(state.layerWarnings);
       for (const report of reports)
-        if (state.artifacts.frames.get(report.id)?.version === report.version)
-          layerWarnings.set(report.id, report.report.warnings);
+        if (state.artifacts.frames.get(report.id)?.version === report.version) {
+          const frame = state.pages
+            .flatMap((page) => page.frames)
+            .find((frame) => frame.id === report.id);
+          if (frame)
+            layerWarnings.set(
+              viewportId(
+                frame.id,
+                frame.meta,
+                report.width ?? frame.meta.width,
+              ),
+              report.report.warnings,
+            );
+        }
       return reports.length ? { ...state, layerWarnings } : state;
     });
   const inspect = Effect.fn("Layers.inspect")(function* (
@@ -39,16 +53,21 @@ export const makeLayersApi = Effect.fn("Layers.api")(function* (
         if (frame.kind !== "tsx")
           return { error: "Image frames have no DOM layers." };
         const shot = yield* shots.capture(
-          frame,
+          {
+            ...frame,
+            meta: {
+              ...frame.meta,
+              ...frameViewports(frame, payload.width)[0]!,
+            },
+          },
           "",
           1,
-          [],
-          payload.width,
-          true,
+          { inspectOnly: true },
         );
         if (shot.report)
           reports.push({
             id: frame.id,
+            width: payload.width ?? frame.meta.width,
             version: state.artifacts.frames.get(frame.id)?.version ?? 0,
             report: shot.report,
           });

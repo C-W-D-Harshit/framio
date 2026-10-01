@@ -1,3 +1,4 @@
+import { ViewportDimension } from "../domain/project";
 import * as Schema from "effect/Schema";
 export const LayerSelection = Schema.Struct({
   path: Schema.String,
@@ -46,9 +47,7 @@ export type LayerReport = typeof LayerReport.Type;
 export const InspectRequest = Schema.Struct({
   frame: Schema.String,
   layer: Schema.optional(Schema.String),
-  width: Schema.optional(
-    Schema.Finite.pipe(Schema.check(Schema.isGreaterThan(0))),
-  ),
+  width: Schema.optional(ViewportDimension),
 });
 export const InspectResponse = Schema.Struct({
   report: Schema.optional(LayerReport),

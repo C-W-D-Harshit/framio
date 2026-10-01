@@ -46,6 +46,7 @@ content, no data fetching, no real logic. Each state (empty, loading, error, ope
     10-onboarding/
       welcome.tsx              # a frame
       welcome--illustrated.tsx # a variation of it
+  comments.json          # user feedback and agent replies, versioned with designs
   .state/selection.json  # what the user selected on the canvas (read-only)
   .state/errors.json     # errors and non-blocking layer warnings (read-only)
 ```
@@ -65,6 +66,19 @@ Read `references/process.md` before starting any phase below. Scale the process 
 
 Phase 0 means **asking the user** (at most 5 questions, one message) for a new product. Do not
 skip it and invent a product. Stop for the user's choice at the end of phase 2.
+
+## Building the real app
+
+When asked to implement, build, or ship a design in the user's app, read
+`references/handoff.md`. Port the theme and components into the app, follow its conventions,
+replace mock data, and verify each screen with `framio screenshot --url <url> --compare <page>/<frame>`.
+Never import from `.framio` at runtime.
+
+## Addressing comments
+
+When asked to address or fix comments, read `references/comments.md` and the open comments in
+`.framio/comments.json`. Fix and visually verify each, append an agent reply, and resolve it.
+Never delete user comments.
 
 ## Design skills (required)
 
@@ -154,6 +168,8 @@ export const meta = {
   name: "Pricing",          // label on the canvas
   width: 1440,              // viewport width (mobile: 390)
   height: 900,              // viewport height; h-screen / min-h-screen equal this
+  widths: [1440, 768, 390],  // optional: one component at every responsive width
+  // heights: [900, 1024, 844], // optional: overrides in the same order as widths
   variationOf: "pricing",   // optional: slug of the frame this is a variation of
   theme: "dark",            // optional: render with the .dark theme
 };
@@ -169,6 +185,11 @@ export default function Frame() {
 }
 ```
 
+- Use `widths` for responsive screens. The first width is primary; the canvas groups viewports
+  largest first. Heights default to `height` at widths ≥1024, 1024 at 600–1023, and 844 below 600.
+  `heights`, if provided, must have the same length as `widths`. Without `widths`, behavior is unchanged.
+  Screenshot captures every width as `<slug>@<width>.png`; `--width <n>` captures one. Inspect
+  and fix the smallest width too. Selection includes a `width` for responsive viewports.
 - `meta` must be a plain object literal (it is read without running the file).
 - Frames grow to fit their content. Put `min-h-screen` on the root of full screens.
 - Style with theme tokens (`bg-background`, `text-muted-foreground`, `bg-primary`, `border`,

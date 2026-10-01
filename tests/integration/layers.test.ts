@@ -108,6 +108,18 @@ test("layer screenshot, inspect and source rename round trips use the live pipel
     });
     expect(wider.report.width).toBe(780);
     expect(wider.report.tree[0].box.width).toBe(780);
+    const widerCli = await run("inspect", "01-test/home", "--width", "780");
+    expect(widerCli.code).toBe(0);
+    expect(JSON.parse(widerCli.stdout).width).toBe(780);
+    expect((await run("inspect", "01-test/home", "--width", "1.5")).code).toBe(
+      1,
+    );
+    const invalidWidth = await fetch(info.url + "/api/inspect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ frame: "01-test/home", width: 1.5 }),
+    });
+    expect(invalidWidth.status).toBe(400);
     const inspected = await run(
       "inspect",
       "01-test/home",

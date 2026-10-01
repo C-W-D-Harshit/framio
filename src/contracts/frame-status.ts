@@ -5,5 +5,6 @@ export const FrameStatus = Schema.Struct({
   id: Schema.String,
   warnings: Schema.optional(Schema.Array(LayerWarning)),
   error: Schema.NullOr(Schema.String),
+  width: Schema.optional(Schema.Finite),
   version: Schema.optional(Schema.Finite),
 });

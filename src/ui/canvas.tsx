@@ -1,3 +1,6 @@
+import { viewportId, viewports } from "../domain/viewports";
+import { CommentsPanel, type CommentDraft } from "./comments";
+import type { Comment } from "../contracts/comments";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -35,7 +38,7 @@ import type { ElementInfo as ElementContract } from "../contracts/requests";
 import type { Snapshot } from "../contracts/snapshot";
 import { ContextMenu } from "./context-menu";
 import { FrameNode, standaloneUrl, type FrameNodeType } from "./frame-node";
-import { layoutFrames } from "./layout";
+import { layoutViewports } from "./layout";
 import { Toolbar, type Tool } from "./toolbar";
 
 type Page = Snapshot["pages"][number];
@@ -58,6 +61,8 @@ type Props = {
   cssVersion: number;
   tool: Tool;
   onTool(tool: Tool): void;
+  comments: readonly Comment[];
+  commentsError: string | null;
 };
 
 export function Canvas(props: Props) {
@@ -98,8 +103,85 @@ function useSavedViewport(key: string) {
   return [initial, save] as const;
 }
 
-function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
+function CanvasInner({
+  page,
+  projectName,
+  cssVersion,
+  tool,
+  onTool,
+  comments,
+  commentsError,
+}: Props) {
   const flow = useReactFlow<FrameNodeType>();
+  const [showComments, setShowComments] = useState(false);
+  const [showResolved, setShowResolved] = useState(false);
+  const [activeComment, setActiveComment] = useState<string | null>(null);
+  const [draft, setDraft] = useState<CommentDraft | null>(null);
+  const pageComments = useMemo(
+    () => comments.filter((c) => c.frame.startsWith(`${page.id}/`)),
+    [comments, page.id],
+  );
+
+  const openComment = useCallback(
+    (id: string) => {
+      setShowComments(true);
+      setActiveComment(id || null);
+      setDraft(null);
+      const comment = comments.find((c) => c.id === id);
+      const node = flow
+        .getNodes()
+        .find((n) => (n.data.frame.frameId ?? n.id) === comment?.frame);
+      if (node && comment) {
+        let x = comment.anchor.x,
+          y = comment.anchor.y;
+        const iframe = [
+          ...document.querySelectorAll<HTMLIFrameElement>("iframe[data-frame]"),
+        ].find((el) => el.dataset.frame === node.id);
+        try {
+          const rect = comment.anchor.selector
+            ? iframe?.contentDocument
+                ?.querySelector(comment.anchor.selector)
+                ?.getBoundingClientRect()
+            : null;
+          if (rect) {
+            x += rect.x;
+            y += rect.y;
+          }
+        } catch {}
+        void flow.setCenter(node.position.x + x, node.position.y + y, {
+          zoom: Math.max(flow.getZoom(), 0.7),
+          duration: 250,
+        });
+      }
+    },
+    [comments, flow],
+  );
+  const makeDraft = useCallback(
+    (frame: string, x: number, y: number, element: ElementInfo | null) => {
+      const base =
+        page.frames.find((f) => f.id === frame) ??
+        page.frames.find((f) =>
+          viewports(f.meta).some(
+            (v) => viewportId(f.id, f.meta, v.width) === frame,
+          ),
+        );
+      if (!base) return;
+      setDraft({
+        frame: base.id,
+        anchor:
+          element?.selector && element.rect
+            ? {
+                selector: element.selector,
+                x: x - element.rect.x,
+                y: y - element.rect.y,
+              }
+            : { x, y },
+      });
+      setActiveComment(null);
+      setShowComments(true);
+    },
+    [page.frames],
+  );
   const [heights, setHeights] = useAtom(heightsAtom(page.id));
   const saveSelection = useAtomSet(saveSelectionAtom);
   const saveCanvas = useAtomSet(saveCanvasAtom);
@@ -129,20 +211,43 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
   const useThumbs = page.frames.length > THUMB_THRESHOLD;
 
   const laidOut = useMemo<FrameNodeType[]>(() => {
-    const pos = layoutFrames(page.frames, heights, saved);
-    return page.frames.map((frame) => ({
-      id: frame.id,
-      type: "frame",
-      position: pos[frame.id]!,
-      dragHandle: ".frame-drag",
-      data: {
-        frame,
-        height: heights[frame.id] ?? frame.meta.height,
-        cssVersion,
-        useThumbs,
-      },
-    }));
-  }, [page.frames, heights, saved, cssVersion, useThumbs]);
+    return layoutViewports(page.frames, heights, saved).map(
+      ({ frame, position }) => ({
+        id: frame.id,
+        type: "frame",
+        position,
+        dragHandle: ".frame-drag",
+        data: {
+          frame,
+          comments: pageComments,
+          showResolved,
+          onComment: openComment,
+          height: heights[frame.id] ?? frame.meta.height,
+          cssVersion,
+          useThumbs,
+        },
+      }),
+    );
+  }, [
+    page.frames,
+    heights,
+    saved,
+    cssVersion,
+    useThumbs,
+    pageComments,
+    showResolved,
+    openComment,
+  ]);
+
+  const layoutIndex = useMemo(() => {
+    const nodes = new Map(laidOut.map((node) => [node.id, node]));
+    const groups = new Map<string, FrameNodeType>();
+    for (const node of laidOut) {
+      const id = node.data.frame.frameId ?? node.id;
+      if (!groups.has(id)) groups.set(id, node);
+    }
+    return { nodes, groups };
+  }, [laidOut]);
 
   const [nodes, setNodes, onNodesChange] =
     useNodesState<FrameNodeType>(laidOut);
@@ -167,11 +272,14 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
         .filter((f) => f.parent && page.frames.some((p) => p.id === f.parent))
         .map((f) => ({
           id: `${f.parent}->${f.id}`,
-          source: f.parent!,
-          target: f.id,
+          source:
+            laidOut.filter((n) => n.data.frame.frameId === f.parent).at(-1)
+              ?.id ?? f.parent!,
+          target:
+            laidOut.find((n) => n.data.frame.frameId === f.id)?.id ?? f.id,
           selectable: false,
         })),
-    [page.frames],
+    [page.frames, laidOut],
   );
 
   // Frames report their real height after loading; keep the first fit in sync until the user moves.
@@ -190,8 +298,11 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
 
   // --- Selection ------------------------------------------------------------
   const [selection, setSelection] = useAtom(selectionAtom);
+  // Ignore React Flow's old selection until it acknowledges an iframe selection.
+  const pendingSelection = useRef<readonly string[] | null>(null);
   const selectFrames = useCallback(
     (ids: readonly string[]) => {
+      pendingSelection.current = [...ids].sort();
       const selected = new Set(ids);
       setNodes((ns) => ns.map((n) => ({ ...n, selected: selected.has(n.id) })));
     },
@@ -201,7 +312,11 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
   useEffect(() => {
     postToFrames(
       { type: "clear-selection" },
-      selection.element || selection.layer ? selection.frames[0] : undefined,
+      selection.element || selection.layer
+        ? selection.width
+          ? `__viewport__/${selection.frames[0]}/${selection.width}`
+          : selection.frames[0]
+        : undefined,
     );
   }, [selection]);
 
@@ -230,6 +345,16 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
   // --- Panning: Hand tool, Space + drag, middle-button drag -----------------
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [panning, setPanning] = useState(false);
+  const [frameDragging, setFrameDragging] = useState(false);
+  useEffect(() => {
+    const release = () => setFrameDragging(false);
+    window.addEventListener("pointerup", release);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("blur", release);
+    };
+  }, []);
   const panFrom = useRef<Pos | null>(null);
   const hand = tool === "hand" || spaceHeld;
 
@@ -260,7 +385,10 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
   }, [flow, saveViewport]);
 
   const onPointerDownCapture = (e: ReactPointerEvent) => {
+    userMoved.current = true;
     if ((e.target as Element).closest("[data-ui]")) return;
+    if (e.button === 0 && (e.target as Element).closest(".frame-drag"))
+      setFrameDragging(true);
     if (e.button === 1 || (e.button === 0 && hand)) {
       e.preventDefault();
       e.stopPropagation();
@@ -278,7 +406,8 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
     frame: string;
   } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
-  const menuFrame = menu && page.frames.find((f) => f.id === menu.frame);
+  const menuFrame =
+    menu && laidOut.find((n) => n.id === menu.frame)?.data.frame;
 
   // --- Keyboard -------------------------------------------------------------
   const [showHelp, setShowHelp] = useState(false);
@@ -303,7 +432,7 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
         flow.zoomOut({ duration: 150 });
       } else if (mod && e.key.toLowerCase() === "a") {
         e.preventDefault();
-        selectFrames(page.frames.map((f) => f.id));
+        selectFrames(laidOut.map((n) => n.id));
       } else if (mod || e.altKey) {
         return;
       } else if (e.shiftKey && e.code === "Digit1")
@@ -320,8 +449,13 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
       else if (e.key === "?") setShowHelp((v) => !v);
       else if (e.key === "v" || e.key === "V") onTool("select");
       else if (e.key === "h" || e.key === "H") onTool("hand");
-      else if (e.key === "Escape") {
+      else if (e.key.toLowerCase() === "c") {
+        onTool("comment");
+        setShowComments(true);
+      } else if (e.key === "Escape") {
         setShowHelp(false);
+        setDraft(null);
+        setActiveComment(null);
         selectFrames([]);
         setSelection({ frames: [], element: null });
       }
@@ -343,6 +477,7 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
   }, [
     flow,
     page.frames,
+    laidOut,
     onTool,
     selectFrames,
     zoomToFrames,
@@ -380,14 +515,26 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
               h[frame] === msg.height ? h : { ...h, [frame]: msg.height },
             );
           break;
-        case "select":
+        case "select": {
+          userMoved.current = true;
+          if (
+            tool === "comment" &&
+            msg.x !== undefined &&
+            msg.y !== undefined
+          ) {
+            makeDraft(frame, msg.x, msg.y, msg.element);
+            break;
+          }
+          const viewport = laidOut.find((n) => n.id === frame)?.data.frame;
           selectFrames([frame]);
           setSelection({
-            frames: [frame],
+            frames: [viewport?.frameId ?? frame],
             element: msg.element,
             layer: msg.layer,
+            ...(viewport?.meta.widths ? { width: viewport.meta.width } : {}),
           });
           break;
+        }
         case "dblclick":
           zoomToFrames([frame]);
           break;
@@ -429,6 +576,9 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
     endPan,
     setHeights,
     setSelection,
+    tool,
+    makeDraft,
+    laidOut,
   ]);
 
   // Restyle frames in place when theme.css changes, instead of reloading every iframe.
@@ -440,7 +590,7 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
 
   return (
     <div
-      className={`absolute inset-0 ${hand ? "tool-hand" : ""} ${panning ? "is-panning" : ""}`}
+      className={`absolute inset-0 ${hand ? "tool-hand" : ""} ${panning ? "is-panning" : ""} ${frameDragging ? "is-dragging" : ""}`}
       onPointerDownCapture={onPointerDownCapture}
       onPointerMove={(e) => panFrom.current && movePan(e.screenX, e.screenY)}
       onPointerUp={endPan}
@@ -453,19 +603,43 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onSelectionChange={({ nodes: sel }) => {
-          const ids = sel.map((n) => n.id).sort();
+          const pending = pendingSelection.current;
+          if (pending && pending.every((id) => layoutIndex.nodes.has(id))) {
+            const actual = sel.map((node) => node.id).sort();
+            if (
+              actual.length !== pending.length ||
+              actual.some((id, index) => id !== pending[index])
+            )
+              return;
+          }
+          pendingSelection.current = null;
+          const ids = [
+            ...new Set(sel.map((n) => n.data.frame.frameId ?? n.id)),
+          ].sort();
+          const width =
+            sel.length === 1 && sel[0]!.data.frame.meta.widths
+              ? sel[0]!.data.frame.meta.width
+              : undefined;
           setSelection((prev) => {
             if (
+              prev.width === width &&
               prev.frames.length === ids.length &&
               prev.frames.every((id, i) => id === ids[i])
             )
               return prev;
-            const keepElement =
-              prev.element && ids.length === 1 && ids[0] === prev.frames[0];
+            const keep =
+              prev.element &&
+              ids.length === 1 &&
+              ids[0] === prev.frames[0] &&
+              prev.width === width;
             return {
               frames: ids,
-              element: keepElement ? prev.element : null,
-              ...(ids.length === 1 && ids[0] === prev.frames[0] && prev.layer
+              element: keep ? prev.element : null,
+              ...(width ? { width } : {}),
+              ...(ids.length === 1 &&
+              ids[0] === prev.frames[0] &&
+              prev.width === width &&
+              prev.layer
                 ? { layer: prev.layer }
                 : {}),
             };
@@ -477,16 +651,66 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
           setMenu({ x: e.clientX, y: e.clientY, frame: node.id });
         }}
         onPaneContextMenu={(e) => e.preventDefault()}
-        onNodeDragStop={(_, _node, dragged) => {
+        onNodeClick={(event, node) => {
+          if (tool === "comment" && node.data.frame.kind === "image") {
+            const rect = (event.target as HTMLElement)
+              .closest(".react-flow__node")
+              ?.getBoundingClientRect();
+            if (rect)
+              makeDraft(
+                node.id,
+                (event.clientX - rect.left) / flow.getZoom(),
+                (event.clientY - rect.top) / flow.getZoom(),
+                null,
+              );
+          }
+        }}
+        onNodeDrag={(_, node, dragged) => {
+          const deltas = new Map<string, Pos>();
+          for (const n of dragged) {
+            const original = layoutIndex.nodes.get(n.id);
+            if (original)
+              deltas.set(n.data.frame.frameId ?? n.id, {
+                x: n.position.x - original.position.x,
+                y: n.position.y - original.position.y,
+              });
+          }
+          const direct = new Set(dragged.map((n) => n.id));
+          setNodes((current) =>
+            current.map((n) => {
+              const delta = deltas.get(n.data.frame.frameId ?? n.id);
+              const original = layoutIndex.nodes.get(n.id);
+              return delta && original && !direct.has(n.id)
+                ? {
+                    ...n,
+                    dragging: true,
+                    position: {
+                      x: original.position.x + delta.x,
+                      y: original.position.y + delta.y,
+                    },
+                  }
+                : n;
+            }),
+          );
+        }}
+        onNodeDragStop={(_, node, dragged) => {
           const positions: Record<string, Pos> = {};
           for (const n of dragged) {
-            const frame = page.frames.find((f) => f.id === n.id);
-            if (frame)
-              positions[frame.slug] = {
-                x: Math.round(n.position.x),
-                y: Math.round(n.position.y),
+            const original = layoutIndex.nodes.get(n.id);
+            const group = layoutIndex.groups.get(n.data.frame.frameId ?? n.id);
+            if (original && group)
+              positions[n.data.frame.slug] = {
+                x: Math.round(
+                  group.position.x + n.position.x - original.position.x,
+                ),
+                y: Math.round(
+                  group.position.y + n.position.y - original.position.y,
+                ),
               };
           }
+          setNodes((current) =>
+            current.map((n) => ({ ...n, dragging: false })),
+          );
           setMoved((m) => ({ ...m, ...positions }));
           saveCanvas({ page: page.id, positions });
         }}
@@ -504,13 +728,14 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
         zoomOnScroll={false}
         zoomOnPinch
         zoomOnDoubleClick={false}
-        selectionOnDrag={!hand}
+        selectionOnDrag={!hand && tool !== "comment"}
         selectionMode={SelectionMode.Partial}
         selectionKeyCode={null}
         multiSelectionKeyCode="Shift"
-        nodesDraggable={!hand}
-        elementsSelectable={!hand}
+        nodesDraggable={!hand && tool !== "comment"}
+        elementsSelectable={!hand && tool !== "comment"}
         nodesConnectable={false}
+        autoPanOnNodeFocus={false}
         deleteKeyCode={null}
         proOptions={{ hideAttribution: true }}
       >
@@ -519,10 +744,27 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
           tool={tool}
           onTool={onTool}
           showHelp={showHelp}
+          showComments={showComments}
+          onToggleComments={() => setShowComments((v) => !v)}
           onToggleHelp={() => setShowHelp((v) => !v)}
         />
       </ReactFlow>
 
+      {showComments && (
+        <CommentsPanel
+          comments={pageComments}
+          active={activeComment}
+          draft={draft}
+          error={commentsError}
+          showResolved={showResolved}
+          onResolved={setShowResolved}
+          onSelect={openComment}
+          onClose={() => setShowComments(false)}
+          onSaved={() => {
+            setDraft(null);
+          }}
+        />
+      )}
       {menu && menuFrame && (
         <ContextMenu
           x={menu.x}

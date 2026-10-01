@@ -34,8 +34,9 @@ export const heightsAtom = Atom.family((page: string) =>
 export const movedAtom = Atom.family((page: string) =>
   Atom.make<Record<string, { x: number; y: number }>>({}),
 );
+const storedTool = localStorage.getItem("framio:tool");
 export const toolAtom = Atom.make<Tool>(
-  localStorage.getItem("framio:tool") === "hand" ? "hand" : "select",
+  storedTool === "hand" || storedTool === "comment" ? storedTool : "select",
 );
 
 const readHash = () => {
@@ -61,4 +62,8 @@ export const renameLayerAtom = Atom.family((_frame: string) =>
   runtime.fn((payload: typeof RenameRequest.Type) =>
     Effect.flatMap(ProjectClient, (client) => client.renameLayer(payload)),
   ),
+);
+export const saveCommentAtom = runtime.fn(
+  (payload: import("../contracts/comments").CommentOperation) =>
+    Effect.flatMap(ProjectClient, (client) => client.comment(payload)),
 );

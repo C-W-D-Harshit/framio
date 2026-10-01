@@ -3,23 +3,42 @@ import * as Schema from "effect/Schema";
 export const PositiveNumber = Schema.Finite.pipe(
   Schema.check(Schema.isGreaterThan(0)),
 );
+export const ViewportDimension = PositiveNumber.pipe(
+  Schema.check(Schema.isInt()),
+);
+export const Widths = Schema.Array(ViewportDimension).pipe(
+  Schema.check(Schema.isMinLength(1), Schema.isUnique()),
+);
 export const Position = Schema.Struct({ x: Schema.Finite, y: Schema.Finite });
 export const Positions = Schema.Record(Schema.String, Position);
+const ResponsiveHeights = Schema.makeFilter(
+  (value: {
+    readonly widths?: readonly number[];
+    readonly heights?: readonly number[];
+  }) =>
+    !value.heights ||
+    (!!value.widths && value.heights.length === value.widths.length),
+  { message: "meta.heights must have the same length as meta.widths" },
+);
 export const FrameMeta = Schema.Struct({
   name: Schema.String,
   width: PositiveNumber,
   height: PositiveNumber,
+  widths: Schema.optional(Widths),
+  heights: Schema.optional(Schema.Array(ViewportDimension)),
   variationOf: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.Literals(["light", "dark"])),
-});
+}).pipe(Schema.check(ResponsiveHeights));
 export type FrameMeta = typeof FrameMeta.Type;
 export const FrameMetaInput = Schema.Struct({
   name: Schema.optional(Schema.String),
   width: Schema.optional(Schema.Union([Schema.Number, Schema.String])),
   height: Schema.optional(Schema.Union([Schema.Number, Schema.String])),
+  widths: Schema.optional(Widths),
+  heights: Schema.optional(Schema.Array(ViewportDimension)),
   variationOf: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.Literals(["light", "dark"])),
-});
+}).pipe(Schema.check(ResponsiveHeights));
 
 export const ImageSidecar = Schema.Struct({
   name: Schema.optional(Schema.String),

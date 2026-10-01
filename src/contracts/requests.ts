@@ -1,6 +1,10 @@
 import { LayerSelection, LayerReport } from "./layers";
 import * as Schema from "effect/Schema";
-import { PositiveNumber, Positions } from "../domain/project";
+import {
+  PositiveNumber,
+  Positions,
+  ViewportDimension,
+} from "../domain/project";
 
 export const ElementInfo = Schema.Struct({
   tag: Schema.String,
@@ -22,6 +26,7 @@ export const SelectionRequest = Schema.Struct({
   frames: Schema.Array(Schema.String),
   layer: Schema.optional(LayerSelection),
   element: Schema.NullOr(ElementInfo),
+  width: Schema.optional(ViewportDimension),
 });
 export const CanvasRequest = Schema.Struct({
   page: Schema.String,
@@ -32,6 +37,11 @@ export const ScreenshotRequest = Schema.Struct({
   page: Schema.optional(Schema.String),
   scale: Schema.optional(PositiveNumber),
   layers: Schema.optional(Schema.Array(Schema.String)),
+  width: Schema.optional(ViewportDimension),
+  height: Schema.optional(ViewportDimension),
+  url: Schema.optional(Schema.String),
+  compare: Schema.optional(Schema.String),
+  into: Schema.optional(Schema.String),
 });
 export const ScreenshotResult = Schema.Struct({
   frame: Schema.String,

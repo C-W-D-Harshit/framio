@@ -9,7 +9,7 @@ import { relative } from "node:path";
 import { projectPaths } from "../lib/paths";
 import { ServerLauncher } from "../services/server-launcher";
 import { requireProject } from "./shared";
-import { ScreenshotResponse } from "../contracts/requests";
+import { validateScreenshot } from "../domain/screenshot";
 import { InvalidInput } from "../domain/errors";
 
 export const screenshot = Effect.fn("screenshot")(function* (options: {
@@ -18,22 +18,31 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
   all: boolean;
   scale: number;
   layers: readonly string[];
+  url: Option.Option<string>;
+  compare: Option.Option<string>;
+  into: Option.Option<string>;
+  width: Option.Option<number>;
+  height: Option.Option<number>;
 }) {
-  if (!options.frames.length && Option.isNone(options.page) && !options.all)
-    return yield* new InvalidInput({
-      message:
-        "Usage: framio screenshot <frame>... [--page <page> | --all] [--scale=2]",
-    });
-  const p = projectPaths(yield* requireProject);
-  const { info } = yield* (yield* ServerLauncher).ensure(p, true);
-  const client = yield* HttpApiClient.make(Api, { baseUrl: info.url });
-  const response = yield* client.project.screenshot({
-    payload: {
+  const payload = yield* validateScreenshot(
+    {
       frames: options.frames,
       page: Option.getOrUndefined(options.page),
       scale: options.scale,
       layers: options.layers,
+      url: Option.getOrUndefined(options.url),
+      compare: Option.getOrUndefined(options.compare),
+      into: Option.getOrUndefined(options.into),
+      width: Option.getOrUndefined(options.width),
+      height: Option.getOrUndefined(options.height),
     },
+    options.all,
+  );
+  const p = projectPaths(yield* requireProject);
+  const { info } = yield* (yield* ServerLauncher).ensure(p, true);
+  const client = yield* HttpApiClient.make(Api, { baseUrl: info.url });
+  const response = yield* client.project.screenshot({
+    payload,
   });
   let failed = false;
   for (const r of response.results) {

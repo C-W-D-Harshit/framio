@@ -1,11 +1,23 @@
 import type { LayerNode, LayerReport } from "../contracts/layers";
 import { buildLayerTree, inspectLayers, resolveLayer } from "../domain/layers";
+function rendered(el: Element) {
+  const style = getComputedStyle(el);
+  return (
+    style.display !== "none" &&
+    style.visibility !== "hidden" &&
+    (el.getClientRects().length > 0 || style.display === "contents")
+  );
+}
+function layerElements(root: Element) {
+  return [...root.querySelectorAll<HTMLElement>("[data-layer]")].filter(
+    rendered,
+  );
+}
 export function measureLayers(width = window.innerWidth): LayerReport {
-  // TODO responsive frames: pass the active viewport width from meta.widths.
   const root = document.getElementById("root");
   if (!root) return { tree: [], warnings: [], checks: [], width };
   const origin = root.getBoundingClientRect();
-  const elements = [...root.querySelectorAll<HTMLElement>("[data-layer]")];
+  const elements = layerElements(root);
   const indices = new Map(elements.map((el, i) => [el, i]));
   const box = (el: Element) => {
     const r = el.getBoundingClientRect();
@@ -45,6 +57,7 @@ export function measureLayers(width = window.innerWidth): LayerReport {
   };
   const owned = new Map<Element, Element[]>();
   for (const descendant of root.querySelectorAll("*")) {
+    if (!rendered(descendant)) continue;
     const owner = descendant.closest("[data-layer]");
     if (!owner) continue;
     const list = owned.get(owner) ?? [];
@@ -168,21 +181,23 @@ export function measureLayers(width = window.innerWidth): LayerReport {
       hasText: [...el.childNodes].some(
         (n) => n.nodeType === Node.TEXT_NODE && Boolean(n.textContent?.trim()),
       ),
-      childBoxes: [...el.children].map(box),
+      childBoxes: [...el.children].filter(rendered).map(box),
     };
   });
   const frameRoot = root.firstElementChild;
   const unnamed = frameRoot
     ? [...frameRoot.children].filter(
-        (el) => !el.hasAttribute("data-layer") && !el.matches("style, script"),
+        (el) =>
+          rendered(el) &&
+          !el.hasAttribute("data-layer") &&
+          !el.matches("style, script"),
       )
     : [];
   return inspectLayers(buildLayerTree(records), records, width, unnamed.length);
 }
 function identities() {
-  const elements = [
-    ...document.querySelectorAll<HTMLElement>("#root [data-layer]"),
-  ];
+  const root = document.getElementById("root");
+  const elements = root ? layerElements(root) : [];
   const indices = new Map(elements.map((el, index) => [el, index]));
   const tree = buildLayerTree(
     elements.map((el) => ({

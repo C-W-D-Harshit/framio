@@ -1,4 +1,6 @@
 import { useLayerReport } from "./layers-panel";
+import { CommentPins } from "./comments";
+import type { Comment } from "../contracts/comments";
 import {
   Handle,
   Position,
@@ -18,6 +20,9 @@ import type { SnapshotFrame } from "../contracts/snapshot";
 
 export type FrameNodeData = {
   frame: SnapshotFrame;
+  comments: readonly Comment[];
+  showResolved: boolean;
+  onComment(id: string): void;
   height: number;
   cssVersion: number;
   /** Large pages swap live iframes for server-rendered thumbnails when zoomed out. */
@@ -31,15 +36,18 @@ const LIVE_ZOOM = 0.25;
 const THUMB_SCALE = 0.5;
 
 const enc = encodeURIComponent;
+const canonical = (f: SnapshotFrame) => f.frameId ?? f.id;
 export const frameUrl = (f: SnapshotFrame, version = f.version) =>
-  `/f/${enc(f.page)}/${enc(f.slug)}?canvas=1&v=${version}`;
+  `/f/${enc(f.page)}/${enc(f.slug)}?canvas=1&v=${version}&width=${f.meta.width}&height=${f.meta.height}`;
 export const imageUrl = (f: SnapshotFrame) =>
   `/img/${enc(f.page)}/${enc(f.slug)}?v=${f.version}`;
 /** URL to view a frame on its own, outside the canvas. */
 export const standaloneUrl = (f: SnapshotFrame) =>
-  f.kind === "image" ? imageUrl(f) : `/f/${enc(f.page)}/${enc(f.slug)}`;
+  f.kind === "image"
+    ? imageUrl(f)
+    : `/f/${enc(f.page)}/${enc(f.slug)}?width=${f.meta.width}&height=${f.meta.height}`;
 const thumbUrl = (f: SnapshotFrame, css: number) =>
-  `/thumb/${enc(f.page)}/${enc(f.slug)}.png?v=${f.version}-${css}`;
+  `/thumb/${enc(f.page)}/${enc(f.slug)}.png?v=${f.version}-${css}&width=${f.meta.width}`;
 
 export const FrameNode = memo(function FrameNode({
   data,
@@ -67,10 +75,15 @@ export const FrameNode = memo(function FrameNode({
     );
   });
   const isImage = frame.kind === "image";
+  const hasPins = data.comments.some(
+    (c) =>
+      c.frame === (frame.frameId ?? frame.id) &&
+      (data.showResolved || c.status === "open"),
+  );
   const live =
     !isImage &&
     (visible || selected) &&
-    (selected || !useThumbs || zoom >= LIVE_ZOOM);
+    (selected || !useThumbs || zoom >= LIVE_ZOOM || hasPins);
 
   // Double-buffered reloads: the new version loads hidden and replaces the old one once rendered.
   const [shown, setShown] = useState(frame.version);
@@ -135,7 +148,9 @@ export const FrameNode = memo(function FrameNode({
           <span className="inline-block size-[0.6em] shrink-0 self-center rounded-full bg-red-500" />
         )}
         <span className={selected ? "text-accent" : "text-neutral-300"}>
-          {frame.meta.name}
+          {(!frame.meta.widths ||
+            frame.meta.width === Math.max(...frame.meta.widths)) &&
+            frame.meta.name}
         </span>
         <span className="text-neutral-500">
           {width} × {frame.meta.height}
@@ -195,6 +210,13 @@ export const FrameNode = memo(function FrameNode({
             />
           ))}
       </div>
+      <CommentPins
+        frame={frame}
+        comments={data.comments}
+        showResolved={data.showResolved}
+        onComment={data.onComment}
+        zoom={zoom}
+      />
       {(frame.note || frame.source) && (
         <div
           className="absolute top-full left-0 flex max-w-full flex-col gap-[0.3em] text-neutral-400"
