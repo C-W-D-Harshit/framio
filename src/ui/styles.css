@@ -38,7 +38,9 @@ body {
   stroke-dasharray: calc(6px / var(--zoom, 1)) calc(5px / var(--zoom, 1));
 }
 
-/* Hand tool / Space held / middle-drag: frames stop taking input so the whole canvas pans. */
+/* Keep input on the canvas during navigation gestures and before frame runtime loads. */
+iframe[data-frame]:not([data-input-ready]),
+.is-zooming iframe,
 .tool-hand iframe,
 .is-panning iframe,
 .is-dragging iframe {
