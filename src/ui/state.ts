@@ -57,7 +57,8 @@ export const pageAtom = Atom.make(
 export const layersAtom = Atom.family((frame: string) =>
   Atom.make<LayerReport | null>(null),
 );
-export const renameLayerAtom = runtime.fn(
-  (payload: typeof RenameRequest.Type) =>
+export const renameLayerAtom = Atom.family((_frame: string) =>
+  runtime.fn((payload: typeof RenameRequest.Type) =>
     Effect.flatMap(ProjectClient, (client) => client.renameLayer(payload)),
+  ),
 );

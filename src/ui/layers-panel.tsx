@@ -120,8 +120,8 @@ function FrameLayers({
 }) {
   const report = useLayerReport(frame.id);
   const [selection] = useAtom(selectionAtom);
-  const rename = useAtomSet(renameLayerAtom);
-  const result = useAtomValue(renameLayerAtom);
+  const rename = useAtomSet(renameLayerAtom(frame.id));
+  const result = useAtomValue(renameLayerAtom(frame.id));
   const storageKey = `framio:layers:${project}/${frame.id}`;
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     try {
