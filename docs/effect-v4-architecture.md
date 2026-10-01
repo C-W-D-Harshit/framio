@@ -9,12 +9,13 @@ Use Bun 1.4.2 or newer and Node 24 or newer for development. The pinned toolchai
 ```sh
 bun install --frozen-lockfile
 bun run build:ui
+bun run format:check
 bun run check
 bun run build:binary
 python3 scripts/smoke-binary.py dist/bin/framio-darwin-arm64
 ```
 
-Use the filename for your platform for the final command. `test:effect` uses Vitest and `@effect/vitest` for service scheduling/resource tests. `test:integration` uses Bun for filesystem watching, process lifecycle, compiler output, RPC, and real Chromium rendering. Chromium is downloaded on first use; test prerequisites are distinct from runtime regressions.
+Use the filename for your platform for the final command. `bun run format` formats internal source and tests with pinned Prettier; generated assets and the user scaffold are excluded. Python utility scripts use Black. `test:effect` uses Vitest and `@effect/vitest` for service scheduling/resource tests. `test:integration` uses Bun for filesystem watching, process lifecycle, compiler output, RPC, and real Chromium rendering. Chromium is downloaded on first use; test prerequisites are distinct from runtime regressions.
 
 Read the installed `node_modules/effect/AGENTS.md` before changing Effect code. Resolve v4 APIs against installed source. There are no patched Effect dependencies.
 

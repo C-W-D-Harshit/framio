@@ -30,7 +30,10 @@ export function layoutFrames(
   const subtreeHeight = new Map<string, number>();
   const measure = (f: SnapshotFrame): number => {
     const kids = children.get(f.id) ?? [];
-    const kidsHeight = kids.reduce((sum, k, i) => sum + measure(k) + (i ? GAP_Y : 0), 0);
+    const kidsHeight = kids.reduce(
+      (sum, k, i) => sum + measure(k) + (i ? GAP_Y : 0),
+      0,
+    );
     const total = Math.max(h(f), kidsHeight);
     subtreeHeight.set(f.id, total);
     return total;
@@ -75,7 +78,10 @@ export function layoutFrames(
     else if (parent && final[parent.id]) {
       const pa = auto[parent.id]!;
       const pf = final[parent.id]!;
-      final[f.id] = { x: pf.x + auto[f.id]!.x - pa.x, y: pf.y + auto[f.id]!.y - pa.y };
+      final[f.id] = {
+        x: pf.x + auto[f.id]!.x - pa.x,
+        y: pf.y + auto[f.id]!.y - pa.y,
+      };
     } else final[f.id] = auto[f.id]!;
     for (const k of children.get(f.id) ?? []) resolve(k);
   };

@@ -15,23 +15,35 @@ export const makeCaptureResources = <B, P, E, EP>(options: {
   isConnected: (browser: B) => boolean;
   concurrency?: number;
   idleTTL?: Duration.Input;
-}) => Effect.gen(function*() {
-  const browser = yield* RcRef.make({ acquire: options.acquireBrowser, idleTimeToLive: options.idleTTL ?? Policies.browserIdleTTL });
-  const permits = yield* Semaphore.make(options.concurrency ?? Policies.captureConcurrency);
-  const withPage = <A, E2, R>(use: (page: P) => Effect.Effect<A, E2, R>) => Effect.scoped(
-    Effect.gen(function*() {
-      let current = yield* RcRef.get(browser);
-      if (!options.isConnected(current)) {
-        yield* RcRef.invalidate(browser);
-        current = yield* RcRef.get(browser);
-      }
-      yield* Effect.acquireRelease(
-        Metric.modify(Diagnostics.activeCaptures, 1).pipe(Effect.andThen(Metric.update(Diagnostics.captures, 1))),
-        () => Metric.modify(Diagnostics.activeCaptures, -1),
-      );
-      const page = yield* Effect.acquireRelease(options.openPage(current), options.closePage);
-      return yield* measure(Diagnostics.captureDuration, use(page));
-    }),
-  ).pipe(Semaphore.withPermits(permits, 1));
-  return { withPage, invalidate: RcRef.invalidate(browser) };
-});
+}) =>
+  Effect.gen(function* () {
+    const browser = yield* RcRef.make({
+      acquire: options.acquireBrowser,
+      idleTimeToLive: options.idleTTL ?? Policies.browserIdleTTL,
+    });
+    const permits = yield* Semaphore.make(
+      options.concurrency ?? Policies.captureConcurrency,
+    );
+    const withPage = <A, E2, R>(use: (page: P) => Effect.Effect<A, E2, R>) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          let current = yield* RcRef.get(browser);
+          if (!options.isConnected(current)) {
+            yield* RcRef.invalidate(browser);
+            current = yield* RcRef.get(browser);
+          }
+          yield* Effect.acquireRelease(
+            Metric.modify(Diagnostics.activeCaptures, 1).pipe(
+              Effect.andThen(Metric.update(Diagnostics.captures, 1)),
+            ),
+            () => Metric.modify(Diagnostics.activeCaptures, -1),
+          );
+          const page = yield* Effect.acquireRelease(
+            options.openPage(current),
+            options.closePage,
+          );
+          return yield* measure(Diagnostics.captureDuration, use(page));
+        }),
+      ).pipe(Semaphore.withPermits(permits, 1));
+    return { withPage, invalidate: RcRef.invalidate(browser) };
+  });

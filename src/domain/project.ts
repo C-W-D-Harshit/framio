@@ -1,6 +1,8 @@
 import * as Schema from "effect/Schema";
 
-export const PositiveNumber = Schema.Finite.pipe(Schema.check(Schema.isGreaterThan(0)));
+export const PositiveNumber = Schema.Finite.pipe(
+  Schema.check(Schema.isGreaterThan(0)),
+);
 export const Position = Schema.Struct({ x: Schema.Finite, y: Schema.Finite });
 export const Positions = Schema.Record(Schema.String, Position);
 export const FrameMeta = Schema.Struct({
@@ -50,5 +52,8 @@ export const Page = Schema.Struct({
   positions: Positions,
 });
 export type Page = typeof Page.Type;
-export const CanvasFile = Schema.StructWithRest(Schema.Struct({ positions: Schema.optional(Positions) }), [Schema.Record(Schema.String, Schema.Unknown)]);
+export const CanvasFile = Schema.StructWithRest(
+  Schema.Struct({ positions: Schema.optional(Positions) }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "svg"];

@@ -1,4 +1,10 @@
-import { Handle, Position, useStore, type Node, type NodeProps } from "@xyflow/react";
+import {
+  Handle,
+  Position,
+  useStore,
+  type Node,
+  type NodeProps,
+} from "@xyflow/react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import * as Effect from "effect/Effect";
@@ -24,12 +30,15 @@ const LIVE_ZOOM = 0.25;
 const THUMB_SCALE = 0.5;
 
 const enc = encodeURIComponent;
-export const frameUrl = (f: SnapshotFrame, version = f.version) => `/f/${enc(f.page)}/${enc(f.slug)}?canvas=1&v=${version}`;
-export const imageUrl = (f: SnapshotFrame) => `/img/${enc(f.page)}/${enc(f.slug)}?v=${f.version}`;
+export const frameUrl = (f: SnapshotFrame, version = f.version) =>
+  `/f/${enc(f.page)}/${enc(f.slug)}?canvas=1&v=${version}`;
+export const imageUrl = (f: SnapshotFrame) =>
+  `/img/${enc(f.page)}/${enc(f.slug)}?v=${f.version}`;
 /** URL to view a frame on its own, outside the canvas. */
 export const standaloneUrl = (f: SnapshotFrame) =>
   f.kind === "image" ? imageUrl(f) : `/f/${enc(f.page)}/${enc(f.slug)}`;
-const thumbUrl = (f: SnapshotFrame, css: number) => `/thumb/${enc(f.page)}/${enc(f.slug)}.png?v=${f.version}-${css}`;
+const thumbUrl = (f: SnapshotFrame, css: number) =>
+  `/thumb/${enc(f.page)}/${enc(f.slug)}.png?v=${f.version}-${css}`;
 
 export const FrameNode = memo(function FrameNode({
   data,
@@ -48,7 +57,12 @@ export const FrameNode = memo(function FrameNode({
     const top = positionAbsoluteY * z + ty;
     const mx = s.width * 0.5;
     const my = s.height * 0.5;
-    return left < s.width + mx && left + width * z > -mx && top < s.height + my && top + height * z > -my;
+    return (
+      left < s.width + mx &&
+      left + width * z > -mx &&
+      top < s.height + my &&
+      top + height * z > -my
+    );
   });
   const isImage = frame.kind === "image";
   const live = !isImage && visible && (!useThumbs || zoom >= LIVE_ZOOM);
@@ -57,22 +71,42 @@ export const FrameNode = memo(function FrameNode({
   const [shown, setShown] = useState(frame.version);
   const pending = frame.version !== shown ? frame.version : null;
   const pendingRef = useRef<HTMLIFrameElement>(null);
-  const switchAtom = useMemo(() => Atom.make(Effect.gen(function*() {
-    if (pending === null || !live) return pending;
-    yield* Effect.callback<void>(resume => {
-      const onMessage = (event: MessageEvent) => {
-        if (event.source !== pendingRef.current?.contentWindow || event.origin !== location.origin) return;
-        const decoded = Schema.decodeUnknownResult(FrameMessage)(event.data);
-        if (Result.isSuccess(decoded) && (decoded.success.type === "ready" || decoded.success.type === "error")) resume(Effect.void);
-      };
-      window.addEventListener("message", onMessage);
-      return Effect.sync(() => window.removeEventListener("message", onMessage));
-    }).pipe(Effect.timeoutOption("8 seconds"));
-    return pending;
-  })), [pending, live]);
+  const switchAtom = useMemo(
+    () =>
+      Atom.make(
+        Effect.gen(function* () {
+          if (pending === null || !live) return pending;
+          yield* Effect.callback<void>((resume) => {
+            const onMessage = (event: MessageEvent) => {
+              if (
+                event.source !== pendingRef.current?.contentWindow ||
+                event.origin !== location.origin
+              )
+                return;
+              const decoded = Schema.decodeUnknownResult(FrameMessage)(
+                event.data,
+              );
+              if (
+                Result.isSuccess(decoded) &&
+                (decoded.success.type === "ready" ||
+                  decoded.success.type === "error")
+              )
+                resume(Effect.void);
+            };
+            window.addEventListener("message", onMessage);
+            return Effect.sync(() =>
+              window.removeEventListener("message", onMessage),
+            );
+          }).pipe(Effect.timeoutOption("8 seconds"));
+          return pending;
+        }),
+      ),
+    [pending, live],
+  );
   const switchResult = useAtomValue(switchAtom);
   useEffect(() => {
-    if (AsyncResult.isSuccess(switchResult) && switchResult.value !== null) setShown(switchResult.value);
+    if (AsyncResult.isSuccess(switchResult) && switchResult.value !== null)
+      setShown(switchResult.value);
   }, [switchResult]);
 
   const versions = pending === null ? [shown] : [shown, pending];
@@ -84,8 +118,12 @@ export const FrameNode = memo(function FrameNode({
         style={{ fontSize: 12, paddingBottom: 6 }}
         title="Drag to move · Double-click to zoom · Right-click for more"
       >
-        {frame.error && <span className="inline-block size-[0.6em] shrink-0 self-center rounded-full bg-red-500" />}
-        <span className={selected ? "text-accent" : "text-neutral-300"}>{frame.meta.name}</span>
+        {frame.error && (
+          <span className="inline-block size-[0.6em] shrink-0 self-center rounded-full bg-red-500" />
+        )}
+        <span className={selected ? "text-accent" : "text-neutral-300"}>
+          {frame.meta.name}
+        </span>
         <span className="text-neutral-500">
           {width} × {frame.meta.height}
         </span>
@@ -94,12 +132,19 @@ export const FrameNode = memo(function FrameNode({
         className="relative overflow-hidden bg-white"
         style={{
           height,
-          outline: selected ? `${2 / zoom}px solid var(--color-accent)` : "none",
+          outline: selected
+            ? `${2 / zoom}px solid var(--color-accent)`
+            : "none",
           boxShadow: "0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25)",
         }}
       >
         {isImage && visible && (
-          <img src={imageUrl(frame)} alt={frame.meta.name} draggable={false} className="block size-full object-contain" />
+          <img
+            src={imageUrl(frame)}
+            alt={frame.meta.name}
+            draggable={false}
+            className="block size-full object-contain"
+          />
         )}
         {!isImage && visible && useThumbs && (
           <img
@@ -108,9 +153,15 @@ export const FrameNode = memo(function FrameNode({
             draggable={false}
             className="absolute inset-0 w-full"
             // Frames that never went live still need their real height for layout; report it like an iframe would.
-            onLoad={event => {
-              const height = Math.round(event.currentTarget.naturalHeight / THUMB_SCALE);
-              setHeights(current => current[frame.id] === height ? current : { ...current, [frame.id]: height });
+            onLoad={(event) => {
+              const height = Math.round(
+                event.currentTarget.naturalHeight / THUMB_SCALE,
+              );
+              setHeights((current) =>
+                current[frame.id] === height
+                  ? current
+                  : { ...current, [frame.id]: height },
+              );
             }}
           />
         )}
@@ -123,7 +174,11 @@ export const FrameNode = memo(function FrameNode({
               data-frame={frame.id}
               src={frameUrl(frame, v)}
               className="absolute inset-0 block border-0"
-              style={{ width, height, visibility: v === pending ? "hidden" : "visible" }}
+              style={{
+                width,
+                height,
+                visibility: v === pending ? "hidden" : "visible",
+              }}
             />
           ))}
       </div>
@@ -134,14 +189,30 @@ export const FrameNode = memo(function FrameNode({
         >
           {frame.note && <p className="whitespace-pre-wrap">{frame.note}</p>}
           {frame.source && (
-            <a data-ui href={frame.source} target="_blank" rel="noreferrer" className="nodrag truncate text-neutral-500 underline hover:text-neutral-200">
+            <a
+              data-ui
+              href={frame.source}
+              target="_blank"
+              rel="noreferrer"
+              className="nodrag truncate text-neutral-500 underline hover:text-neutral-200"
+            >
               {frame.source.replace(/^https?:\/\//, "")}
             </a>
           )}
         </div>
       )}
-      <Handle type="target" position={Position.Left} isConnectable={false} className="!opacity-0" />
-      <Handle type="source" position={Position.Right} isConnectable={false} className="!opacity-0" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        isConnectable={false}
+        className="!opacity-0"
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        isConnectable={false}
+        className="!opacity-0"
+      />
     </div>
   );
 });

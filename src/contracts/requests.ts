@@ -8,10 +8,23 @@ export const ElementInfo = Schema.Struct({
   className: Schema.optional(Schema.String),
   dataSlot: Schema.optional(Schema.String),
   html: Schema.optional(Schema.String),
-  rect: Schema.optional(Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })),
+  rect: Schema.optional(
+    Schema.Struct({
+      x: Schema.Finite,
+      y: Schema.Finite,
+      width: Schema.Finite,
+      height: Schema.Finite,
+    }),
+  ),
 });
-export const SelectionRequest = Schema.Struct({ frames: Schema.Array(Schema.String), element: Schema.NullOr(ElementInfo) });
-export const CanvasRequest = Schema.Struct({ page: Schema.String, positions: Positions });
+export const SelectionRequest = Schema.Struct({
+  frames: Schema.Array(Schema.String),
+  element: Schema.NullOr(ElementInfo),
+});
+export const CanvasRequest = Schema.Struct({
+  page: Schema.String,
+  positions: Positions,
+});
 export const ScreenshotRequest = Schema.Struct({
   frames: Schema.optional(Schema.Array(Schema.String)),
   page: Schema.optional(Schema.String),
@@ -25,4 +38,6 @@ export const ScreenshotResult = Schema.Struct({
   height: Schema.optional(PositiveNumber),
   error: Schema.optional(Schema.NullOr(Schema.String)),
 });
-export const ScreenshotResponse = Schema.Struct({ results: Schema.Array(ScreenshotResult) });
+export const ScreenshotResponse = Schema.Struct({
+  results: Schema.Array(ScreenshotResult),
+});

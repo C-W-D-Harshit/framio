@@ -1,5 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect, Layer } from "effect";
@@ -20,14 +28,21 @@ function project() {
 }
 function launch(root: string, args: string[]) {
   const child = Bun.spawn([process.execPath, cli, ...args], {
-    cwd: root, env: { ...process.env, HOME: join(root, "home") }, stdout: "pipe", stderr: "pipe",
+    cwd: root,
+    env: { ...process.env, HOME: join(root, "home") },
+    stdout: "pipe",
+    stderr: "pipe",
   });
   children.push(child);
   return child;
 }
 async function run(root: string, args: string[]) {
   const child = launch(root, args);
-  const [code, out, err] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  const [code, out, err] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
   return { code, output: out + err };
 }
 async function ready(root: string) {
@@ -47,13 +62,17 @@ async function gone(pid: number) {
 afterEach(async () => {
   for (const root of projects) {
     const info = await getRunningServer(projectPaths(root));
-    if (info) { process.kill(info.pid, "SIGTERM"); await gone(info.pid); }
+    if (info) {
+      process.kill(info.pid, "SIGTERM");
+      await gone(info.pid);
+    }
   }
   for (const child of children.splice(0)) {
     if (child.exitCode === null) child.kill("SIGTERM");
     await child.exited;
   }
-  for (const root of projects.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of projects.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 test("foreground start stays attached and Ctrl+C stops its server", async () => {
@@ -73,15 +92,27 @@ test("an older healthy server cannot be borrowed but can still be stopped", asyn
   const state = join(root, ".framio/.state");
   mkdirSync(state, { recursive: true });
   const fixture = join(root, "old-server.ts");
-  writeFileSync(fixture, `
+  writeFileSync(
+    fixture,
+    `
     const root = ${JSON.stringify(root)};
     const server = Bun.serve({hostname:"127.0.0.1",port:0,fetch:() => Response.json({ok:true,root,pid:process.pid})});
     await Bun.write(${JSON.stringify(join(state, "server.json"))}, JSON.stringify({pid:process.pid,port:server.port,url:"http://127.0.0.1:"+server.port,startedAt:new Date().toISOString()}));
     process.on("SIGTERM", () => {server.stop(true);process.exit(0)});
-  `);
-  const child = Bun.spawn([process.execPath, fixture], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  `,
+  );
+  const child = Bun.spawn([process.execPath, fixture], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   children.push(child);
-  for (let attempt = 0; attempt < 100 && !existsSync(join(state, "server.json")); attempt++) await Bun.sleep(20);
+  for (
+    let attempt = 0;
+    attempt < 100 && !existsSync(join(state, "server.json"));
+    attempt++
+  )
+    await Bun.sleep(20);
   expect(existsSync(join(state, "server.json"))).toBe(true);
   const status = await run(root, ["status"]);
   expect(status.code).toBe(1);
@@ -94,17 +125,30 @@ test("an older healthy server cannot be borrowed but can still be stopped", asyn
 
 test("concurrent background starts create one server, list it, and stop --all works outside a project", async () => {
   const root = project();
-  const results = await Promise.all(Array.from({ length: 4 }, () => run(root, ["start", "--background", "--no-open"])));
-  expect(results.map(r => r.code)).toEqual([0, 0, 0, 0]);
-  expect(results.filter(r => r.output.includes("running in the background"))).toHaveLength(1);
+  const results = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      run(root, ["start", "--background", "--no-open"]),
+    ),
+  );
+  expect(results.map((r) => r.code)).toEqual([0, 0, 0, 0]);
+  expect(
+    results.filter((r) => r.output.includes("running in the background")),
+  ).toHaveLength(1);
   const info = await ready(root);
   const registry = join(root, "home/.framio/servers");
   const files = Array.from(new Bun.Glob("*.json").scanSync(registry));
   expect(files).toHaveLength(1);
-  expect(JSON.parse(readFileSync(join(registry, files[0]!), "utf8")).pid).toBe(info.pid);
-  expect((await run(root, ["list"])).output).toContain(`${info.pid}\t${info.url}\t${root}`);
+  expect(JSON.parse(readFileSync(join(registry, files[0]!), "utf8")).pid).toBe(
+    info.pid,
+  );
+  expect((await run(root, ["list"])).output).toContain(
+    `${info.pid}\t${info.url}\t${root}`,
+  );
   const stop = Bun.spawn([process.execPath, cli, "stop", "--all"], {
-    cwd: tmpdir(), env: { ...process.env, HOME: join(root, "home") }, stdout: "pipe", stderr: "pipe",
+    cwd: tmpdir(),
+    env: { ...process.env, HOME: join(root, "home") },
+    stdout: "pipe",
+    stderr: "pipe",
   });
   expect(await stop.exited).toBe(0);
   await gone(info.pid);
@@ -128,7 +172,9 @@ test("screenshots reuse an existing server without stopping it, and open does no
   const root = project();
   expect((await run(root, ["open"])).code).toBe(1);
   expect(await readServerInfo(projectPaths(root))).toBeNull();
-  expect((await run(root, ["start", "--background", "--no-open"])).code).toBe(0);
+  expect((await run(root, ["start", "--background", "--no-open"])).code).toBe(
+    0,
+  );
   const info = await ready(root);
   expect((await run(root, ["screenshot", "--all"])).code).toBe(0);
   expect((await ready(root)).pid).toBe(info.pid);
@@ -138,17 +184,39 @@ test("screenshots reuse an existing server without stopping it, and open does no
 
 test("a crashed server's stale lock is recovered without duplicate launches", async () => {
   const root = project();
-  expect((await run(root, ["start", "--background", "--no-open"])).code).toBe(0);
+  expect((await run(root, ["start", "--background", "--no-open"])).code).toBe(
+    0,
+  );
   const crashed = await ready(root);
   process.kill(crashed.pid, "SIGKILL");
   await gone(crashed.pid);
   expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(true);
-  const restarts = await Promise.all(Array.from({ length: 4 }, () => run(root, ["start", "--background", "--no-open"])));
-  expect(restarts.map(r => r.code)).toEqual([0, 0, 0, 0]);
-  expect(restarts.filter(r => r.output.includes("running in the background"))).toHaveLength(1);
+  const restarts = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      run(root, ["start", "--background", "--no-open"]),
+    ),
+  );
+  expect(restarts.map((r) => r.code)).toEqual([0, 0, 0, 0]);
+  expect(
+    restarts.filter((r) => r.output.includes("running in the background")),
+  ).toHaveLength(1);
   expect((await ready(root)).pid).not.toBe(crashed.pid);
 }, 20_000);
 
-const RegistryLayer = ServerRegistry.layer.pipe(Layer.provide(Layer.merge(BunFileSystem.layer, FetchHttpClient.layer)));
-function getRunningServer(p: ReturnType<typeof projectPaths>) { return Effect.runPromise(Effect.flatMap(ServerRegistry, registry => registry.running(p)).pipe(Effect.provide(RegistryLayer))); }
-function readServerInfo(p: ReturnType<typeof projectPaths>) { return Effect.runPromise(Effect.flatMap(ServerRegistry, registry => registry.read(p)).pipe(Effect.provide(RegistryLayer))); }
+const RegistryLayer = ServerRegistry.layer.pipe(
+  Layer.provide(Layer.merge(BunFileSystem.layer, FetchHttpClient.layer)),
+);
+function getRunningServer(p: ReturnType<typeof projectPaths>) {
+  return Effect.runPromise(
+    Effect.flatMap(ServerRegistry, (registry) => registry.running(p)).pipe(
+      Effect.provide(RegistryLayer),
+    ),
+  );
+}
+function readServerInfo(p: ReturnType<typeof projectPaths>) {
+  return Effect.runPromise(
+    Effect.flatMap(ServerRegistry, (registry) => registry.read(p)).pipe(
+      Effect.provide(RegistryLayer),
+    ),
+  );
+}

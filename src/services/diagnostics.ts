@@ -11,7 +11,17 @@ export const Diagnostics = {
   activeCaptures: Metric.gauge("framio.capture.active"),
   cleanupFailures: Metric.counter("framio.cleanup.failures"),
 };
-export const measure = <A, E, R>(timer: Metric.Metric<Duration.Duration, unknown>, effect: Effect.Effect<A, E, R>) => Effect.gen(function*() {
-  const start = yield* Clock.currentTimeMillis;
-  return yield* effect.pipe(Effect.ensuring(Effect.flatMap(Clock.currentTimeMillis, end => Metric.update(timer, Duration.millis(end - start)))));
-});
+export const measure = <A, E, R>(
+  timer: Metric.Metric<Duration.Duration, unknown>,
+  effect: Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const start = yield* Clock.currentTimeMillis;
+    return yield* effect.pipe(
+      Effect.ensuring(
+        Effect.flatMap(Clock.currentTimeMillis, (end) =>
+          Metric.update(timer, Duration.millis(end - start)),
+        ),
+      ),
+    );
+  });

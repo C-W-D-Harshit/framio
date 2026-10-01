@@ -11,16 +11,40 @@ import { requireProject } from "./shared";
 import { ScreenshotResponse } from "../contracts/requests";
 import { InvalidInput } from "../domain/errors";
 
-export const screenshot = Effect.fn("screenshot")(function*(options: { frames: readonly string[]; page: Option.Option<string>; all: boolean; scale: number }) {
-  if (!options.frames.length && Option.isNone(options.page) && !options.all) return yield* new InvalidInput({ message: "Usage: framio screenshot <frame>... [--page <page> | --all] [--scale=2]" });
+export const screenshot = Effect.fn("screenshot")(function* (options: {
+  frames: readonly string[];
+  page: Option.Option<string>;
+  all: boolean;
+  scale: number;
+}) {
+  if (!options.frames.length && Option.isNone(options.page) && !options.all)
+    return yield* new InvalidInput({
+      message:
+        "Usage: framio screenshot <frame>... [--page <page> | --all] [--scale=2]",
+    });
   const p = projectPaths(yield* requireProject);
   const { info } = yield* (yield* ServerLauncher).ensure(p, true);
   const client = yield* HttpApiClient.make(Api, { baseUrl: info.url });
-  const response = yield* client.project.screenshot({ payload: { frames: options.frames, page: Option.getOrUndefined(options.page), scale: options.scale } });
+  const response = yield* client.project.screenshot({
+    payload: {
+      frames: options.frames,
+      page: Option.getOrUndefined(options.page),
+      scale: options.scale,
+    },
+  });
   let failed = false;
   for (const r of response.results) {
-    if (r.path) yield* Console.log(`${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`);
-    if (r.error) { failed = true; yield* Console.error(`error in ${r.frame}:\n${r.error}\n`); }
+    if (r.path)
+      yield* Console.log(
+        `${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`,
+      );
+    if (r.error) {
+      failed = true;
+      yield* Console.error(`error in ${r.frame}:\n${r.error}\n`);
+    }
   }
-  if (failed) yield* Effect.sync(() => { process.exitCode = 1; });
+  if (failed)
+    yield* Effect.sync(() => {
+      process.exitCode = 1;
+    });
 });

@@ -19,12 +19,17 @@ export const Snapshot = Schema.Struct({
   projectName: Schema.String,
   cssVersion: Schema.Finite,
   cssError: Schema.NullOr(Schema.String),
-  pages: Schema.Array(Schema.Struct({
-    id: Schema.String,
-    name: Schema.String,
-    frames: Schema.Array(SnapshotFrame),
-    positions: Positions,
-  })),
+  pages: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      name: Schema.String,
+      frames: Schema.Array(SnapshotFrame),
+      positions: Positions,
+    }),
+  ),
 });
 export type Snapshot = typeof Snapshot.Type;
-export const SnapshotMessage = Schema.Struct({ type: Schema.Literal("snapshot"), snapshot: Snapshot });
+export const SnapshotMessage = Schema.Struct({
+  type: Schema.Literal("snapshot"),
+  snapshot: Snapshot,
+});

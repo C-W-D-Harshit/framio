@@ -15,7 +15,9 @@
     "test:effect": "vitest run --config vitest.effect.config.ts",
     "test:integration": "bun test tests/integration",
     "test:all": "bun run test:effect && bun run test:integration",
-    "check": "bun run typecheck && bun run test:all"
+    "check": "bun run typecheck && bun run test:all",
+    "format": "prettier --write src scripts tests package.json tsconfig.json vitest.effect.config.ts .github",
+    "format:check": "prettier --check src scripts tests package.json tsconfig.json vitest.effect.config.ts .github"
   },
   "dependencies": {
     "@effect/atom-react": "4.0.0",
@@ -39,6 +41,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "bun-plugin-tailwind": "latest",
+    "prettier": "3.9.9",
     "typescript": "^5.9.0",
     "vitest": "5.0.3"
   },

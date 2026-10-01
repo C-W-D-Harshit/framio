@@ -3,10 +3,21 @@ import { useEffect, useRef } from "react";
 export type MenuItem = { label: string; hint?: string; onSelect(): void };
 
 /** Minimal right-click menu. Closes on outside click, Escape, scroll, or after picking an item. */
-export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose(): void }) {
+export function ContextMenu({
+  x,
+  y,
+  items,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  items: MenuItem[];
+  onClose(): void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose();
+    const onDown = (e: PointerEvent) =>
+      !ref.current?.contains(e.target as Node) && onClose();
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("keydown", onKey);
@@ -26,7 +37,10 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
       data-ui
       role="menu"
       className="fixed z-30 min-w-52 rounded-lg border border-chrome-line bg-chrome p-1 text-xs shadow-xl shadow-black/40"
-      style={{ left: Math.min(x, window.innerWidth - 220), top: Math.min(y, window.innerHeight - 40 * items.length) }}
+      style={{
+        left: Math.min(x, window.innerWidth - 220),
+        top: Math.min(y, window.innerHeight - 40 * items.length),
+      }}
     >
       {items.map((item) => (
         <button

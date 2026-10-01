@@ -8,6 +8,14 @@ export const ServerInfo = Schema.Struct({
   startedAt: Schema.String,
 });
 export type ServerInfo = typeof ServerInfo.Type;
-export const RegisteredServer = Schema.Struct({ ...ServerInfo.fields, root: Schema.String });
+export const RegisteredServer = Schema.Struct({
+  ...ServerInfo.fields,
+  root: Schema.String,
+});
 export type RegisteredServer = typeof RegisteredServer.Type;
-export const Health = Schema.Struct({ ok: Schema.Boolean, root: Schema.String, pid: Schema.Int, protocol: Schema.optional(Schema.String) });
+export const Health = Schema.Struct({
+  ok: Schema.Boolean,
+  root: Schema.String,
+  pid: Schema.Int,
+  protocol: Schema.optional(Schema.String),
+});
