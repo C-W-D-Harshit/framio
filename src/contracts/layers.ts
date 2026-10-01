@@ -46,7 +46,9 @@ export type LayerReport = typeof LayerReport.Type;
 export const InspectRequest = Schema.Struct({
   frame: Schema.String,
   layer: Schema.optional(Schema.String),
-  width: Schema.optional(Schema.Finite),
+  width: Schema.optional(
+    Schema.Finite.pipe(Schema.check(Schema.isGreaterThan(0))),
+  ),
 });
 export const InspectResponse = Schema.Struct({
   report: Schema.optional(LayerReport),

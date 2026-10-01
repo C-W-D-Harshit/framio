@@ -1,3 +1,4 @@
+import type { LayerWarning } from "../contracts/layers";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Metric from "effect/Metric";
@@ -38,6 +39,7 @@ export type ProjectGeneration = {
   css: { text: string; error: string | null; version: number };
   imageVersions: ReadonlyMap<string, number>;
   runtimeErrors: ReadonlyMap<string, string>;
+  layerWarnings?: ReadonlyMap<string, readonly (typeof LayerWarning.Type)[]>;
 };
 export function projectSnapshot(
   root: string,
@@ -179,11 +181,11 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
           }),
         { concurrency: 8, discard: true },
       );
+      const frameIds = new Set(frames.map((frame) => frame.id));
+      const changedIds = new Set(built.changed);
       const runtimeErrors = new Map(
         [...previous.runtimeErrors].filter(
-          ([id]) =>
-            frames.some((frame) => frame.id === id) &&
-            !built.changed.includes(id),
+          ([id]) => frameIds.has(id) && !changedIds.has(id),
         ),
       );
       const retained: Assets[] = [];
@@ -217,6 +219,11 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         artifacts: built.artifacts,
         imageVersions,
         runtimeErrors,
+        layerWarnings: new Map(
+          [...(previous.layerWarnings ?? [])].filter(
+            ([id]) => frameIds.has(id) && !changedIds.has(id),
+          ),
+        ),
         css: {
           text: theme.css,
           error: theme.error,
@@ -300,7 +307,16 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
           });
         yield* fs.writeFileString(
           p.errorsFile,
-          JSON.stringify({ errors }, null, 2) + "\n",
+          JSON.stringify(
+            {
+              errors,
+              warnings: [...(value.layerWarnings ?? [])].flatMap(
+                ([frame, warnings]) => warnings.map((w) => ({ frame, ...w })),
+              ),
+            },
+            null,
+            2,
+          ) + "\n",
         );
       }).pipe(
         Effect.catch((error) =>

@@ -161,6 +161,30 @@ describe("layers", () => {
       }),
   );
   it.effect(
+    "does not expose unsafe duplicate or overriding spread locations",
+    () =>
+      Effect.sync(() => {
+        expect(
+          injectLayerSources(
+            '<div data-layer="First" data-layer="Second" />',
+            "frame.tsx",
+          ),
+        ).not.toContain("data-framio-layer-source");
+        expect(
+          injectLayerSources(
+            '<div data-layer="First" {...props} />',
+            "frame.tsx",
+          ),
+        ).not.toContain("data-framio-layer-source");
+        expect(
+          injectLayerSources(
+            '<div {...props} data-layer="First" />',
+            "frame.tsx",
+          ),
+        ).toContain("data-framio-layer-source");
+      }),
+  );
+  it.effect(
     "shared components and mapped instances use their producing source",
     () =>
       Effect.gen(function* () {

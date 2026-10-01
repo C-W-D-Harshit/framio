@@ -1,8 +1,14 @@
+import { LayerSelection, LayerReport } from "./layers";
 import * as Schema from "effect/Schema";
 import { PositiveNumber } from "../domain/project";
 import { ElementInfo } from "./requests";
 const base = { source: Schema.Literal("framio"), frame: Schema.String };
 export const FrameMessage = Schema.Union([
+  Schema.Struct({
+    ...base,
+    type: Schema.Literal("layers"),
+    report: LayerReport,
+  }),
   Schema.Struct({
     ...base,
     type: Schema.Literals(["ready", "size"]),
@@ -17,6 +23,7 @@ export const FrameMessage = Schema.Union([
     ...base,
     type: Schema.Literal("select"),
     element: Schema.NullOr(ElementInfo),
+    layer: Schema.optional(LayerSelection),
   }),
   Schema.Struct({ ...base, type: Schema.Literals(["dblclick", "pan-end"]) }),
   Schema.Struct({
@@ -45,6 +52,16 @@ export const FrameMessage = Schema.Union([
   }),
 ]);
 export const CanvasMessage = Schema.Union([
+  Schema.Struct({
+    source: Schema.Literal("framio-canvas"),
+    type: Schema.Literal("layer-select"),
+    path: Schema.String,
+  }),
+  Schema.Struct({
+    source: Schema.Literal("framio-canvas"),
+    type: Schema.Literal("layer-hover"),
+    path: Schema.NullOr(Schema.String),
+  }),
   Schema.Struct({
     source: Schema.Literal("framio-canvas"),
     type: Schema.Literal("clear-selection"),

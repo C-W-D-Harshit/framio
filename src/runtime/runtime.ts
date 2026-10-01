@@ -1,3 +1,5 @@
+import { measureLayers, pathForElement, findLayerElement } from "./layers";
+import type { LayerReport } from "../contracts/layers";
 /**
  * Injected into every frame document (classic script, runs before the frame bundle).
  * - exposes readiness + content height for screenshots
@@ -24,6 +26,7 @@ declare global {
       ready: boolean;
       error: string | null;
       contentHeight(): number;
+      layers(width?: number): LayerReport;
       reportError(error: unknown, componentStack?: string): void;
     };
   }
@@ -36,7 +39,7 @@ Effect.runFork(
         Effect.sync(() => new AbortController()),
         (controller) => Effect.sync(() => controller.abort()),
       );
-      const observers: ResizeObserver[] = [];
+      const observers: { disconnect(): void }[] = [];
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           for (const observer of observers) observer.disconnect();
@@ -102,6 +105,7 @@ Effect.runFork(
                 next.media = previous[0]!.media;
                 committed = true;
                 for (const link of previous) link.remove();
+                Queue.offerUnsafe(layerUpdates, undefined);
               }
               dispose();
               resume(Effect.void);
@@ -157,6 +161,9 @@ Effect.runFork(
                   id: boot.id,
                   version: boot.version,
                   error,
+                  warnings: window.__framio?.ready
+                    ? measureLayers().warnings
+                    : undefined,
                 }),
               }),
             catch: (cause) => cause,
@@ -198,6 +205,7 @@ Effect.runFork(
         ready: false,
         error: boot.error,
         contentHeight,
+        layers: measureLayers,
         reportError(error, componentStack) {
           if (window.__framio.error) return;
           const message = errorMessage(error, componentStack);
@@ -252,6 +260,7 @@ Effect.runFork(
           window.__framio.ready = true;
           reportStatus(null);
           postParent({ type: "ready", height: contentHeight() });
+          publishLayers();
         }
       }).pipe(
         Effect.timeout("20 seconds"),
@@ -260,6 +269,35 @@ Effect.runFork(
         ),
       );
       if (!boot.error) yield* Effect.forkScoped(waitForReady);
+
+      function publishLayers() {
+        const report = measureLayers();
+        postParent({ type: "layers", report });
+        reportStatus(window.__framio.error);
+      }
+      const layerUpdates = yield* Queue.sliding<void>(1);
+      yield* Effect.forever(
+        Effect.gen(function* () {
+          yield* Queue.take(layerUpdates);
+          yield* Effect.sleep(100);
+          if (window.__framio.ready) publishLayers();
+        }),
+      ).pipe(Effect.forkScoped);
+      documentEvents.addEventListener("DOMContentLoaded", () => {
+        const root = document.getElementById("root");
+        if (!root) return;
+        const observer = new MutationObserver(() =>
+          Queue.offerUnsafe(layerUpdates, undefined),
+        );
+        observer.observe(root, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          characterData: true,
+        });
+        observers.push(observer);
+        observe(() => Queue.offerUnsafe(layerUpdates, undefined)).observe(root);
+      });
 
       // --- Canvas mode ---
       if (inCanvas) {
@@ -463,11 +501,19 @@ Effect.runFork(
             e.stopPropagation();
             if (e.button !== 0) return;
             const el = document.elementFromPoint(e.clientX, e.clientY);
-            selectedEl = isOwn(el) ? null : el;
+            const clickedEl = isOwn(el) ? null : el;
+            selectedEl = clickedEl?.closest("[data-layer]") ?? clickedEl;
             place(selected, selectedEl);
             postParent({
               type: "select",
-              element: selectedEl ? describe(selectedEl) : null,
+              element: clickedEl ? describe(clickedEl) : null,
+              layer:
+                selectedEl && pathForElement(selectedEl)
+                  ? {
+                      path: pathForElement(selectedEl),
+                      name: selectedEl.getAttribute("data-layer"),
+                    }
+                  : undefined,
             });
           },
           true,
@@ -478,6 +524,22 @@ Effect.runFork(
           const decoded = Schema.decodeUnknownResult(CanvasMessage)(e.data);
           if (Result.isFailure(decoded)) return;
           const message = decoded.success;
+          if (message.type === "layer-hover")
+            place(hover, message.path ? findLayerElement(message.path) : null);
+          if (message.type === "layer-select") {
+            selectedEl = findLayerElement(message.path);
+            place(selected, selectedEl);
+            postParent({
+              type: "select",
+              element: selectedEl ? describe(selectedEl) : null,
+              layer: selectedEl
+                ? {
+                    path: pathForElement(selectedEl),
+                    name: selectedEl.getAttribute("data-layer"),
+                  }
+                : undefined,
+            });
+          }
           if (message.type === "clear-selection") {
             selectedEl = null;
             place(selected, null);

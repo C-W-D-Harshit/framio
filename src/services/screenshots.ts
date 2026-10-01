@@ -1,3 +1,4 @@
+import { captureFrameLayers, type LayerShot } from "../server/layers/capture";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,12 +18,7 @@ import {
 } from "../server/page-composition";
 import { BrowserUnavailable, CaptureFailed } from "../domain/errors";
 
-type Shot = {
-  path: string;
-  width: number;
-  height: number;
-  error: string | null;
-};
+type Shot = LayerShot;
 type CaptureError = CaptureFailed | BrowserUnavailable;
 export class Screenshots extends Context.Service<
   Screenshots,
@@ -31,6 +27,10 @@ export class Screenshots extends Context.Service<
       frame: Frame,
       out: string,
       scale?: number,
+      layers?: readonly string[],
+      width?: number,
+      inspectOnly?: boolean,
+      emitLayers?: boolean,
     ) => Effect.Effect<Shot, CaptureError>;
     compose: (
       frames: readonly PageShotFrame[],
@@ -85,10 +85,19 @@ export class Screenshots extends Context.Service<
         );
 
         const capture = Effect.fn("Screenshots.capture")(
-          (frame: Frame, out: string, scale = 1) =>
+          (
+            frame: Frame,
+            out: string,
+            scale = 1,
+            layers: readonly string[] = [],
+            viewportWidth = frame.meta.width,
+            inspectOnly = false,
+            emitLayers = true,
+          ) =>
             resources.withPage((page) =>
               Effect.gen(function* () {
-                const { width, height } = frame.meta;
+                const { height } = frame.meta;
+                const width = viewportWidth; // TODO responsive frames: wire CLI --width and per-width filenames.
                 yield* chromiumOperation(() =>
                   page.setViewport({ width, height, deviceScaleFactor: scale }),
                 );
@@ -155,18 +164,17 @@ export class Screenshots extends Context.Service<
                       ),
                   ),
                 );
-                yield* write(
+                return yield* captureFrameLayers(
+                  page,
                   out,
-                  yield* chromiumOperation(() =>
-                    page.screenshot({ type: "png" }),
-                  ),
-                );
-                return {
-                  path: out,
                   width,
-                  height: fullHeight,
-                  error: state.error,
-                };
+                  fullHeight,
+                  state.error,
+                  layers,
+                  inspectOnly,
+                  write,
+                  emitLayers,
+                );
               }),
             ),
         );

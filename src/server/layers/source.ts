@@ -52,6 +52,8 @@ export function injectLayerSources(text: string, file: string) {
       )
     )
       continue;
+    if (peers.some((p) => ts.isJsxSpreadAttribute(p) && p.pos > attr.pos))
+      continue;
     const init = attr.initializer;
     const value = init && ts.isStringLiteral(init) ? init.text : null;
     const source = JSON.stringify({
@@ -100,7 +102,19 @@ export const editLayerSource = Effect.fn("Layers.editSource")(function* (
     return yield* new RenameFailed({
       message: "Layer source location is ambiguous.",
     });
-  const init = matches[0]!.initializer!;
+  const attribute = matches[0]!;
+  const peers = (attribute.parent as ts.JsxAttributes).properties;
+  if (
+    peers.filter(
+      (p) => ts.isJsxAttribute(p) && p.name.getText() === "data-layer",
+    ).length !== 1 ||
+    peers.some((p) => ts.isJsxSpreadAttribute(p) && p.pos > attribute.pos)
+  )
+    return yield* new RenameFailed({
+      message:
+        "Layer source is ambiguous because attributes can override its name.",
+    });
+  const init = attribute.initializer!;
   if (
     !ts.isStringLiteral(init) ||
     location.value === null ||

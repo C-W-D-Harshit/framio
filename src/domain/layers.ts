@@ -123,13 +123,24 @@ export function inspectLayers(
       )
     )
       add("Children overflow their layer.", "error");
+    const boxes = r.childBoxes.filter((c) => c.width && c.height);
+    const columnStack =
+      boxes.length > 1 &&
+      boxes
+        .slice(1)
+        .every(
+          (c, index) =>
+            c.y >= boxes[index]!.y + boxes[index]!.height - 1 &&
+            Math.abs(c.x - boxes[0]!.x) <= 3,
+        );
     const vertical =
-      node.styles.display?.includes("flex") &&
-      node.styles.flexDirection === "column";
+      (node.styles.display?.includes("flex") &&
+        node.styles.flexDirection === "column") ||
+      ((node.styles.display === "block" || node.styles.display === "grid") &&
+        columnStack);
     const horizontal =
       node.styles.display?.includes("flex") &&
       node.styles.flexDirection === "row";
-    const boxes = r.childBoxes.filter((c) => c.width && c.height);
     if (vertical || horizontal) {
       node.spacing = boxes
         .slice(1)

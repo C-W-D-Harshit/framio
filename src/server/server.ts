@@ -1,3 +1,4 @@
+import { makeLayersApi, type LayerObservation } from "./layers/api";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
@@ -115,10 +116,12 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
     Screenshots,
   );
 
+  const layers = yield* makeLayersApi(p.framio, project, shots);
   const screenshot = Effect.fn("Server.screenshot")(function* (
     body: typeof ScreenshotRequest.Type,
   ): Effect.fn.Return<typeof ScreenshotResponse.Type> {
-    return yield* project.withStableState((state) =>
+    const reports: LayerObservation[] = [];
+    const result = yield* project.withStableState((state) =>
       Effect.gen(function* () {
         const capture = (
           frame: Frame,
@@ -129,8 +132,20 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
               frame,
               join(p.screenshots, frame.page, `${frame.slug}.png`),
               scale,
+              body.layers,
             )
             .pipe(
+              Effect.tap((shot) =>
+                Effect.sync(() => {
+                  if (shot.report)
+                    reports.push({
+                      id: frame.id,
+                      version:
+                        state.artifacts.frames.get(frame.id)?.version ?? 0,
+                      report: shot.report,
+                    });
+                }),
+              ),
               Effect.map((shot) => ({
                 frame: frame.id,
                 file: frame.relFile,
@@ -235,9 +250,13 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
         };
       }),
     );
+    yield* layers.warnings(reports);
+    return result;
   });
   const Handlers = HttpApiBuilder.group(Api, "project", (handlers) =>
     handlers.handleAll({
+      renameLayer: ({ payload }) => layers.renameLayer(payload),
+      inspect: ({ payload }) => layers.inspect(payload),
       health: () =>
         Effect.succeed({
           ok: true,
@@ -264,6 +283,9 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
                   file: frame.relFile,
                 })),
                 element: frames.length === 1 ? payload.element : null,
+                ...(frames.length === 1 && payload.layer
+                  ? { layer: payload.layer }
+                  : {}),
                 selectedAt: DateTime.formatIso(yield* DateTime.now),
               },
               null,
@@ -315,12 +337,20 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
                 built.version !== payload.version)
             )
               return state;
-            if ((state.runtimeErrors.get(payload.id) ?? null) === payload.error)
+            if (
+              (state.runtimeErrors.get(payload.id) ?? null) === payload.error &&
+              (payload.warnings === undefined ||
+                JSON.stringify(state.layerWarnings?.get(payload.id) ?? []) ===
+                  JSON.stringify(payload.warnings))
+            )
               return state;
             const runtimeErrors = new Map(state.runtimeErrors);
             if (payload.error) runtimeErrors.set(payload.id, payload.error);
             else runtimeErrors.delete(payload.id);
-            return { ...state, runtimeErrors };
+            const layerWarnings = new Map(state.layerWarnings);
+            if (payload.warnings)
+              layerWarnings.set(payload.id, payload.warnings);
+            return { ...state, runtimeErrors, layerWarnings };
           })
           .pipe(Effect.as({ ok: true as const })),
       screenshot: ({ payload }) => screenshot(payload),
@@ -408,6 +438,10 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
             frame,
             join(p.state, "thumbs", frame.page, `${frame.slug}.png`),
             0.5,
+            [],
+            undefined,
+            false,
+            false,
           );
         }),
       ),
