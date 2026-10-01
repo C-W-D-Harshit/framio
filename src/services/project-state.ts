@@ -1,3 +1,6 @@
+import { readComments } from "./comments";
+import type { Comment } from "../contracts/comments";
+import { viewports, viewportId } from "../domain/viewports";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Metric from "effect/Metric";
@@ -29,6 +32,8 @@ type Assets = {
   css: { text: string; error: string | null; version: number };
 };
 export type ProjectGeneration = {
+  comments: readonly Comment[];
+  commentsError: string | null;
   retained: readonly Assets[];
   generation: number;
   imageFiles: ReadonlyMap<string, string>;
@@ -45,6 +50,8 @@ export function projectSnapshot(
 ): Snapshot {
   return {
     projectName: basename(root),
+    comments: value.comments,
+    commentsError: value.commentsError,
     cssVersion: value.css.version,
     cssError: value.css.error,
     pages: value.pages.map((page) => ({
@@ -59,6 +66,14 @@ export function projectSnapshot(
         parent: frame.parent,
         note: frame.note,
         source: frame.source,
+        viewportErrors: Object.fromEntries(
+          viewports(frame.meta).flatMap((v) => {
+            const error = value.runtimeErrors.get(
+              viewportId(frame.id, frame.meta, v.width),
+            );
+            return error ? [[String(v.width), error]] : [];
+          }),
+        ),
         version:
           frame.kind === "image"
             ? (value.imageVersions.get(frame.id) ?? 0)
@@ -88,6 +103,8 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         ),
   );
   const initial: ProjectGeneration = {
+    comments: [],
+    commentsError: null,
     retained: [],
     generation: 0,
     imageFiles: new Map(),
@@ -104,6 +121,15 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
       files: ReadonlySet<string>,
       full: boolean,
     ) {
+      const commentResult = yield* fs
+        .readFileString(join(p.framio, "comments.json"))
+        .pipe(
+          Effect.catchReason("PlatformError", "NotFound", () =>
+            Effect.succeed(null),
+          ),
+          Effect.flatMap(readComments),
+          Effect.result,
+        );
       const pages = yield* scanProject(p);
       const frames = pages.flatMap((page) => page.frames);
       const previousFrames = new Map(
@@ -182,8 +208,18 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
       const runtimeErrors = new Map(
         [...previous.runtimeErrors].filter(
           ([id]) =>
-            frames.some((frame) => frame.id === id) &&
-            !built.changed.includes(id),
+            frames.some((frame) =>
+              viewports(frame.meta).some(
+                (v) => viewportId(frame.id, frame.meta, v.width) === id,
+              ),
+            ) &&
+            !frames.some(
+              (frame) =>
+                built.changed.includes(frame.id) &&
+                viewports(frame.meta).some(
+                  (v) => viewportId(frame.id, frame.meta, v.width) === id,
+                ),
+            ),
         ),
       );
       const retained: Assets[] = [];
@@ -209,6 +245,14 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         retainedBytes += bytes;
       }
       const next: ProjectGeneration = {
+        comments:
+          commentResult._tag === "Success"
+            ? commentResult.success.comments
+            : previous.comments,
+        commentsError:
+          commentResult._tag === "Failure"
+            ? commentResult.failure.message
+            : null,
         retained,
         imageFiles,
         imageBytes,
@@ -267,7 +311,7 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
           page.frames.flatMap((frame) => {
             const buildError =
               frame.metaError ?? value.artifacts.frames.get(frame.id)?.error;
-            const runtimeError = value.runtimeErrors.get(frame.id);
+
             return buildError
               ? [
                   {
@@ -277,18 +321,31 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
                     message: buildError,
                   },
                 ]
-              : runtimeError
-                ? [
-                    {
-                      frame: frame.id,
-                      file: frame.relFile,
-                      kind: "runtime",
-                      message: runtimeError,
-                    },
-                  ]
-                : [];
+              : viewports(frame.meta).flatMap((v) => {
+                  const runtimeError = value.runtimeErrors.get(
+                    viewportId(frame.id, frame.meta, v.width),
+                  );
+                  return runtimeError
+                    ? [
+                        {
+                          frame: frame.id,
+                          file: frame.relFile,
+                          kind: "runtime",
+                          message: runtimeError,
+                          ...(frame.meta.widths ? { width: v.width } : {}),
+                        },
+                      ]
+                    : [];
+                });
           }),
         );
+        if (value.commentsError)
+          errors.push({
+            frame: "",
+            file: ".framio/comments.json",
+            kind: "comments",
+            message: value.commentsError,
+          });
         if (value.css.error)
           errors.unshift({
             frame: "",

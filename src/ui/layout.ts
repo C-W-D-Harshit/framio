@@ -1,3 +1,4 @@
+import { groupWidth, viewports, viewportId } from "../domain/viewports";
 import type { SnapshotFrame } from "../contracts/snapshot";
 
 type Pos = { x: number; y: number };
@@ -26,7 +27,12 @@ export function layoutFrames(
     } else roots.push(f);
   }
 
-  const h = (f: SnapshotFrame) => heights[f.id] ?? f.meta.height;
+  const h = (f: SnapshotFrame) =>
+    Math.max(
+      ...viewports(f.meta).map(
+        (v) => heights[viewportId(f.id, f.meta, v.width)] ?? v.height,
+      ),
+    );
   const subtreeHeight = new Map<string, number>();
   const measure = (f: SnapshotFrame): number => {
     const kids = children.get(f.id) ?? [];
@@ -44,14 +50,14 @@ export function layoutFrames(
     auto[f.id] = { x, y };
     let cy = y;
     for (const k of children.get(f.id) ?? []) {
-      place(k, x + f.meta.width + GAP_X, cy);
+      place(k, x + groupWidth(f.meta) + GAP_X, cy);
       cy += subtreeHeight.get(k.id)! + GAP_Y;
     }
   };
   if (children.size === 0 && roots.length > 3) {
     // No variations at all (e.g. a moodboard): a grid reads better than one tall column.
     const cols = Math.min(4, Math.ceil(Math.sqrt(roots.length)));
-    const colWidth = Math.max(...roots.map((r) => r.meta.width)) + GAP_X;
+    const colWidth = Math.max(...roots.map((r) => groupWidth(r.meta))) + GAP_X;
     let y = 0;
     for (let i = 0; i < roots.length; i += cols) {
       const row = roots.slice(i, i + cols);
@@ -87,4 +93,35 @@ export function layoutFrames(
   };
   roots.forEach(resolve);
   return final;
+}
+
+export function layoutViewports(
+  frames: readonly SnapshotFrame[],
+  heights: Record<string, number>,
+  saved: Record<string, Pos>,
+) {
+  const groups = layoutFrames(frames, heights, saved);
+  return frames.flatMap((frame) => {
+    let offset = 0;
+    return [...viewports(frame.meta)]
+      .sort((a, b) => b.width - a.width)
+      .map((v) => {
+        const id = viewportId(frame.id, frame.meta, v.width);
+        const position = {
+          x: groups[frame.id]!.x + offset,
+          y: groups[frame.id]!.y,
+        };
+        offset += v.width + 80;
+        return {
+          frame: {
+            ...frame,
+            id,
+            frameId: frame.id,
+            meta: { ...frame.meta, ...v },
+            error: frame.viewportErrors?.[String(v.width)] ?? frame.error,
+          },
+          position,
+        };
+      });
+  });
 }
