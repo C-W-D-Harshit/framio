@@ -1,6 +1,15 @@
 {
   "name": "framio",
   "version": "0.0.2",
+  "description": "A design canvas for coding agents.",
+  "license": "MIT",
+  "author": "Harshit",
+  "homepage": "https://github.com/C-W-D-Harshit/framio#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/C-W-D-Harshit/framio.git"
+  },
+  "bugs": "https://github.com/C-W-D-Harshit/framio/issues",
   "private": true,
   "type": "module",
   "bin": {
