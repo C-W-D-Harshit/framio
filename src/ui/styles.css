@@ -1,0 +1,34 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/base.css";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --color-chrome: #1c1c1c;
+  --color-chrome-line: #2b2b2b;
+  --color-canvas: #262626;
+  --color-accent: #4c8dff;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply bg-canvas font-sans text-neutral-200 antialiased;
+  font-size: 13px;
+  overscroll-behavior: none;
+}
+
+.react-flow__node-frame {
+  cursor: default;
+}
+
+/* --zoom is set by the canvas so lines keep the same on-screen weight at any zoom. */
+.react-flow__edge-path {
+  stroke: #6b6b6b;
+  stroke-width: calc(1.5px / var(--zoom, 1));
+  stroke-dasharray: calc(6px / var(--zoom, 1)) calc(5px / var(--zoom, 1));
+}
