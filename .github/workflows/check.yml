@@ -23,6 +23,7 @@ jobs:
         # Ubuntu's AppArmor restriction blocks the downloaded Chrome for Testing.
         # Keep Chromium's sandbox enabled on this ephemeral runner.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: python3 -m unittest discover -s tests/python -v
       - run: bun run check
       - run: bun run build:binary
       - run: python3 scripts/smoke-binary.py dist/bin/framio-linux-x64

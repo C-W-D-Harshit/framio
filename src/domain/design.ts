@@ -3,9 +3,10 @@ const Scalar = Schema.Union([Schema.String, Schema.Number]);
 const TokenName = Schema.String.pipe(
   Schema.check(Schema.isPattern(/[a-z0-9]/i)),
 );
-const TokenValue = Schema.NonEmptyString.pipe(
-  Schema.check(Schema.isPattern(/\S/)),
-);
+const TokenValue = Schema.Union([
+  Schema.NonEmptyString.pipe(Schema.check(Schema.isPattern(/\S/))),
+  Schema.Finite,
+]);
 export const Typography = Schema.StructWithRest(
   Schema.Struct({
     fontFamily: Schema.optional(Schema.String),

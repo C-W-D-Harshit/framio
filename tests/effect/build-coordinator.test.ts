@@ -4,6 +4,36 @@ import { TestClock } from "effect/testing";
 import { makeBuildCoordinator } from "../../src/services/build-coordinator";
 
 describe("build coordination", () => {
+  it.effect(
+    "a failed batch waits without spinning and the next barrier performs a full scan",
+    () =>
+      Effect.gen(function* () {
+        const scans: boolean[] = [];
+        let fail = true;
+        const coordinator = yield* makeBuildCoordinator({
+          initial: 0,
+          build: (n, _files, full) => {
+            scans.push(full);
+            return fail
+              ? Effect.fail("temporary read failure")
+              : Effect.succeed(n + 1);
+          },
+          onError: () => Effect.void,
+        });
+        yield* coordinator.notify("theme.css");
+        yield* TestClock.adjust(60);
+        assert.deepStrictEqual(scans, [false]);
+        yield* TestClock.adjust(1000);
+        assert.deepStrictEqual(scans, [false]);
+        fail = false;
+        assert.strictEqual(
+          yield* coordinator.withStableState(Effect.succeed),
+          1,
+        );
+        assert.deepStrictEqual(scans, [false, true]);
+      }),
+  );
+
   it.effect("a canceled full scan retries without another file event", () =>
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();

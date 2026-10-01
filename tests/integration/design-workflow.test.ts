@@ -272,3 +272,18 @@ test("metadata is literal data and never executes calls or getters", async () =>
     expect(frame.metaError?.includes("executed")).toBe(false);
   }
 });
+
+test("numeric YAML design tokens generate CSS while blank values stay invalid", async () => {
+  const p = project();
+  design(p, "colors:\n  zero: 0\nrounded:\n  none: 0\n  sm: 4");
+  const css = (await readDesignCss(p.designMd, ""))!.rules;
+  expect(css).toContain("--zero: 0");
+  expect(css).toContain("--radius-none: 0");
+  expect(css).toContain("--radius-sm: 4");
+  for (const value of ['""', '"   "', ".inf", ".nan"]) {
+    design(p, `rounded:\n  sm: ${value}`);
+    await expect(readDesignCss(p.designMd, "")).rejects.toThrow(
+      "tokens are invalid",
+    );
+  }
+});

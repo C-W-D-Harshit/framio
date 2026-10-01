@@ -41,7 +41,22 @@ export const makeBuildCoordinator = <S, E>(options: {
         yield* restore(
           options.build(previous, batch.files, batch.full).pipe(
             Effect.flatMap((next) => SubscriptionRef.set(state, next)),
-            Effect.catch(options.onError),
+            Effect.catch((error) =>
+              Effect.uninterruptible(
+                Effect.gen(function* () {
+                  // Retry on the next event/barrier, without spinning on a persistent failure.
+                  yield* Ref.set(pending, {
+                    files: new Set<string>(),
+                    full: true,
+                  });
+                  yield* Metric.update(
+                    Diagnostics.pendingFiles,
+                    options.maxPending ?? 1024,
+                  );
+                  yield* options.onError(error);
+                }),
+              ),
+            ),
           ),
         ).pipe(
           Effect.onInterrupt(() =>

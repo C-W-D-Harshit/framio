@@ -2,7 +2,7 @@ import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { scaffoldFiles } from "../generated/assets.js";
 import { ensureBrowser, isBrowserInstalled } from "../lib/browser";
 import { runBun } from "../lib/bun";
@@ -31,7 +31,7 @@ export const init = Effect.fn("init")(function* (skipInstall: boolean) {
       ? SKILL_DIRS.map((dir) => join(root, dir, rel.slice("skill/".length)))
       : [join(p.framio, rel === "_gitignore" ? ".gitignore" : rel)];
     for (const target of destinations) {
-      yield* fs.makeDirectory(target.slice(0, target.lastIndexOf("/")), {
+      yield* fs.makeDirectory(dirname(target), {
         recursive: true,
       });
       yield* fs.writeFile(target, bytes);

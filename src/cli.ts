@@ -66,7 +66,10 @@ Effect.gen(function* () {
       Runtime.defaultTeardown(exit, (code) =>
         onExit(
           code === 130 &&
-            (!args[0] || args[0] === "start" || args[0] === "__serve")
+            (!args[0] ||
+              args[0].startsWith("-") ||
+              args[0] === "start" ||
+              args[0] === "__serve")
             ? 0
             : code,
         ),

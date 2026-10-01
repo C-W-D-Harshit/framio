@@ -130,7 +130,7 @@ Effect.runFork(
               Math.max(root.getBoundingClientRect().height, root.scrollHeight),
             )
           : 0;
-        return h > 0 ? h : window.innerHeight;
+        return h > 0 ? h : Math.max(window.innerHeight, 1);
       }
 
       function postParent(msg: Record<string, unknown>) {

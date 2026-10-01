@@ -226,3 +226,22 @@ function ensureBrowser() {
     ensureBrowserEffect().pipe(Effect.provide(BunFileSystem.layer)),
   );
 }
+
+test(
+  "empty zero-height viewports still report a positive frame height",
+  () =>
+    withCanvas(async (page) => {
+      const height = await page.evaluate(() => {
+        const iframe = document.querySelector("iframe")!;
+        iframe.style.height = "0px";
+        iframe.contentDocument!.getElementById("root")!.remove();
+        return (
+          iframe.contentWindow as Window & {
+            __framio: { contentHeight(): number };
+          }
+        ).__framio.contentHeight();
+      });
+      expect(height).toBe(1);
+    }),
+  30_000,
+);

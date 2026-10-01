@@ -12,6 +12,7 @@ bun run build:ui
 bun run format:check
 bun run check
 bun run build:binary
+python3 -m unittest discover -s tests/python -v
 python3 scripts/smoke-binary.py dist/bin/framio-darwin-arm64
 ```
 
@@ -54,7 +55,9 @@ Effect owns application workflows and resources directly. Promise conversion is 
 
 ## Native adapters and bundle boundaries
 
-`platform/server-child.ts` retains native process detachment and descriptor-backed logging. `platform/project-watch.ts` supplies bounded native watch ingress. `platform/chromium.ts` wraps Puppeteer operations with typed failures and cancellation/cleanup. Bun compiler plugins, image header inspection, metadata AST extraction, and screenshot HTML composition remain host integration or pure computation.
+`platform/server-child.ts` retains native process detachment and descriptor-backed logging. `platform/browser-launcher.ts` hands browser openers to the OS without attaching them to the short-lived CLI scope. `platform/project-watch.ts` supplies bounded native watch ingress. `platform/chromium.ts` wraps Puppeteer operations with typed failures and cancellation/cleanup. Bun compiler plugins, image header inspection, metadata AST extraction, and screenshot HTML composition remain host integration or pure computation.
+
+UI/runtime builds publish a single manifest containing immutable asset bytes. Loaded servers retain their own bytes, and scoped candidate directories are removed after successful or failed builds. Repeated watch builds create no published asset trees. Legacy `dist/builds` directories from older builds are left intact because older server processes may still reference them; they can be removed after those processes stop.
 
 Embedded scaffold paths use Bun's virtual filesystem. `init` reads those bytes with `Bun.file` before writing with Effect FileSystem; node filesystem copy cannot read `/$bunfs` paths. The compiled smoke check compares every destination hash outside the checkout and verifies overwrite protection.
 
@@ -76,7 +79,7 @@ Local macOS arm64 evidence on 2026-10-01:
 - Final collaborative browser inspection showed two ready frames and a Live connection; a live source edit replaced the primary iframe at version3 while its variation remained at version2. Earlier checks exercised selection and tools. The task-owned UI server was stopped after inspection. This is not a complete drag/persistence/reconnect/disposal fault matrix.
 - React Doctor previously reported 72 with no errors and seven component-complexity/callback warnings. This is diagnostic evidence, not a release gate.
 
-The reproducible compiled comparison is in `effect-v4-performance.json`. It uses 13 samples after one excluded warmup, alternating startup order, a single React frame, isolated process state, and no Node/Bun on PATH. It measures committed snapshot rebuilds, not save-to-visible browser latency. RSS excludes Chromium and browser UI; warm RSS and cold capture are single observations.
+The recorded compiled comparison is in `effect-v4-performance.json`. To produce a new comparison, run `python3 scripts/benchmark-effect.py BASELINE_BINARY CANDIDATE_BINARY --baseline-revision BASELINE_SOURCE_SHA`. The script records the supplied baseline revision and SHA-256 hashes of both measured binaries. It uses 13 samples after one excluded warmup, alternating startup order, a single React frame, isolated process state, and no Node/Bun on PATH. It measures committed snapshot rebuilds, not save-to-visible browser latency. RSS excludes Chromium and browser UI; warm RSS and cold capture are single observations.
 
 Startup and idle server RSS exceed the proposed acceptance budgets. The latest rebuild median also exceeds the latency budget, although earlier samples passed; repeatable rebuild acceptance remains unresolved. Lazy CLI construction and narrow imports reduced unnecessary work but did not resolve these regressions. Further profiling must distinguish module/schema initialization, filesystem runtime costs, and retained service state. The budgets have not been changed. There are no measured canvas/per-iframe heap results or 10/50/100-frame distributions yet.
 

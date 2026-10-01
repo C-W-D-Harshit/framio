@@ -433,7 +433,9 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           { contentType: "text/css; charset=utf-8" },
         );
       if (path === "/_runtime.js")
-        return yield* staticFile(runtimeFile, "text/javascript; charset=utf-8");
+        return HttpServerResponse.uint8Array(runtimeFile, {
+          contentType: "text/javascript; charset=utf-8",
+        });
       const frameMatch = /^\/f\/([^/]+)\/([^/]+)$/.exec(path);
       if (frameMatch) {
         const frame = all.find(
@@ -539,10 +541,10 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           : response;
       }
       const asset = uiFiles[path.slice(1)];
-      return yield* staticFile(
-        asset ?? uiFiles["index.html"]!,
-        MIME[path.slice(path.lastIndexOf("."))] ?? "text/html; charset=utf-8",
-      );
+      return HttpServerResponse.uint8Array(asset ?? uiFiles["index.html"]!, {
+        contentType:
+          MIME[path.slice(path.lastIndexOf("."))] ?? "text/html; charset=utf-8",
+      });
     }),
   );
   yield* Layer.build(

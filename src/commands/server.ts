@@ -1,6 +1,6 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { launchBrowser } from "../platform/browser-launcher";
 import { ServerRegistry } from "../services/server-registry";
 import { ServerLauncher } from "../services/server-launcher";
 import { projectPaths } from "../lib/paths";
@@ -14,15 +14,7 @@ export const openBrowser = Effect.fn("openBrowser")(function* (url: string) {
       : process.platform === "win32"
         ? ["cmd", "/c", "start", "", url]
         : ["xdg-open", url];
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* spawner.spawn(
-    ChildProcess.make(command[0]!, command.slice(1), {
-      stdout: "ignore",
-      stderr: "ignore",
-      detached: true,
-    }),
-  );
-  yield* child.unref;
+  yield* launchBrowser(command);
 });
 
 export const start = Effect.fn("start")(function* (options: {

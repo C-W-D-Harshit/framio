@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -75,17 +76,18 @@ afterEach(async () => {
     rmSync(root, { recursive: true, force: true });
 });
 
-test("foreground start stays attached and Ctrl+C stops its server", async () => {
-  const root = project();
-  const child = launch(root, ["start", "--no-open"]);
-  const info = await ready(root);
-  expect(child.exitCode).toBeNull();
-  child.kill("SIGINT");
-  expect(await child.exited).toBe(0);
-  await gone(info.pid);
-  expect(await readServerInfo(projectPaths(root))).toBeNull();
-  expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(false);
-}, 20_000);
+for (const args of [["start", "--no-open"], ["--no-open"]])
+  test(`foreground ${args.join(" ")} stays attached and Ctrl+C stops its server`, async () => {
+    const root = project();
+    const child = launch(root, args);
+    const info = await ready(root);
+    expect(child.exitCode).toBeNull();
+    child.kill("SIGINT");
+    expect(await child.exited).toBe(0);
+    await gone(info.pid);
+    expect(await readServerInfo(projectPaths(root))).toBeNull();
+    expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(false);
+  }, 20_000);
 
 test("an older healthy server cannot be borrowed but can still be stopped", async () => {
   const root = project();
@@ -220,3 +222,48 @@ function readServerInfo(p: ReturnType<typeof projectPaths>) {
     ),
   );
 }
+
+test("browser launchers survive the short-lived open command scope", async () => {
+  if (process.platform === "win32")
+    throw new Error("This POSIX launcher fixture requires macOS or Linux");
+  const root = project();
+  expect((await run(root, ["start", "--background", "--no-open"])).code).toBe(
+    0,
+  );
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  const opener = join(bin, process.platform === "darwin" ? "open" : "xdg-open");
+  const marker = join(root, "opened");
+  const release = join(root, "release-opener");
+  const pidFile = join(root, "opener-pid");
+  writeFileSync(
+    opener,
+    `#!${process.execPath}\nimport {existsSync,writeFileSync} from "node:fs";\nwriteFileSync(${JSON.stringify(pidFile)}, String(process.pid));\nconst timer=setInterval(()=>{if(existsSync(${JSON.stringify(release)})){writeFileSync(${JSON.stringify(marker)},process.argv[2]);clearInterval(timer)}},20);`,
+  );
+  chmodSync(opener, 0o755);
+  let openerPid: number | undefined;
+  try {
+    const child = Bun.spawn([process.execPath, cli, "open"], {
+      cwd: root,
+      env: {
+        ...process.env,
+        HOME: join(root, "home"),
+        PATH: `${bin}:${process.env.PATH}`,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    children.push(child);
+    expect(await child.exited).toBe(0);
+    for (let i = 0; i < 100 && !existsSync(pidFile); i++) await Bun.sleep(20);
+    expect(existsSync(pidFile)).toBe(true);
+    openerPid = Number(readFileSync(pidFile, "utf8"));
+    expect(isAlive(openerPid)).toBe(true);
+    writeFileSync(release, "go");
+    for (let i = 0; i < 100 && !existsSync(marker); i++) await Bun.sleep(20);
+    expect(readFileSync(marker, "utf8")).toBe((await ready(root)).url);
+    await gone(openerPid);
+  } finally {
+    if (openerPid && isAlive(openerPid)) process.kill(openerPid, "SIGKILL");
+  }
+}, 20_000);
