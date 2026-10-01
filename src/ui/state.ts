@@ -33,12 +33,9 @@ export const heightsAtom = Atom.family((page: string) =>
 export const movedAtom = Atom.family((page: string) =>
   Atom.make<Record<string, { x: number; y: number }>>({}),
 );
+const storedTool = localStorage.getItem("framio:tool");
 export const toolAtom = Atom.make<Tool>(
-  localStorage.getItem("framio:tool") === "hand"
-    ? "hand"
-    : localStorage.getItem("framio:tool") === "comment"
-      ? "comment"
-      : "select",
+  storedTool === "hand" || storedTool === "comment" ? storedTool : "select",
 );
 
 const readHash = () => {

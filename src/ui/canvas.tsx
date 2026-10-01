@@ -238,6 +238,16 @@ function CanvasInner({
     openComment,
   ]);
 
+  const layoutIndex = useMemo(() => {
+    const nodes = new Map(laidOut.map((node) => [node.id, node]));
+    const groups = new Map<string, FrameNodeType>();
+    for (const node of laidOut) {
+      const id = node.data.frame.frameId ?? node.id;
+      if (!groups.has(id)) groups.set(id, node);
+    }
+    return { nodes, groups };
+  }, [laidOut]);
+
   const [nodes, setNodes, onNodesChange] =
     useNodesState<FrameNodeType>(laidOut);
   useEffect(() => {
@@ -630,7 +640,7 @@ function CanvasInner({
         onNodeDrag={(_, node, dragged) => {
           const deltas = new Map<string, Pos>();
           for (const n of dragged) {
-            const original = laidOut.find((o) => o.id === n.id);
+            const original = layoutIndex.nodes.get(n.id);
             if (original)
               deltas.set(n.data.frame.frameId ?? n.id, {
                 x: n.position.x - original.position.x,
@@ -641,7 +651,7 @@ function CanvasInner({
           setNodes((current) =>
             current.map((n) => {
               const delta = deltas.get(n.data.frame.frameId ?? n.id);
-              const original = laidOut.find((o) => o.id === n.id);
+              const original = layoutIndex.nodes.get(n.id);
               return delta && original && !direct.has(n.id)
                 ? {
                     ...n,
@@ -658,10 +668,8 @@ function CanvasInner({
         onNodeDragStop={(_, node, dragged) => {
           const positions: Record<string, Pos> = {};
           for (const n of dragged) {
-            const original = laidOut.find((o) => o.id === n.id);
-            const group = laidOut.find(
-              (o) => o.data.frame.frameId === n.data.frame.frameId,
-            );
+            const original = layoutIndex.nodes.get(n.id);
+            const group = layoutIndex.groups.get(n.data.frame.frameId ?? n.id);
             if (original && group)
               positions[n.data.frame.slug] = {
                 x: Math.round(

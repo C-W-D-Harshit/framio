@@ -205,21 +205,26 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
           }),
         { concurrency: 8, discard: true },
       );
+      const currentViewportIds = new Set(
+        frames.flatMap((frame) =>
+          viewports(frame.meta).map((v) =>
+            viewportId(frame.id, frame.meta, v.width),
+          ),
+        ),
+      );
+      const changedFrames = new Set(built.changed);
+      const changedViewportIds = new Set(
+        frames
+          .filter((frame) => changedFrames.has(frame.id))
+          .flatMap((frame) =>
+            viewports(frame.meta).map((v) =>
+              viewportId(frame.id, frame.meta, v.width),
+            ),
+          ),
+      );
       const runtimeErrors = new Map(
         [...previous.runtimeErrors].filter(
-          ([id]) =>
-            frames.some((frame) =>
-              viewports(frame.meta).some(
-                (v) => viewportId(frame.id, frame.meta, v.width) === id,
-              ),
-            ) &&
-            !frames.some(
-              (frame) =>
-                built.changed.includes(frame.id) &&
-                viewports(frame.meta).some(
-                  (v) => viewportId(frame.id, frame.meta, v.width) === id,
-                ),
-            ),
+          ([id]) => currentViewportIds.has(id) && !changedViewportIds.has(id),
         ),
       );
       const retained: Assets[] = [];
