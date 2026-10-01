@@ -1,7 +1,6 @@
 # Framio
 
-A design canvas for coding agents. Designs are React + Tailwind files in `.framio/`; your agent
-writes them, Framio shows them live on an infinite canvas.
+A design canvas for coding agents.
 
 ## Install
 
