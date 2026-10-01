@@ -4,6 +4,71 @@ import { TestClock } from "effect/testing";
 import { makeBuildCoordinator } from "../../src/services/build-coordinator";
 
 describe("build coordination", () => {
+  it.effect("a canceled full scan retries without another file event", () =>
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      const scans: boolean[] = [];
+      const coordinator = yield* makeBuildCoordinator({
+        initial: 0,
+        build: (n, _files, full) =>
+          Effect.gen(function* () {
+            scans.push(full);
+            if (scans.length === 1) {
+              yield* Deferred.succeed(entered, undefined);
+              yield* Effect.never;
+            }
+            return n + 1;
+          }),
+        onError: () => Effect.void,
+      });
+      yield* coordinator.notify();
+      const capture = yield* coordinator
+        .withStableState(Effect.succeed)
+        .pipe(Effect.forkChild);
+      yield* Deferred.await(entered);
+      yield* Fiber.interrupt(capture);
+      yield* TestClock.adjust(60);
+      assert.strictEqual(yield* coordinator.get, 1);
+      assert.deepStrictEqual(scans, [true, true]);
+    }),
+  );
+  it.effect(
+    "a canceled barrier restores its batch alongside later file events",
+    () =>
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const batches: string[][] = [];
+        const coordinator = yield* makeBuildCoordinator({
+          initial: 0,
+          build: (n, files) =>
+            Effect.gen(function* () {
+              batches.push([...files].sort());
+              if (batches.length === 1) {
+                yield* Deferred.succeed(entered, undefined);
+                yield* Effect.never;
+              }
+              return n + 1;
+            }),
+          onError: () => Effect.void,
+        });
+        yield* coordinator.notify("first.tsx");
+        const capture = yield* coordinator
+          .withStableState(Effect.succeed)
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(entered);
+        yield* coordinator.notify("later.tsx");
+        yield* Fiber.interrupt(capture);
+        assert.strictEqual(yield* coordinator.get, 0);
+        assert.strictEqual(
+          yield* coordinator.withStableState(Effect.succeed),
+          1,
+        );
+        assert.deepStrictEqual(batches, [
+          ["first.tsx"],
+          ["first.tsx", "later.tsx"],
+        ]);
+      }),
+  );
   it.effect(
     "accumulates filenames and a screenshot barrier drains the quiet window",
     () =>

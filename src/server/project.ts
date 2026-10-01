@@ -51,23 +51,26 @@ const readFrame = Effect.fn("Project.readFrame")(function* (
   const fs = yield* FileSystem.FileSystem;
   const slug = fileName.replace(/\.tsx$/, "");
   const file = join(p.pages, page, fileName);
-  const source = yield* fs.readFileString(file);
-  const result = yield* Effect.try({
-    try: () => {
-      const meta = parseMeta(source);
-      return Schema.decodeUnknownSync(FrameMeta)({
-        ...DEFAULT_META,
-        name: slug,
-        ...meta,
-        width: meta.width ?? 1440,
-        height: meta.height ?? 900,
-      });
-    },
-    catch: (cause) =>
-      new InvalidInput({
-        message: cause instanceof Error ? cause.message : String(cause),
-      }),
-  }).pipe(Effect.result);
+  const source = yield* fs.readFileString(file).pipe(Effect.result);
+  const result =
+    source._tag === "Failure"
+      ? source
+      : yield* Effect.try({
+          try: () => {
+            const meta = parseMeta(source.success);
+            return Schema.decodeUnknownSync(FrameMeta)({
+              ...DEFAULT_META,
+              name: slug,
+              ...meta,
+              width: meta.width ?? 1440,
+              height: meta.height ?? 900,
+            });
+          },
+          catch: (cause) =>
+            new InvalidInput({
+              message: cause instanceof Error ? cause.message : String(cause),
+            }),
+        }).pipe(Effect.result);
   return {
     id: `${page}/${slug}`,
     kind: "tsx",
@@ -75,7 +78,7 @@ const readFrame = Effect.fn("Project.readFrame")(function* (
     slug,
     file,
     relFile: relative(p.root, file),
-    content: source,
+    content: source._tag === "Success" ? source.success : undefined,
     meta:
       result._tag === "Success"
         ? result.success

@@ -533,7 +533,10 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
         const file = normalize(join(base!, path.slice(prefix!.length)));
         if (!file.startsWith(base! + sep))
           return HttpServerResponse.text("Not found", { status: 404 });
-        return yield* staticFile(file);
+        const response = yield* staticFile(file);
+        return prefix === "/assets/"
+          ? HttpServerResponse.setHeader(response, "cache-control", "no-cache")
+          : response;
       }
       const asset = uiFiles[path.slice(1)];
       return yield* staticFile(

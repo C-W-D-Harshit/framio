@@ -28,19 +28,45 @@ export const makeBuildCoordinator = <S, E>(options: {
     const pending = yield* Ref.make({ files: new Set<string>(), full: false });
     const wake = yield* Queue.sliding<void>(1);
     const lock = yield* Semaphore.make(1);
-    const flush = Effect.gen(function* () {
-      const batch = yield* Ref.getAndSet(pending, {
-        files: new Set<string>(),
-        full: false,
-      });
-      yield* Metric.update(Diagnostics.pendingFiles, 0);
-      if (!batch.full && batch.files.size === 0) return;
-      const previous = yield* SubscriptionRef.get(state);
-      yield* options.build(previous, batch.files, batch.full).pipe(
-        Effect.flatMap((next) => SubscriptionRef.set(state, next)),
-        Effect.catch(options.onError),
-      );
-    });
+    const flush = Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const batch = yield* Ref.getAndSet(pending, {
+          files: new Set<string>(),
+          full: false,
+        });
+        yield* Metric.update(Diagnostics.pendingFiles, 0);
+        if (!batch.full && batch.files.size === 0) return;
+        const previous = yield* SubscriptionRef.get(state);
+        // Clearing pending work and installing its interruption recovery are atomic.
+        yield* restore(
+          options.build(previous, batch.files, batch.full).pipe(
+            Effect.flatMap((next) => SubscriptionRef.set(state, next)),
+            Effect.catch(options.onError),
+          ),
+        ).pipe(
+          Effect.onInterrupt(() =>
+            Effect.gen(function* () {
+              yield* Ref.update(pending, (current) => {
+                const files = new Set([...batch.files, ...current.files]);
+                return batch.full ||
+                  current.full ||
+                  files.size > (options.maxPending ?? 1024)
+                  ? { files: new Set<string>(), full: true }
+                  : { files, full: false };
+              });
+              const current = yield* Ref.get(pending);
+              yield* Metric.update(
+                Diagnostics.pendingFiles,
+                current.full
+                  ? (options.maxPending ?? 1024)
+                  : current.files.size,
+              );
+              yield* Queue.offer(wake, undefined);
+            }),
+          ),
+        );
+      }),
+    );
     const notify = Effect.fnUntraced(function* (filename?: string) {
       yield* Ref.update(pending, (current) => {
         if (current.full) return current;
