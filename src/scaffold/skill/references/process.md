@@ -140,6 +140,9 @@ first, then change what the brief calls for.
 
 **Goal:** finished, believable screens.
 
+- Before writing or changing any component text, read `references/copy.md` once per session
+  and apply its unslop process to every component, including copy from imported blocks and
+  templates. Self-audit the wording, then check clarity and fit in the rendered frame.
 - Real content: real-sounding names, numbers, dates, and copy written for this product. No lorem
   ipsum, no "Item 1", no "John Doe".
 - Design every important state as a variation: empty, loading (skeleton), error, success, long

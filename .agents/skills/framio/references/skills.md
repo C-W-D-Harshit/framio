@@ -1,6 +1,8 @@
 # Design skills
 
-Design skills are loaded on demand, not bundled with Framio. Most come from the ui-skills registry:
+External design skills are loaded on demand. The required unslop rules for UI copy are included
+in `references/copy.md`; read them before first writing copy, then apply them to every component
+with text. Other skills mostly come from the ui-skills registry:
 
 ```sh
 npx ui-skills get <slug>          # print a skill; read it fully and follow it

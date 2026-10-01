@@ -83,6 +83,15 @@ instead of `ui-skills get`, and also load
 When a skill conflicts with Framio's rules (it says to scaffold an app,
 write HTML, or wire real data), Framio's rules win.
 
+## UI copy (required)
+
+Before writing UI copy, read `references/copy.md`, which includes the unslop rules directly.
+Apply its process whenever you create or edit a component containing text, including imported
+Tailark, Axis, and Notio copy. Load the reference once per session, then apply it to every
+component: write for the product, remove AI phrasing and filler, and self-audit before finishing.
+Match BRIEF.md and DESIGN.md, preserve meaning, and keep controls concise and errors actionable.
+No external skill download is needed for these included instructions.
+
 ## Finish one frame before the next
 
 Work on exactly one frame at a time, including directions, design-system frames, screens,
