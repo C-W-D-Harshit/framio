@@ -1,4 +1,5 @@
 import { EmptyCanvas, DisconnectedNotice } from "./empty-canvas";
+import framioIcon from "./brand/framio-icon.png";
 import type { CSSProperties } from "react";
 import {
   ChevronRight,
@@ -101,6 +102,11 @@ export function App() {
   const { snapshot, connected, saveError } = AsyncResult.isSuccess(live)
     ? live.value
     : { snapshot: null, connected: false, saveError: null };
+  const projectName = snapshot?.projectName;
+  useEffect(() => {
+    // Project first so tabs stay distinguishable when several canvases are open.
+    document.title = projectName ? `${projectName} · Framio` : "Framio";
+  }, [projectName]);
   const [pageId, setPageId] = useHashPage();
   const [tool, setTool] = useTool();
   const [selection, setSelection] = useAtom(selectionAtom);
@@ -168,7 +174,7 @@ export function App() {
         >
           <SidebarHeader className="h-14 flex-row items-center justify-between border-b px-4">
             <div className="flex min-w-0 items-center gap-2 font-medium">
-              <span className="size-3.5 shrink-0 rounded-sm bg-primary" />
+              <img src={framioIcon} alt="" className="size-5 shrink-0" />
               <span className="truncate">
                 {snapshot?.projectName ?? "Framio"}
               </span>

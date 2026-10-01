@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Sparkles } from "lucide-react";
 
 export const meta = {
-  name: "Sign in — split layout",
+  name: "Sign in, split layout",
   width: 1440,
   height: 900,
   variationOf: "sign-in",

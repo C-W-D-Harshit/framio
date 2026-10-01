@@ -1,4 +1,9 @@
-# Framio
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/framio-wordmark-on-dark.png" />
+    <img src=".github/assets/framio-wordmark-on-light.png" alt="Framio" height="64" />
+  </picture>
+</h1>
 
 A design canvas for coding agents.
 

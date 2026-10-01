@@ -55,6 +55,7 @@ const MIME: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".ico": "image/x-icon",
   ".woff2": "font/woff2",
 };
 function frameHtml(frame: Frame, canvas: boolean, state: ProjectGeneration) {

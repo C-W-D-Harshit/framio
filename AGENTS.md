@@ -16,3 +16,11 @@ Use `bun run test:effect` for deterministic service tests and
 `bun run test:integration` for actual Bun/process/compiler/browser tests.
 Preserve existing dirty work and report local, browser, binary, and CI evidence
 separately. Do not publish a release without a user delivery instruction.
+
+# Writing
+
+Never use em dashes in anything you write here: UI strings, page titles, scaffold
+content, docs, README, code comments, commit messages, and PR text. Use a period,
+comma, or colon instead. Join a project name and "Framio" in titles with a middle
+dot, for example `my-app · Framio`. Design copy rules for generated projects live in
+`src/scaffold/skill/references/copy.md`.
