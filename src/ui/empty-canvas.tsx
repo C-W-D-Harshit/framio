@@ -132,8 +132,6 @@ export function EmptyCanvas({
         onTool={onTool}
         showHelp={help}
         onToggleHelp={() => setHelp((value) => !value)}
-        showComments={false}
-        onToggleComments={() => {}}
       />
     </ReactFlowProvider>
   );

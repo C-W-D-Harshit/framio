@@ -638,6 +638,14 @@ function CanvasInner({
           edges={edges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
+          onPaneClick={() => {
+            selectFrames([]);
+            setSelection({ frames: [], element: null });
+            setDraft(null);
+            setActiveComment(null);
+            closeMenu();
+            if (tool === "comment") onTool("select");
+          }}
           onSelectionChange={({ nodes: sel }) => {
             const pending = pendingSelection.current;
             if (pending && pending.every((id) => layoutIndex.nodes.has(id))) {
@@ -782,8 +790,6 @@ function CanvasInner({
             tool={tool}
             onTool={onTool}
             showHelp={showHelp}
-            showComments={showComments}
-            onToggleComments={() => onCommentsChange(!showComments)}
             onToggleHelp={() => setShowHelp((v) => !v)}
           />
         </ReactFlow>

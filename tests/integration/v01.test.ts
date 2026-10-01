@@ -460,7 +460,10 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
                 '[role="treeitem"][aria-selected="true"] button:last-child',
               );
               await page.waitForSelector('[aria-label="Layer inspection"]');
-              await page.click('button[aria-label="Comments panel"]');
+              expect(
+                await page.$('button[aria-label="Comments panel"]'),
+              ).toBeNull();
+              await page.click('button[aria-label="Comment"]');
               await page.waitForSelector('[aria-label="Comments"]');
               await page.evaluate(
                 () =>
@@ -479,6 +482,39 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
               await page.click('button[aria-label="Comment"]');
               await clickHeading();
               await page.waitForSelector('textarea[aria-label="New comment"]');
+              await page.type(
+                'textarea[aria-label="New comment"]',
+                "Discard this draft",
+              );
+              const emptyCanvas = (await (await page.$(
+                ".react-flow__pane",
+              ))!.boundingBox())!;
+              await page.mouse.click(emptyCanvas.x + 10, emptyCanvas.y + 10);
+              await page.waitForSelector(
+                'button[aria-label="Select"][aria-pressed="true"]',
+              );
+              await page.waitForSelector('textarea[aria-label="New comment"]', {
+                hidden: true,
+              });
+              await waitUntil(
+                () =>
+                  json(root, ".state/selection.json").frames.length === 0 &&
+                  json(root, ".state/selection.json").element === null,
+              );
+              expect(
+                await page.$(
+                  'button[aria-label="Comment"][aria-pressed="true"]',
+                ),
+              ).toBeNull();
+              await page.click('button[aria-label="Comment"]');
+              await clickHeading();
+              await page.waitForSelector('textarea[aria-label="New comment"]');
+              expect(
+                await page.$eval(
+                  'textarea[aria-label="New comment"]',
+                  (element) => (element as HTMLTextAreaElement).value,
+                ),
+              ).toBe("");
               await page.type(
                 'textarea[aria-label="New comment"]',
                 "Shorten this heading",

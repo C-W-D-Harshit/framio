@@ -9,7 +9,6 @@ import { Kbd } from "./components/ui/kbd";
 import { Button } from "./components/ui/button";
 import { useReactFlow, useStore } from "@xyflow/react";
 import {
-  PanelRight,
   MessageCircle,
   Hand,
   Keyboard,
@@ -32,8 +31,6 @@ type Props = {
   onTool(tool: Tool): void;
   showHelp: boolean;
   onToggleHelp(): void;
-  onToggleComments(): void;
-  showComments: boolean;
   reviewTools?: boolean;
 };
 
@@ -43,8 +40,6 @@ export function Toolbar({
   onTool,
   showHelp,
   onToggleHelp,
-  onToggleComments,
-  showComments,
   reviewTools = true,
 }: Props) {
   const flow = useReactFlow();
@@ -70,24 +65,14 @@ export function Toolbar({
           <Hand className="size-4" />
         </ToolButton>
         {reviewTools && (
-          <>
-            <ToolButton
-              active={tool === "comment"}
-              onClick={() => onTool("comment")}
-              label="Comment"
-              shortcut="C"
-            >
-              <MessageCircle className="size-4" />
-            </ToolButton>
-            <ToolButton
-              quiet
-              active={showComments}
-              onClick={onToggleComments}
-              label="Comments panel"
-            >
-              <PanelRight className="size-4" />
-            </ToolButton>
-          </>
+          <ToolButton
+            active={tool === "comment"}
+            onClick={() => onTool("comment")}
+            label="Comment"
+            shortcut="C"
+          >
+            <MessageCircle className="size-4" />
+          </ToolButton>
         )}
         <Divider />
         <ToolButton
