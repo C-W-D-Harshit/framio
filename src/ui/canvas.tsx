@@ -1,3 +1,4 @@
+import { SelectionCallout } from "./selection-callout";
 import { viewportId, viewports } from "../domain/viewports";
 import { CommentsPanel, type CommentDraft } from "./comments";
 import type { Comment } from "../contracts/comments";
@@ -6,6 +7,7 @@ import {
   ReactFlowProvider,
   SelectionMode,
   useNodesState,
+  useNodesInitialized,
   useReactFlow,
   useStore,
   type Edge,
@@ -39,7 +41,7 @@ import type { Snapshot } from "../contracts/snapshot";
 import { ContextMenu } from "./context-menu";
 import { FrameNode, standaloneUrl, type FrameNodeType } from "./frame-node";
 import { layoutViewports } from "./layout";
-import { Toolbar, type Tool } from "./toolbar";
+import { Toolbar, MOD, type Tool } from "./toolbar";
 
 type Page = Snapshot["pages"][number];
 type Pos = { x: number; y: number };
@@ -63,6 +65,9 @@ type Props = {
   onTool(tool: Tool): void;
   comments: readonly Comment[];
   commentsError: string | null;
+  showComments: boolean;
+  onCommentsChange(show: boolean): void;
+  focusFrame?: { id: string; serial: number } | null;
 };
 
 export function Canvas(props: Props) {
@@ -111,9 +116,11 @@ function CanvasInner({
   onTool,
   comments,
   commentsError,
+  focusFrame,
+  showComments,
+  onCommentsChange,
 }: Props) {
   const flow = useReactFlow<FrameNodeType>();
-  const [showComments, setShowComments] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
   const [activeComment, setActiveComment] = useState<string | null>(null);
   const [draft, setDraft] = useState<CommentDraft | null>(null);
@@ -124,37 +131,11 @@ function CanvasInner({
 
   const openComment = useCallback(
     (id: string) => {
-      setShowComments(true);
+      onCommentsChange(true);
       setActiveComment(id || null);
       setDraft(null);
-      const comment = comments.find((c) => c.id === id);
-      const node = flow
-        .getNodes()
-        .find((n) => (n.data.frame.frameId ?? n.id) === comment?.frame);
-      if (node && comment) {
-        let x = comment.anchor.x,
-          y = comment.anchor.y;
-        const iframe = [
-          ...document.querySelectorAll<HTMLIFrameElement>("iframe[data-frame]"),
-        ].find((el) => el.dataset.frame === node.id);
-        try {
-          const rect = comment.anchor.selector
-            ? iframe?.contentDocument
-                ?.querySelector(comment.anchor.selector)
-                ?.getBoundingClientRect()
-            : null;
-          if (rect) {
-            x += rect.x;
-            y += rect.y;
-          }
-        } catch {}
-        void flow.setCenter(node.position.x + x, node.position.y + y, {
-          zoom: Math.max(flow.getZoom(), 0.7),
-          duration: 250,
-        });
-      }
     },
-    [comments, flow],
+    [onCommentsChange],
   );
   const makeDraft = useCallback(
     (frame: string, x: number, y: number, element: ElementInfo | null) => {
@@ -178,9 +159,9 @@ function CanvasInner({
             : { x, y },
       });
       setActiveComment(null);
-      setShowComments(true);
+      onCommentsChange(true);
     },
-    [page.frames],
+    [page.frames, onCommentsChange],
   );
   const [heights, setHeights] = useAtom(heightsAtom(page.id));
   const saveSelection = useAtomSet(saveSelectionAtom);
@@ -219,6 +200,8 @@ function CanvasInner({
         dragHandle: ".frame-drag",
         data: {
           frame,
+          parentName: page.frames.find((parent) => parent.id === frame.parent)
+            ?.meta.name,
           comments: pageComments,
           showResolved,
           onComment: openComment,
@@ -269,7 +252,15 @@ function CanvasInner({
   const edges = useMemo<Edge[]>(
     () =>
       page.frames
-        .filter((f) => f.parent && page.frames.some((p) => p.id === f.parent))
+        .filter((f) => {
+          const parent = laidOut.find(
+            (node) => (node.data.frame.frameId ?? node.id) === f.parent,
+          );
+          const child = laidOut.find(
+            (node) => (node.data.frame.frameId ?? node.id) === f.id,
+          );
+          return parent && child && parent.position.x !== child.position.x;
+        })
         .map((f) => ({
           id: `${f.parent}->${f.id}`,
           source:
@@ -341,6 +332,44 @@ function CanvasInner({
       }),
     [flow],
   );
+
+  const nodesReady = useNodesInitialized();
+  const appliedFocus = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      !focusFrame ||
+      !nodesReady ||
+      appliedFocus.current === focusFrame.serial ||
+      !page.frames.some((frame) => frame.id === focusFrame.id)
+    )
+      return;
+    const targets = flow
+      .getNodes()
+      .filter((node) => (node.data.frame.frameId ?? node.id) === focusFrame.id);
+    if (!targets.length) return;
+    appliedFocus.current = focusFrame.serial;
+    userMoved.current = true;
+    selectFrames(targets.map((node) => node.id));
+    setSelection({ frames: [focusFrame.id], element: null });
+    void zoomToFrames(targets.map((node) => node.id));
+  }, [
+    focusFrame,
+    nodesReady,
+    page.frames,
+    flow,
+    selectFrames,
+    setSelection,
+    zoomToFrames,
+  ]);
+
+  const canvasWidth = useStore((state) => state.width);
+  const previousWidth = useRef(0);
+  useEffect(() => {
+    const before = previousWidth.current;
+    previousWidth.current = canvasWidth;
+    if (!before || before === canvasWidth) return;
+    void flow.fitView({ padding: 0.15 });
+  }, [canvasWidth, selection.frames, selection.width, flow]);
 
   // --- Panning: Hand tool, Space + drag, middle-button drag -----------------
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -424,7 +453,17 @@ function CanvasInner({
         if (!e.repeat) setSpaceHeld(true);
         return;
       }
-      if (mod && (e.key === "=" || e.key === "+")) {
+      if (
+        mod &&
+        (e.key === "Enter" || (e.shiftKey && e.key.toLowerCase() === "c"))
+      ) {
+        const frame = flow.getNodes().find((node) => node.selected)?.data.frame;
+        if (!frame) return;
+        e.preventDefault();
+        if (e.key === "Enter")
+          window.open(standaloneUrl(frame), "_blank", "noopener,noreferrer");
+        else void navigator.clipboard.writeText(frame.relFile);
+      } else if (mod && (e.key === "=" || e.key === "+")) {
         e.preventDefault();
         flow.zoomIn({ duration: 150 });
       } else if (mod && e.key === "-") {
@@ -451,7 +490,7 @@ function CanvasInner({
       else if (e.key === "h" || e.key === "H") onTool("hand");
       else if (e.key.toLowerCase() === "c") {
         onTool("comment");
-        setShowComments(true);
+        onCommentsChange(true);
       } else if (e.key === "Escape") {
         setShowHelp(false);
         setDraft(null);
@@ -483,6 +522,7 @@ function CanvasInner({
     zoomToFrames,
     endPan,
     setSelection,
+    onCommentsChange,
   ]);
 
   // --- Messages from frame iframes ------------------------------------------
@@ -597,169 +637,177 @@ function CanvasInner({
       onPointerCancel={endPan}
       onMouseDownCapture={(e) => e.button === 1 && e.preventDefault()}
     >
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onSelectionChange={({ nodes: sel }) => {
-          const pending = pendingSelection.current;
-          if (pending && pending.every((id) => layoutIndex.nodes.has(id))) {
-            const actual = sel.map((node) => node.id).sort();
-            if (
-              actual.length !== pending.length ||
-              actual.some((id, index) => id !== pending[index])
-            )
-              return;
-          }
-          pendingSelection.current = null;
-          const ids = [
-            ...new Set(sel.map((n) => n.data.frame.frameId ?? n.id)),
-          ].sort();
-          const width =
-            sel.length === 1 && sel[0]!.data.frame.meta.widths
-              ? sel[0]!.data.frame.meta.width
-              : undefined;
-          setSelection((prev) => {
-            if (
-              prev.width === width &&
-              prev.frames.length === ids.length &&
-              prev.frames.every((id, i) => id === ids[i])
-            )
-              return prev;
-            const keep =
-              prev.element &&
-              ids.length === 1 &&
-              ids[0] === prev.frames[0] &&
-              prev.width === width;
-            return {
-              frames: ids,
-              element: keep ? prev.element : null,
-              ...(width ? { width } : {}),
-              ...(ids.length === 1 &&
-              ids[0] === prev.frames[0] &&
-              prev.width === width &&
-              prev.layer
-                ? { layer: prev.layer }
-                : {}),
-            };
-          });
-        }}
-        onNodeDoubleClick={(_, node) => zoomToFrames([node.id])}
-        onNodeContextMenu={(e, node) => {
-          e.preventDefault();
-          setMenu({ x: e.clientX, y: e.clientY, frame: node.id });
-        }}
-        onPaneContextMenu={(e) => e.preventDefault()}
-        onNodeClick={(event, node) => {
-          if (tool === "comment" && node.data.frame.kind === "image") {
-            const rect = (event.target as HTMLElement)
-              .closest(".react-flow__node")
-              ?.getBoundingClientRect();
-            if (rect)
-              makeDraft(
-                node.id,
-                (event.clientX - rect.left) / flow.getZoom(),
-                (event.clientY - rect.top) / flow.getZoom(),
-                null,
-              );
-          }
-        }}
-        onNodeDrag={(_, node, dragged) => {
-          const deltas = new Map<string, Pos>();
-          for (const n of dragged) {
-            const original = layoutIndex.nodes.get(n.id);
-            if (original)
-              deltas.set(n.data.frame.frameId ?? n.id, {
-                x: n.position.x - original.position.x,
-                y: n.position.y - original.position.y,
-              });
-          }
-          const direct = new Set(dragged.map((n) => n.id));
-          setNodes((current) =>
-            current.map((n) => {
-              const delta = deltas.get(n.data.frame.frameId ?? n.id);
-              const original = layoutIndex.nodes.get(n.id);
-              return delta && original && !direct.has(n.id)
-                ? {
-                    ...n,
-                    dragging: true,
-                    position: {
-                      x: original.position.x + delta.x,
-                      y: original.position.y + delta.y,
-                    },
-                  }
-                : n;
-            }),
-          );
-        }}
-        onNodeDragStop={(_, node, dragged) => {
-          const positions: Record<string, Pos> = {};
-          for (const n of dragged) {
-            const original = layoutIndex.nodes.get(n.id);
-            const group = layoutIndex.groups.get(n.data.frame.frameId ?? n.id);
-            if (original && group)
-              positions[n.data.frame.slug] = {
-                x: Math.round(
-                  group.position.x + n.position.x - original.position.x,
-                ),
-                y: Math.round(
-                  group.position.y + n.position.y - original.position.y,
-                ),
-              };
-          }
-          setNodes((current) =>
-            current.map((n) => ({ ...n, dragging: false })),
-          );
-          setMoved((m) => ({ ...m, ...positions }));
-          saveCanvas({ page: page.id, positions });
-        }}
-        onMoveStart={() => {
-          if (!autoFitting.current) userMoved.current = true;
-        }}
-        onMoveEnd={(_, vp) => userMoved.current && saveViewport(vp)}
-        defaultViewport={savedViewport ?? undefined}
-        fitView={!savedViewport}
-        fitViewOptions={FIT}
-        minZoom={0.03}
-        maxZoom={4}
-        panOnDrag={false}
-        panOnScroll
-        zoomOnScroll={false}
-        zoomOnPinch
-        zoomOnDoubleClick={false}
-        selectionOnDrag={!hand && tool !== "comment"}
-        selectionMode={SelectionMode.Partial}
-        selectionKeyCode={null}
-        multiSelectionKeyCode="Shift"
-        nodesDraggable={!hand && tool !== "comment"}
-        elementsSelectable={!hand && tool !== "comment"}
-        nodesConnectable={false}
-        autoPanOnNodeFocus={false}
-        deleteKeyCode={null}
-        proOptions={{ hideAttribution: true }}
+      <div
+        className={`absolute inset-y-0 left-0 ${showComments ? "right-[296px]" : "right-0"}`}
       >
-        <ZoomVar />
-        <Toolbar
-          tool={tool}
-          onTool={onTool}
-          showHelp={showHelp}
-          showComments={showComments}
-          onToggleComments={() => setShowComments((v) => !v)}
-          onToggleHelp={() => setShowHelp((v) => !v)}
-        />
-      </ReactFlow>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onSelectionChange={({ nodes: sel }) => {
+            const pending = pendingSelection.current;
+            if (pending && pending.every((id) => layoutIndex.nodes.has(id))) {
+              const actual = sel.map((node) => node.id).sort();
+              if (
+                actual.length !== pending.length ||
+                actual.some((id, index) => id !== pending[index])
+              )
+                return;
+            }
+            pendingSelection.current = null;
+            const ids = [
+              ...new Set(sel.map((n) => n.data.frame.frameId ?? n.id)),
+            ].sort();
+            const width =
+              sel.length === 1 && sel[0]!.data.frame.meta.widths
+                ? sel[0]!.data.frame.meta.width
+                : undefined;
+            setSelection((prev) => {
+              if (
+                prev.width === width &&
+                prev.frames.length === ids.length &&
+                prev.frames.every((id, i) => id === ids[i])
+              )
+                return prev;
+              const keep =
+                prev.element &&
+                ids.length === 1 &&
+                ids[0] === prev.frames[0] &&
+                prev.width === width;
+              return {
+                frames: ids,
+                element: keep ? prev.element : null,
+                ...(width ? { width } : {}),
+                ...(ids.length === 1 &&
+                ids[0] === prev.frames[0] &&
+                prev.width === width &&
+                prev.layer
+                  ? { layer: prev.layer }
+                  : {}),
+              };
+            });
+          }}
+          onNodeDoubleClick={(_, node) => zoomToFrames([node.id])}
+          onNodeContextMenu={(e, node) => {
+            e.preventDefault();
+            setMenu({ x: e.clientX, y: e.clientY, frame: node.id });
+          }}
+          onPaneContextMenu={(e) => e.preventDefault()}
+          onNodeClick={(event, node) => {
+            if (tool === "comment" && node.data.frame.kind === "image") {
+              const rect = (event.target as HTMLElement)
+                .closest(".react-flow__node")
+                ?.getBoundingClientRect();
+              if (rect)
+                makeDraft(
+                  node.id,
+                  (event.clientX - rect.left) / flow.getZoom(),
+                  (event.clientY - rect.top) / flow.getZoom(),
+                  null,
+                );
+            }
+          }}
+          onNodeDrag={(_, node, dragged) => {
+            const deltas = new Map<string, Pos>();
+            for (const n of dragged) {
+              const original = layoutIndex.nodes.get(n.id);
+              if (original)
+                deltas.set(n.data.frame.frameId ?? n.id, {
+                  x: n.position.x - original.position.x,
+                  y: n.position.y - original.position.y,
+                });
+            }
+            const direct = new Set(dragged.map((n) => n.id));
+            setNodes((current) =>
+              current.map((n) => {
+                const delta = deltas.get(n.data.frame.frameId ?? n.id);
+                const original = layoutIndex.nodes.get(n.id);
+                return delta && original && !direct.has(n.id)
+                  ? {
+                      ...n,
+                      dragging: true,
+                      position: {
+                        x: original.position.x + delta.x,
+                        y: original.position.y + delta.y,
+                      },
+                    }
+                  : n;
+              }),
+            );
+          }}
+          onNodeDragStop={(_, node, dragged) => {
+            const positions: Record<string, Pos> = {};
+            for (const n of dragged) {
+              const original = layoutIndex.nodes.get(n.id);
+              const group = layoutIndex.groups.get(
+                n.data.frame.frameId ?? n.id,
+              );
+              if (original && group)
+                positions[n.data.frame.slug] = {
+                  x: Math.round(
+                    group.position.x + n.position.x - original.position.x,
+                  ),
+                  y: Math.round(
+                    group.position.y + n.position.y - original.position.y,
+                  ),
+                };
+            }
+            setNodes((current) =>
+              current.map((n) => ({ ...n, dragging: false })),
+            );
+            setMoved((m) => ({ ...m, ...positions }));
+            saveCanvas({ page: page.id, positions });
+          }}
+          onMoveStart={() => {
+            if (!autoFitting.current) userMoved.current = true;
+          }}
+          onMoveEnd={(_, vp) => userMoved.current && saveViewport(vp)}
+          defaultViewport={savedViewport ?? undefined}
+          fitView={!savedViewport}
+          fitViewOptions={FIT}
+          minZoom={0.03}
+          maxZoom={4}
+          panOnDrag={false}
+          panOnScroll
+          zoomOnScroll={false}
+          zoomOnPinch
+          zoomOnDoubleClick={false}
+          selectionOnDrag={!hand && tool !== "comment"}
+          selectionMode={SelectionMode.Partial}
+          selectionKeyCode={null}
+          multiSelectionKeyCode="Shift"
+          nodesDraggable={!hand && tool !== "comment"}
+          elementsSelectable={!hand && tool !== "comment"}
+          nodesConnectable={false}
+          autoPanOnNodeFocus={false}
+          deleteKeyCode={null}
+          proOptions={{ hideAttribution: true }}
+        >
+          <ZoomVar />
+          <SelectionCallout />
+          <Toolbar
+            tool={tool}
+            onTool={onTool}
+            showHelp={showHelp}
+            showComments={showComments}
+            onToggleComments={() => onCommentsChange(!showComments)}
+            onToggleHelp={() => setShowHelp((v) => !v)}
+          />
+        </ReactFlow>
+      </div>
 
       {showComments && (
         <CommentsPanel
           comments={pageComments}
+          frames={page.frames}
           active={activeComment}
           draft={draft}
           error={commentsError}
           showResolved={showResolved}
           onResolved={setShowResolved}
           onSelect={openComment}
-          onClose={() => setShowComments(false)}
+          onClose={() => onCommentsChange(false)}
           onSaved={() => {
             setDraft(null);
           }}
@@ -778,10 +826,12 @@ function CanvasInner({
             },
             {
               label: "Open in new tab",
+              hint: `${MOD} ↵`,
               onSelect: () => window.open(standaloneUrl(menuFrame), "_blank"),
             },
             {
               label: "Copy file path",
+              hint: `${MOD} ⇧ C`,
               onSelect: () => navigator.clipboard.writeText(menuFrame.relFile),
             },
           ]}

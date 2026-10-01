@@ -1,3 +1,12 @@
+import { Card } from "./components/ui/card";
+import { Separator } from "./components/ui/separator";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "./components/ui/tooltip";
+import { Kbd } from "./components/ui/kbd";
+import { Button } from "./components/ui/button";
 import { useReactFlow, useStore } from "@xyflow/react";
 import {
   PanelRight,
@@ -7,6 +16,7 @@ import {
   Minus,
   MousePointer2,
   Plus,
+  Maximize2,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -24,6 +34,7 @@ type Props = {
   onToggleHelp(): void;
   onToggleComments(): void;
   showComments: boolean;
+  reviewTools?: boolean;
 };
 
 /** Floating bottom toolbar. Elements marked data-ui are excluded from canvas panning. */
@@ -34,11 +45,12 @@ export function Toolbar({
   onToggleHelp,
   onToggleComments,
   showComments,
+  reviewTools = true,
 }: Props) {
   const flow = useReactFlow();
   const zoom = useStore((s) => s.transform[2]);
   return (
-    <div data-ui className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2">
+    <div data-ui className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2">
       {showHelp && <Shortcuts />}
       <div className="flex items-center gap-0.5 rounded-xl border border-chrome-line bg-chrome p-1 shadow-xl shadow-black/30">
         <ToolButton
@@ -57,21 +69,26 @@ export function Toolbar({
         >
           <Hand className="size-4" />
         </ToolButton>
-        <ToolButton
-          active={tool === "comment"}
-          onClick={() => onTool("comment")}
-          label="Comment"
-          shortcut="C"
-        >
-          <MessageCircle className="size-4" />
-        </ToolButton>
-        <ToolButton
-          active={showComments}
-          onClick={onToggleComments}
-          label="Comments panel"
-        >
-          <PanelRight className="size-4" />
-        </ToolButton>
+        {reviewTools && (
+          <>
+            <ToolButton
+              active={tool === "comment"}
+              onClick={() => onTool("comment")}
+              label="Comment"
+              shortcut="C"
+            >
+              <MessageCircle className="size-4" />
+            </ToolButton>
+            <ToolButton
+              quiet
+              active={showComments}
+              onClick={onToggleComments}
+              label="Comments panel"
+            >
+              <PanelRight className="size-4" />
+            </ToolButton>
+          </>
+        )}
         <Divider />
         <ToolButton
           onClick={() => flow.zoomOut({ duration: 150 })}
@@ -80,14 +97,16 @@ export function Toolbar({
         >
           <Minus className="size-4" />
         </ToolButton>
-        <button
+        <Button
+          variant="ghost"
+          aria-label="Zoom to fit"
           type="button"
           onClick={() => flow.fitView({ padding: 0.15, duration: 250 })}
           title="Zoom to fit (Shift 1)"
-          className="h-8 min-w-14 rounded-lg px-2 text-xs text-neutral-300 tabular-nums hover:bg-white/[0.06]"
+          className="h-8 w-12 min-w-0 rounded-lg border-0 px-0 font-mono text-[11px] font-normal text-foreground tabular-nums hover:bg-accent"
         >
           {Math.round(zoom * 100)}%
-        </button>
+        </Button>
         <ToolButton
           onClick={() => flow.zoomIn({ duration: 150 })}
           label="Zoom in"
@@ -95,8 +114,15 @@ export function Toolbar({
         >
           <Plus className="size-4" />
         </ToolButton>
+        <ToolButton
+          label="Fit all frames"
+          onClick={() => flow.fitView({ padding: 0.15 })}
+        >
+          <Maximize2 className="size-4" />
+        </ToolButton>
         <Divider />
         <ToolButton
+          quiet
           active={showHelp}
           onClick={onToggleHelp}
           label="Keyboard shortcuts"
@@ -111,91 +137,127 @@ export function Toolbar({
 
 function ToolButton(props: {
   active?: boolean;
+  quiet?: boolean;
   onClick(): void;
   label: string;
   shortcut?: string;
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      title={
-        props.shortcut ? `${props.label} (${props.shortcut})` : props.label
-      }
-      aria-label={props.label}
-      aria-pressed={props.active}
-      className={`flex size-8 items-center justify-center rounded-lg ${
-        props.active
-          ? "bg-accent text-white"
-          : "text-neutral-300 hover:bg-white/[0.06]"
-      }`}
-    >
-      {props.children}
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={props.onClick}
+            aria-label={props.label}
+            aria-pressed={props.active}
+            className={`rounded-lg border-0 text-muted-foreground shadow-none ring-0 hover:bg-accent ${props.active ? (props.quiet ? "bg-accent text-signal" : "bg-primary text-primary-foreground hover:bg-primary") : "bg-transparent"}`}
+          />
+        }
+      >
+        {props.children}
+      </TooltipTrigger>
+      <TooltipContent>
+        {props.label}
+        {props.shortcut && <Kbd>{props.shortcut}</Kbd>}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
-const Divider = () => <div className="mx-1 h-5 w-px bg-chrome-line" />;
+const Divider = () => (
+  <Separator orientation="vertical" className="mx-1 h-5!" />
+);
 
-const SHORTCUTS: [string, [string, string][]][] = [
+const k = (...keys: string[]) => (
+  <span className="flex items-center gap-1">
+    {keys.map((key) => (
+      <Kbd key={key}>{key}</Kbd>
+    ))}
+  </span>
+);
+const hint = (text: string) => (
+  <span className="text-muted-foreground">{text}</span>
+);
+const or = (a: ReactNode, b: ReactNode) => (
+  <span className="flex items-center gap-1.5">
+    {a}
+    <span className="text-muted-foreground">or</span>
+    {b}
+  </span>
+);
+const SHORTCUTS: [string, [string, ReactNode][]][] = [
   [
     "Tools",
     [
-      ["Select", "V"],
-      ["Comment", "C"],
-      ["Hand (pan by dragging)", "H"],
+      ["Select", k("V")],
+      ["Hand", or(k("H"), hint("hold Space"))],
+      ["Comment", k("C")],
     ],
   ],
   [
-    "Navigate",
+    "Find",
     [
-      ["Pan", "Scroll · Space drag · Middle drag"],
-      ["Zoom", `Pinch · ${MOD} scroll · ${MOD} + / −`],
-      ["Zoom to fit", "Shift 1"],
-      ["Zoom to selection", "Shift 2"],
-      ["Zoom to 100%", "Shift 0"],
-      ["Zoom to a frame", "Double-click it"],
+      ["Find a frame", k(MOD, "K")],
+      ["Shortcuts", k("?")],
+    ],
+  ],
+  [
+    "View",
+    [
+      ["Pan", hint("Scroll or middle-drag")],
+      ["Zoom", or(k(MOD, "+"), k(MOD, "−"))],
+      ["Zoom to fit", k("⇧", "1")],
+      ["Zoom to selection", k("⇧", "2")],
+      ["Zoom to 100%", k("⇧", "0")],
+      ["Zoom to a frame", hint("Double-click it")],
     ],
   ],
   [
     "Select",
     [
-      ["Element (for your agent)", "Click inside a frame"],
-      ["Frame", "Click its name"],
-      ["Several frames", "Shift click · Drag on canvas"],
-      ["All frames", `${MOD} A`],
-      ["Clear selection", "Esc"],
-    ],
-  ],
-  [
-    "Frames",
-    [
-      ["Move", "Drag its name"],
-      ["More actions", "Right-click"],
+      ["Element, for your agent", hint("Click in a frame")],
+      ["Frame", hint("Click its name")],
+      ["Several frames", or(k("⇧", "Click"), hint("drag"))],
+      ["All frames", k(MOD, "A")],
+      ["Clear selection", k("Esc")],
     ],
   ],
 ];
 
 function Shortcuts() {
   return (
-    <div className="absolute bottom-full left-1/2 mb-2 w-[360px] -translate-x-1/2 rounded-xl border border-chrome-line bg-chrome p-4 shadow-xl shadow-black/40">
-      {SHORTCUTS.map(([group, rows]) => (
-        <div key={group} className="mb-3 last:mb-0">
-          <div className="mb-1.5 text-[11px] font-medium text-neutral-500">
-            {group}
-          </div>
-          {rows.map(([label, keys]) => (
-            <div
-              key={label}
-              className="flex items-baseline justify-between gap-4 py-0.5 text-xs"
-            >
-              <span className="text-neutral-300">{label}</span>
-              <span className="text-right text-neutral-500">{keys}</span>
+    <Card
+      role="region"
+      aria-label="Keyboard shortcuts"
+      className="absolute bottom-full left-1/2 mb-4 w-[600px] max-w-[calc(100vw-32px)] -translate-x-1/2 gap-0 rounded-lg border bg-popover p-5 shadow-2xl"
+    >
+      <div className="mb-4 flex items-center justify-between">
+        <span className="font-medium">Keyboard shortcuts</span>
+        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          Close <Kbd>Esc</Kbd>
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+        {SHORTCUTS.map(([title, rows]) => (
+          <div key={title}>
+            <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+              {title}
             </div>
-          ))}
-        </div>
-      ))}
-    </div>
+            {rows.map(([label, keys]) => (
+              <div
+                key={label}
+                className="flex h-7 items-center justify-between gap-4 text-xs"
+              >
+                <span>{label}</span>
+                <span className="text-xs">{keys}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }

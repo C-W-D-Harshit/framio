@@ -1,3 +1,6 @@
+import { Input } from "./components/ui/input";
+import { ChevronDown, ChevronRight, Layers, Type, Image } from "lucide-react";
+import { Button } from "./components/ui/button";
 import { memo, useEffect, useMemo, useState } from "react";
 import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
@@ -88,23 +91,23 @@ function rowsFor(
 export const LayersPanel = memo(function LayersPanel({
   frame,
   project,
+  onInspect,
 }: {
   frame?: SnapshotFrame;
   project: string;
+  onInspect?: () => void;
 }) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col border-t border-chrome-line">
-      <div className="px-4 py-3 text-[11px] font-medium text-neutral-500">
-        Layers
-      </div>
+    <section className="ml-5 flex min-h-0 flex-col border-l border-border">
       {frame ? (
         <FrameLayers
           key={`${project}/${frame.id}`}
+          onInspect={onInspect}
           frame={frame}
           project={project}
         />
       ) : (
-        <p className="px-4 text-xs text-neutral-500">
+        <p className="px-4 text-xs text-muted-foreground">
           Select a frame to see its layers
         </p>
       )}
@@ -114,9 +117,11 @@ export const LayersPanel = memo(function LayersPanel({
 function FrameLayers({
   frame,
   project,
+  onInspect,
 }: {
   frame: SnapshotFrame;
   project: string;
+  onInspect?: () => void;
 }) {
   const report = useLayerReport(frame.id);
   const [selection] = useAtom(selectionAtom);
@@ -168,24 +173,21 @@ function FrameLayers({
       : null;
   return (
     <div className="min-h-0 overflow-y-auto px-2 pb-3">
-      <div className="px-2 pb-2 text-xs text-neutral-300">
-        {frame.meta.name}
-      </div>
       {report?.warnings.map((warning) => (
         <p
           key={`${warning.path}:${warning.message}`}
-          className="mb-2 rounded bg-amber-500/10 p-2 text-[11px] text-amber-200"
+          className="mb-2 rounded bg-warning/10 p-2 text-[11px] text-warning"
         >
           {warning.message}
         </p>
       ))}
       {(message || failure) && (
-        <p role="alert" className="p-2 text-xs text-red-300">
+        <p role="alert" className="p-2 text-xs text-destructive">
           {message || failure}
         </p>
       )}
       {!report && (
-        <p className="px-2 text-xs text-neutral-500">
+        <p className="px-2 text-xs text-muted-foreground">
           {frame.kind === "image"
             ? "Image frames have no layers"
             : "Waiting for frame layers…"}
@@ -204,6 +206,7 @@ function FrameLayers({
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 postLayer(frame.id, "layer-select", row.node.path);
+                onInspect?.();
               } else if (
                 event.key === "ArrowRight" ||
                 event.key === "ArrowLeft"
@@ -220,18 +223,20 @@ function FrameLayers({
             aria-selected={selection.layer?.path === row.node.path}
             aria-expanded={row.expandable ? expanded.has(row.key) : undefined}
             data-layer-row={row.key}
-            className={`flex min-h-7 items-center rounded text-xs ${selection.layer?.path === row.node.path ? "bg-blue-500/20 text-blue-200" : "text-neutral-400 hover:bg-white/5"}`}
+            className={`flex min-h-7 items-center rounded text-xs ${selection.layer?.path === row.node.path ? "bg-primary/15 text-signal" : "text-muted-foreground hover:bg-accent"}`}
             style={{ paddingLeft: row.depth * 12 }}
             onMouseEnter={() =>
               postLayer(frame.id, "layer-hover", row.node.path)
             }
             onMouseLeave={() => postLayer(frame.id, "layer-hover", null)}
           >
-            <button
+            <Button
+              variant="ghost"
               type="button"
               aria-label={`Toggle ${row.label}`}
               disabled={!row.expandable}
-              className="w-6 shrink-0"
+              size="icon-xs"
+              className="shrink-0"
               onClick={() =>
                 setExpanded((current) => {
                   const next = new Set(current);
@@ -241,8 +246,16 @@ function FrameLayers({
                 })
               }
             >
-              {row.expandable ? (expanded.has(row.key) ? "⌄" : "›") : "·"}
-            </button>
+              {row.expandable ? (
+                expanded.has(row.key) ? (
+                  <ChevronDown className="size-3" />
+                ) : (
+                  <ChevronRight className="size-3" />
+                )
+              ) : (
+                <span className="size-3" />
+              )}
+            </Button>
             {editing?.row.key === row.key ? (
               <form
                 className="min-w-0 flex-1"
@@ -253,10 +266,10 @@ function FrameLayers({
                   setEditing(null);
                 }}
               >
-                <input
+                <Input
                   autoFocus
                   aria-label="Layer name"
-                  className="w-full rounded bg-neutral-800 px-1 py-1 text-neutral-100 outline outline-blue-500"
+                  className="w-full rounded bg-card px-1 py-1 text-foreground outline outline-ring"
                   value={editing.name}
                   onChange={(event) =>
                     setEditing({ ...editing, name: event.target.value })
@@ -265,20 +278,22 @@ function FrameLayers({
                     if (event.key === "Escape") setEditing(null);
                   }}
                 />
-                <span className="text-[10px] text-neutral-500">
+                <span className="text-[10px] text-muted-foreground">
                   {nodes.filter((n) => n.source === row.node.source).length > 1
                     ? `Renames all ${nodes.filter((n) => n.source === row.node.source).length}`
                     : "Enter saves · Esc cancels"}
                 </span>
               </form>
             ) : (
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="min-w-0 flex-1 truncate py-1 text-left"
+                className="h-7 min-w-0 flex-1 justify-start gap-2 truncate p-0 text-left text-xs font-normal"
                 title={row.node.path}
-                onClick={() =>
-                  postLayer(frame.id, "layer-select", row.node.path)
-                }
+                onClick={() => {
+                  postLayer(frame.id, "layer-select", row.node.path);
+                  onInspect?.();
+                }}
                 onDoubleClick={() => {
                   if (!row.node.source) {
                     setMessage(
@@ -290,8 +305,15 @@ function FrameLayers({
                   setEditing({ row, name: row.node.name });
                 }}
               >
+                {row.node.path.includes("/img[") ? (
+                  <Image className="size-3" />
+                ) : /\/(h[1-6]|p|span|button)\[/.test(row.node.path) ? (
+                  <Type className="size-3" />
+                ) : (
+                  <Layers className="size-3" />
+                )}
                 {row.label}
-              </button>
+              </Button>
             )}
           </div>
         ))}

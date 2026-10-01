@@ -7,7 +7,7 @@ const GAP_X = 160;
 const GAP_Y = 200;
 
 /**
- * Variations grow to the right of their parent; independent screens stack downward.
+ * Variations stack below their parent, keeping each responsive group on one row.
  * Saved positions win. A frame without a saved position keeps its auto offset relative
  * to its parent, so a new variation of a moved frame still lands next to it.
  */
@@ -40,7 +40,7 @@ export function layoutFrames(
       (sum, k, i) => sum + measure(k) + (i ? GAP_Y : 0),
       0,
     );
-    const total = Math.max(h(f), kidsHeight);
+    const total = h(f) + (kids.length ? GAP_Y + kidsHeight : 0);
     subtreeHeight.set(f.id, total);
     return total;
   };
@@ -48,9 +48,9 @@ export function layoutFrames(
   const auto: Record<string, Pos> = {};
   const place = (f: SnapshotFrame, x: number, y: number) => {
     auto[f.id] = { x, y };
-    let cy = y;
+    let cy = y + h(f) + GAP_Y;
     for (const k of children.get(f.id) ?? []) {
-      place(k, x + groupWidth(f.meta) + GAP_X, cy);
+      place(k, x, cy);
       cy += subtreeHeight.get(k.id)! + GAP_Y;
     }
   };

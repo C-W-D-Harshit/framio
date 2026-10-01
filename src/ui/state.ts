@@ -67,3 +67,65 @@ export const saveCommentAtom = runtime.fn(
   (payload: import("../contracts/comments").CommentOperation) =>
     Effect.flatMap(ProjectClient, (client) => client.comment(payload)),
 );
+
+type StudioActivity = {
+  readonly snapshot: import("../contracts/snapshot").Snapshot | null;
+  readonly entries: readonly {
+    id: string;
+    name: string;
+    verb: string;
+    tone: "signal" | "danger" | "faint";
+    version: string;
+  }[];
+};
+
+/** Keep a bounded session history from the shared live connection, never a second subscription. */
+export const activityAtom = Atom.make<StudioActivity>((get) => {
+  const live = get(liveAtom);
+  const prior = get.self<StudioActivity>();
+  const previous: StudioActivity =
+    prior._tag === "Some" ? prior.value : { snapshot: null, entries: [] };
+  if (
+    live._tag !== "Success" ||
+    !live.value.snapshot ||
+    live.value.snapshot === previous.snapshot
+  )
+    return previous;
+  const snapshot = live.value.snapshot;
+  if (!previous.snapshot) return { snapshot, entries: [] };
+  const before = new Map(
+    previous.snapshot.pages.flatMap((page) =>
+      page.frames.map((frame) => [frame.id, frame] as const),
+    ),
+  );
+  const changes: StudioActivity["entries"][number][] = [];
+  for (const page of snapshot.pages)
+    for (const frame of page.frames) {
+      const old = before.get(frame.id);
+      if (!old || old.version !== frame.version || old.error !== frame.error)
+        changes.push({
+          id: `${frame.id}/${frame.version}/${frame.error ?? ""}`,
+          name: frame.meta.name,
+          verb: frame.error ? "Build failed" : old ? "Updated" : "Added",
+          tone: frame.error ? "danger" : old ? "signal" : "faint",
+          version: `v${frame.version}`,
+        });
+    }
+  if (snapshot.cssVersion !== previous.snapshot.cssVersion)
+    changes.push({
+      id: `theme/${snapshot.cssVersion}`,
+      name: "Project theme",
+      verb: "Updated",
+      tone: "faint",
+      version: `v${snapshot.cssVersion}`,
+    });
+  return {
+    snapshot,
+    entries: [
+      ...changes.reverse(),
+      ...previous.entries.filter(
+        (entry) => !changes.some((change) => change.id === entry.id),
+      ),
+    ].slice(0, 4),
+  };
+});

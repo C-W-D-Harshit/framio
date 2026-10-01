@@ -1,3 +1,10 @@
+import {
+  Monitor,
+  Smartphone,
+  Tablet,
+  Frame,
+  AlertTriangle,
+} from "lucide-react";
 import { useLayerReport } from "./layers-panel";
 import { CommentPins } from "./comments";
 import type { Comment } from "../contracts/comments";
@@ -20,6 +27,7 @@ import type { SnapshotFrame } from "../contracts/snapshot";
 
 export type FrameNodeData = {
   frame: SnapshotFrame;
+  parentName?: string;
   comments: readonly Comment[];
   showResolved: boolean;
   onComment(id: string): void;
@@ -131,38 +139,88 @@ export const FrameNode = memo(function FrameNode({
 
   return (
     <div style={{ width }}>
+      {frame.meta.widths && width === Math.max(...frame.meta.widths) && (
+        <div
+          className="frame-drag absolute bottom-full left-0 flex max-w-full items-center gap-2 whitespace-nowrap"
+          style={{ fontSize: 12 / zoom, paddingBottom: 42 / zoom }}
+        >
+          <Frame
+            className="shrink-0 text-signal"
+            style={{ width: 14 / zoom, height: 14 / zoom }}
+          />
+          <span className="font-medium">{frame.meta.name}</span>
+          <span
+            className="font-mono text-muted-foreground"
+            style={{ fontSize: 11 / zoom }}
+          >
+            · {frame.relFile.split("/").pop()}
+          </span>
+          <span
+            className="rounded-sm border px-[.5em] py-[.2em] text-muted-foreground"
+            style={{ fontSize: 11 / zoom }}
+          >
+            {frame.meta.widths.length} viewports
+          </span>
+          {data.parentName && (
+            <span className="text-muted-foreground">
+              Variation of {data.parentName}
+            </span>
+          )}
+        </div>
+      )}
       <div
         className="frame-drag absolute bottom-full left-0 flex max-w-full cursor-default items-baseline gap-[0.5em] truncate whitespace-nowrap"
-        style={{ fontSize: 12, paddingBottom: 6 }}
+        style={{ fontSize: 11 / zoom, paddingBottom: 6 / zoom }}
         title="Drag to move · Double-click to zoom · Right-click for more"
       >
         {!!layers?.warnings.length && (
           <span
-            className="text-amber-300"
+            className="text-warning"
             title={layers.warnings.map((w) => w.message).join("\n")}
           >
-            ⚠ {layers.warnings.length}
+            <AlertTriangle
+              className="inline"
+              style={{ width: 12 / zoom, height: 12 / zoom }}
+            />{" "}
+            {layers.warnings.length}
           </span>
         )}
         {frame.error && (
-          <span className="inline-block size-[0.6em] shrink-0 self-center rounded-full bg-red-500" />
+          <span className="inline-block size-[0.6em] shrink-0 self-center rounded-full bg-destructive" />
         )}
-        <span className={selected ? "text-accent" : "text-neutral-300"}>
-          {(!frame.meta.widths ||
-            frame.meta.width === Math.max(...frame.meta.widths)) &&
-            frame.meta.name}
+        <span
+          className={
+            selected
+              ? "text-signal"
+              : frame.error
+                ? "text-destructive"
+                : "text-foreground"
+          }
+        >
+          {frame.meta.widths ? (
+            <span className="flex items-center gap-[.5em]">
+              {width < 600 ? (
+                <Smartphone style={{ width: 12 / zoom, height: 12 / zoom }} />
+              ) : width < 1000 ? (
+                <Tablet style={{ width: 12 / zoom, height: 12 / zoom }} />
+              ) : (
+                <Monitor style={{ width: 12 / zoom, height: 12 / zoom }} />
+              )}
+              {width < 600 ? "Mobile" : width < 1000 ? "Tablet" : "Desktop"}
+            </span>
+          ) : (
+            frame.meta.name
+          )}
         </span>
-        <span className="text-neutral-500">
+        <span className="font-mono text-muted-foreground">
           {width} × {frame.meta.height}
         </span>
       </div>
       <div
-        className="relative overflow-hidden bg-white"
+        className="relative overflow-hidden bg-frame-surface"
         style={{
           height,
-          outline: selected
-            ? `${2 / zoom}px solid var(--color-accent)`
-            : "none",
+          outline: selected ? `${2 / zoom}px solid var(--signal)` : "none",
           boxShadow: "0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25)",
         }}
       >
@@ -219,7 +277,7 @@ export const FrameNode = memo(function FrameNode({
       />
       {(frame.note || frame.source) && (
         <div
-          className="absolute top-full left-0 flex max-w-full flex-col gap-[0.3em] text-neutral-400"
+          className="absolute top-full left-0 flex max-w-full flex-col gap-[0.3em] text-muted-foreground"
           style={{ fontSize: 12, paddingTop: 8, lineHeight: 1.45 }}
         >
           {frame.note && <p className="whitespace-pre-wrap">{frame.note}</p>}
@@ -229,7 +287,7 @@ export const FrameNode = memo(function FrameNode({
               href={frame.source}
               target="_blank"
               rel="noreferrer"
-              className="nodrag truncate text-neutral-500 underline hover:text-neutral-200"
+              className="nodrag truncate text-muted-foreground underline hover:text-foreground"
             >
               {frame.source.replace(/^https?:\/\//, "")}
             </a>

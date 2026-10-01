@@ -309,11 +309,59 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
               expect(
                 await page.$$eval(".react-flow__node", (nodes) => nodes.length),
               ).toBe(3);
-              await page.click('button[aria-label="Comment"]');
+              // Studio chrome uses flat tool controls and a keyboard-accessible frame finder.
+              expect(
+                await page.$eval(
+                  'button[aria-label="Hand"]',
+                  (button) => getComputedStyle(button).borderTopWidth,
+                ),
+              ).toBe("0px");
+              await page.click('button[aria-label="Find a frame"]');
+              await page.waitForSelector('[role="dialog"] [cmdk-input]');
+              await page.type("[cmdk-input]", "Invoices");
+              await page.keyboard.press("Enter");
+              await page.waitForFunction(
+                () => !document.querySelector('[role="dialog"]'),
+              );
+              await waitUntil(
+                () =>
+                  existsSync(join(root, ".framio/.state/selection.json")) &&
+                  json(root, ".state/selection.json").frames.some(
+                    (frame: { frame: string }) =>
+                      frame.frame === "01-test/invoices",
+                  ),
+              );
               const frame = page
                 .frames()
                 .find((f) => f.url().includes("width=390"))!;
               const clickHeading = async (offset = 20) => {
+                // Panel resizing and finder navigation animate the viewport. Click only
+                // after its geometry settles, so this reaches the intended element.
+                await page.evaluate(
+                  () =>
+                    new Promise<void>((resolve) => {
+                      let previous = "",
+                        stable = 0;
+                      const sample = () => {
+                        const rect = document
+                          .querySelector(
+                            'iframe[data-frame="__viewport__/01-test/invoices/390"]',
+                          )!
+                          .getBoundingClientRect();
+                        const next = [
+                          rect.x,
+                          rect.y,
+                          rect.width,
+                          rect.height,
+                        ].join(",");
+                        stable = next === previous ? stable + 1 : 0;
+                        previous = next;
+                        if (stable >= 20) resolve();
+                        else requestAnimationFrame(sample);
+                      };
+                      requestAnimationFrame(sample);
+                    }),
+                );
                 const at = await page.evaluate((offset) => {
                   const iframe = document.querySelector<HTMLIFrameElement>(
                     'iframe[data-frame="__viewport__/01-test/invoices/390"]',
@@ -330,6 +378,51 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
                 }, offset);
                 await page.mouse.click(at.x, at.y);
               };
+              await page.click('button[aria-label="Select"]');
+              await clickHeading();
+              await page.waitForSelector('[aria-label="Agent selection"]');
+              const calloutGap = () =>
+                page.evaluate(() => {
+                  const iframe = document.querySelector<HTMLIFrameElement>(
+                    'iframe[data-frame="__viewport__/01-test/invoices/390"]',
+                  )!;
+                  const box = iframe.getBoundingClientRect();
+                  const heading = iframe
+                    .contentDocument!.querySelector("h1")!
+                    .getBoundingClientRect();
+                  const callout = document
+                    .querySelector('[aria-label="Agent selection"]')!
+                    .getBoundingClientRect();
+                  return (
+                    callout.top -
+                    (box.y + (heading.bottom * box.width) / iframe.offsetWidth)
+                  );
+                });
+              await waitUntil(
+                async () => Math.abs((await calloutGap()) - 12) < 1,
+              );
+              const pane = await page.$(".react-flow__pane");
+              const paneBox = (await pane!.boundingBox())!;
+              await page.mouse.move(paneBox.x + 20, paneBox.y + 20);
+              await page.mouse.wheel({ deltaY: 30 });
+              await waitUntil(
+                async () => Math.abs((await calloutGap()) - 12) < 1,
+              );
+              // Layer inspection and feedback share one right-side panel slot.
+              await page.waitForSelector(
+                '[role="treeitem"][aria-selected="true"]',
+              );
+              await page.click(
+                '[role="treeitem"][aria-selected="true"] button:last-child',
+              );
+              await page.waitForSelector('[aria-label="Layer inspection"]');
+              expect(await page.$('[aria-label="Comments"]')).toBeNull();
+              await page.click('button[aria-label="Comments panel"]');
+              await page.waitForSelector('[aria-label="Comments"]');
+              expect(
+                await page.$('[aria-label="Layer inspection"]'),
+              ).toBeNull();
+              await page.click('button[aria-label="Comment"]');
               await clickHeading();
               await page.waitForSelector('textarea[aria-label="New comment"]');
               await page.type(
@@ -347,7 +440,9 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
               expect(comment.author).toBe("user");
               await page.waitForSelector(`[data-comment-pin="${comment.id}"]`);
               await page.click('button[aria-label="Select"]');
-              await page.click(`[data-comment-pin="${comment.id}"]`);
+              await page.click(
+                `[data-id="__viewport__/01-test/invoices/390"] [data-comment-pin="${comment.id}"]`,
+              );
               await page.waitForSelector('textarea[aria-label="Reply"]');
               await page.type('textarea[aria-label="Reply"]', "Keep it clear");
               await page.keyboard.press("Enter");
@@ -437,7 +532,13 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
                 () =>
                   document.querySelectorAll("[data-comment-pin]").length === 0,
               );
-              await page.click('input[type="checkbox"]');
+              await page.click('button[aria-label="Comment filter"]');
+              await page.waitForSelector(
+                '[role="menuitemradio"][aria-label="Resolved comments"]',
+              );
+              await page.click(
+                '[role="menuitemradio"][aria-label="Resolved comments"]',
+              );
               await page.waitForSelector("[data-comment-pin]");
               await page.evaluate(() =>
                 [...document.querySelectorAll("button")]
@@ -581,10 +682,14 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
                 Object.keys(json(root, "pages/01-test/canvas.json").positions),
               ).toEqual(["invoices"]);
               // Delete is explicit and removes only the selected thread.
-              await page.click(`[data-comment-pin="${comment.id}"]`);
+              await page.click(
+                `[data-id="__viewport__/01-test/invoices/390"] [data-comment-pin="${comment.id}"]`,
+              );
+              await page.click('button[aria-label="Comment actions"]');
+              await page.waitForSelector('[role="menuitem"]');
               await page.evaluate(() =>
-                [...document.querySelectorAll("button")]
-                  .find((b) => b.textContent === "Delete")!
+                [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+                  .find((item) => item.textContent?.includes("Delete comment"))!
                   .click(),
               );
               await waitUntil(() => json(root).comments.length === 0);

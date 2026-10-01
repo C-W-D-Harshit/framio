@@ -1,3 +1,31 @@
+import { Kbd } from "./components/ui/kbd";
+import { Avatar, AvatarFallback } from "./components/ui/avatar";
+import { Badge } from "./components/ui/badge";
+import { Card } from "./components/ui/card";
+import { Textarea } from "./components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuItem,
+} from "./components/ui/dropdown-menu";
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarFooter,
+} from "./components/ui/sidebar";
+import {
+  X,
+  MessageCircle,
+  ChevronDown,
+  Check,
+  FileCode2,
+  MoreHorizontal,
+} from "lucide-react";
+import { Button } from "./components/ui/button";
 import { commentGeometry } from "./services/comment-geometry";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
@@ -43,14 +71,15 @@ export function CommentPins({
       {pins.map((pin) => {
         const at = positions[pin.id] ?? { x: pin.anchor.x, y: pin.anchor.y };
         return (
-          <button
+          <Button
+            variant="ghost"
             key={pin.id}
             type="button"
             data-ui
             data-comment-pin={pin.id}
             aria-label={`Comment ${comments.indexOf(pin) + 1}: ${pin.body}`}
             onClick={() => onComment(pin.id)}
-            className={`nodrag nopan pointer-events-auto absolute flex size-7 items-center justify-center rounded-full border-2 border-white text-xs font-semibold shadow-md ${pin.status === "open" ? "bg-accent text-white" : "bg-neutral-600 text-white"}`}
+            className={`nodrag nopan pointer-events-auto absolute flex size-7 items-center justify-center rounded-full border-2 border-frame-surface text-xs font-semibold shadow-md ${pin.status === "open" ? "bg-primary text-primary-foreground" : "bg-faint text-primary-foreground"}`}
             style={{
               left: at.x,
               top: at.y,
@@ -58,7 +87,7 @@ export function CommentPins({
             }}
           >
             {comments.indexOf(pin) + 1}
-          </button>
+          </Button>
         );
       })}
     </div>
@@ -68,6 +97,7 @@ export function CommentPins({
 export type CommentDraft = { frame: string; anchor: typeof CommentAnchor.Type };
 export function CommentsPanel({
   comments,
+  frames,
   active,
   draft,
   error,
@@ -78,6 +108,7 @@ export function CommentsPanel({
   onSaved,
 }: {
   comments: readonly Comment[];
+  frames: readonly SnapshotFrame[];
   active: string | null;
   draft: CommentDraft | null;
   error: string | null;
@@ -95,7 +126,12 @@ export function CommentsPanel({
     setBody("");
     setSaveError(null);
   }, [active, draft]);
-  const current = comments.find((c) => c.id === active);
+  const visible = comments.filter((comment) =>
+    showResolved ? comment.status === "resolved" : comment.status === "open",
+  );
+  const current = draft
+    ? undefined
+    : (visible.find((comment) => comment.id === active) ?? visible[0]);
   const send = async (
     operation: import("../contracts/comments").CommentOperation,
   ) => {
@@ -105,6 +141,8 @@ export function CommentsPanel({
       if (result.ok) {
         setBody("");
         onSaved();
+        if (operation.type === "status" && operation.status === "open")
+          onResolved(false);
       } else setSaveError(result.error ?? "Could not save comment");
     } finally {
       setBusy(false);
@@ -133,152 +171,312 @@ export function CommentsPanel({
         reply: { body: body.trim(), author: "user", createdAt },
       });
   };
+  const composer = (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+      className="mt-3"
+    >
+      <Textarea
+        autoFocus={!!draft}
+        aria-label={draft ? "New comment" : "Reply"}
+        placeholder={draft ? "Leave feedback…" : "Reply to this thread..."}
+        value={body}
+        onChange={(event) => setBody(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            onSaved();
+          } else if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            submit();
+          }
+        }}
+        className="min-h-8 resize-y rounded-md border bg-sidebar px-2.5 py-2 text-xs shadow-none"
+      />
+      {body.trim() && (
+        <Button
+          type="submit"
+          size="xs"
+          className="mt-2"
+          disabled={busy || !!error}
+        >
+          {busy ? "Saving…" : draft ? "Post comment" : "Reply"}
+        </Button>
+      )}
+    </form>
+  );
   return (
-    <aside
+    <Sidebar
+      collapsible="none"
+      side="right"
       data-ui
       aria-label="Comments"
-      className="absolute top-3 right-3 bottom-20 z-30 flex w-80 flex-col rounded-xl border border-chrome-line bg-chrome text-neutral-200 shadow-xl"
+      className="absolute -top-14 right-0 bottom-0 z-30 h-[calc(100%+56px)]! w-[296px]! border-l bg-sidebar text-foreground"
     >
-      <div className="flex items-center justify-between border-b border-chrome-line p-3">
-        <h2 className="font-medium">Comments</h2>
-        <button
-          className="flex size-7 items-center justify-center rounded-md hover:bg-white/5"
+      <SidebarHeader className="h-14 flex-row items-center justify-between border-b px-4">
+        <h2 className="font-medium">
+          Comments{" "}
+          <span className="ml-1 font-mono text-[11px] text-muted-foreground">
+            {visible.length}
+          </span>
+        </h2>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           aria-label="Close comments"
           onClick={onClose}
         >
-          ×
-        </button>
+          <X className="size-4" />
+        </Button>
+      </SidebarHeader>
+      <div className="flex h-12 shrink-0 items-center justify-between border-b px-4 text-xs">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Comment filter"
+                className="h-auto gap-1.5 p-0 text-xs font-normal"
+              />
+            }
+          >
+            {showResolved ? "Resolved comments" : "Open comments"}
+            <ChevronDown className="size-3 text-muted-foreground" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuRadioGroup
+              value={showResolved ? "resolved" : "open"}
+              onValueChange={(value) => onResolved(value === "resolved")}
+            >
+              <DropdownMenuRadioItem value="open" aria-label="Open comments">
+                Open comments
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem
+                value="resolved"
+                aria-label="Resolved comments"
+              >
+                Resolved comments
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <span className="text-muted-foreground">This page</span>
       </div>
-      <label className="flex items-center gap-2 p-3 text-xs text-neutral-400">
-        <input
-          type="checkbox"
-          checked={showResolved}
-          onChange={(e) => onResolved(e.target.checked)}
-        />
-        Show resolved
-      </label>
-      <div className="flex-1 overflow-auto px-3 pb-3">
+      <SidebarContent className="gap-3 p-3">
         {(error || saveError) && (
-          <p role="alert" className="mb-3 text-xs text-red-300">
+          <p role="alert" className="text-xs text-destructive">
             {error || saveError}
           </p>
         )}
-        {draft ? (
-          <p className="mb-3 text-sm">New comment on {draft.frame}</p>
-        ) : current ? (
-          <div className="mb-3">
-            <button
-              className="mb-3 text-xs text-neutral-400"
-              onClick={() => onSelect("")}
-            >
-              ← All comments
-            </button>
-            <p className="mb-1 text-xs text-neutral-500">
-              {current.author} · {current.status}
-            </p>
-            <p className="whitespace-pre-wrap break-words text-sm">
-              {current.body}
-            </p>
-            {current.replies.map((reply, i) => (
-              <div
-                key={`${reply.createdAt}-${i}`}
-                className="mt-3 border-t border-chrome-line pt-3"
-              >
-                <p className="text-xs text-neutral-500">{reply.author}</p>
-                <p className="whitespace-pre-wrap break-words text-sm">
-                  {reply.body}
-                </p>
-              </div>
-            ))}
-            <div className="mt-3 flex gap-3 text-xs">
-              <button
-                disabled={busy || !!error}
-                onClick={() =>
-                  void send({
-                    type: "status",
-                    id: current.id,
-                    expected: current.status,
-                    status: current.status === "open" ? "resolved" : "open",
-                  })
-                }
-              >
-                {current.status === "open" ? "Resolve" : "Reopen"}
-              </button>
-              <button
-                disabled={busy || !!error}
-                className="text-red-300"
-                onClick={() =>
-                  void send({
-                    type: "delete",
-                    id: current.id,
-                    expected: current,
-                  })
-                }
-              >
-                Delete
-              </button>
+        {draft && (
+          <Card className="gap-0 rounded-lg border border-signal/35 bg-card p-3">
+            <div className="flex items-center gap-2 text-[11px]">
+              <MessageCircle className="size-3.5 text-signal" />
+              <span>New comment</span>
+              <span className="ml-auto truncate text-muted-foreground">
+                {frames.find((frame) => frame.id === draft.frame)?.meta.name ??
+                  draft.frame.split("/").pop()}
+              </span>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {comments
-              .filter((c) => showResolved || c.status === "open")
-              .map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => onSelect(c.id)}
-                  className="block w-full rounded-lg border border-chrome-line p-3 text-left hover:bg-white/5"
-                >
-                  <span className="text-xs text-neutral-500">
-                    {comments.indexOf(c) + 1} · {c.frame} · {c.status}
-                  </span>
-                  <p className="mt-1 line-clamp-3 break-words text-sm">
-                    {c.body}
-                  </p>
-                </button>
-              ))}
-            {!comments.some((c) => showResolved || c.status === "open") && (
-              <p className="text-sm text-neutral-500">
-                No open comments. Use C and click a frame to leave feedback.
-              </p>
-            )}
-          </div>
+            {composer}
+          </Card>
         )}
-        {(draft || current) && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
-            }}
-            className="mt-4"
-          >
-            <textarea
-              autoFocus
-              aria-label={draft ? "New comment" : "Reply"}
-              placeholder={draft ? "Leave feedback…" : "Reply…"}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  onSaved();
-                } else if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-              className="min-h-24 w-full resize-y rounded-lg border border-chrome-line bg-black/20 p-2 text-sm outline-none focus:border-accent"
-            />
-            <button
-              disabled={busy || !!error || !body.trim()}
-              className="mt-2 rounded-md bg-accent px-3 py-2 text-xs text-white disabled:opacity-50"
-              type="submit"
+        {visible.map((comment) => {
+          const expanded = comment.id === current?.id;
+          const name =
+            frames.find((frame) => frame.id === comment.frame)?.meta.name ??
+            comment.frame.split("/").pop();
+          return expanded ? (
+            <Card
+              key={comment.id}
+              className="gap-0 rounded-lg border border-signal/35 bg-card p-3"
             >
-              {busy ? "Saving…" : draft ? "Save comment" : "Reply"}
-            </button>
-          </form>
+              <div className="mb-3 flex items-center justify-between text-[11px]">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Badge className="size-5 shrink-0 justify-center rounded-full border-0 p-0">
+                    {comments.indexOf(comment) + 1}
+                  </Badge>
+                  <span className="truncate">{name}</span>
+                  <span className="font-mono text-muted-foreground">
+                    {
+                      frames.find((frame) => frame.id === comment.frame)?.meta
+                        .width
+                    }
+                  </span>
+                </div>
+                {comment.status === "resolved" ? (
+                  <Check className="size-3.5 text-muted-foreground" />
+                ) : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="Comment actions"
+                        />
+                      }
+                    >
+                      <MoreHorizontal className="size-4 text-muted-foreground" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        disabled={busy || !!error}
+                        onClick={() =>
+                          void send({
+                            type: "delete",
+                            id: comment.id,
+                            expected: comment,
+                          })
+                        }
+                      >
+                        Delete comment
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+              <CommentAuthor
+                author={comment.author}
+                createdAt={comment.createdAt}
+              />
+              <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5">
+                {comment.body}
+              </p>
+              {comment.replies.map((reply) => (
+                <div
+                  key={`${reply.createdAt}/${reply.body}`}
+                  className="mt-3 border-t pt-3"
+                >
+                  <CommentAuthor
+                    author={reply.author}
+                    createdAt={reply.createdAt}
+                  />
+                  <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">
+                    {reply.body}
+                  </p>
+                </div>
+              ))}
+              <div className="mt-3 flex items-center justify-between border-t pt-3">
+                <span className="text-[11px] text-muted-foreground">
+                  {comment.status === "resolved"
+                    ? "Resolved"
+                    : `${comment.replies.length} ${comment.replies.length === 1 ? "reply" : "replies"}`}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  disabled={busy || !!error}
+                  onClick={() =>
+                    void send({
+                      type: "status",
+                      id: comment.id,
+                      expected: comment.status,
+                      status: comment.status === "open" ? "resolved" : "open",
+                    })
+                  }
+                >
+                  {comment.status === "open" ? "Resolve" : "Reopen"}
+                </Button>
+              </div>
+              {comment.status === "open" && composer}
+            </Card>
+          ) : (
+            <Button
+              key={comment.id}
+              variant="ghost"
+              onClick={() => onSelect(comment.id)}
+              className="block h-auto w-full whitespace-normal rounded-lg border border-border p-3 text-left font-normal hover:bg-card"
+            >
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="flex size-5 items-center justify-center rounded-full border text-muted-foreground">
+                  {comments.indexOf(comment) + 1}
+                </span>
+                <span className="truncate">{name}</span>
+                <span className="ml-auto text-muted-foreground">
+                  {commentAge(comment.createdAt)}
+                </span>
+              </div>
+              <p className="mt-3 line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
+                {comment.body}
+              </p>
+              <span className="mt-2 block text-[11px] text-muted-foreground">
+                {comment.replies.length
+                  ? `${comment.replies.length} replies`
+                  : "No replies yet"}
+              </span>
+            </Button>
+          );
+        })}
+        {!visible.length && !draft && (
+          <div className="py-6 text-center text-xs leading-5 text-muted-foreground">
+            <MessageCircle className="mx-auto mb-3 size-5 text-faint" />
+            {showResolved
+              ? "No resolved comments yet."
+              : "No open comments. Press C and click a frame to leave feedback."}
+          </div>
         )}
-      </div>
-    </aside>
+      </SidebarContent>
+      <SidebarFooter className="border-t p-4 text-[11px] leading-5 text-muted-foreground">
+        <span className="mb-1 flex items-center gap-2">
+          <MessageCircle className="size-3.5" />
+          Pin feedback to a frame or element
+        </span>
+        <span>
+          Press <Kbd>C</Kbd> and click on the canvas.
+        </span>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
+
+function commentAge(createdAt: string) {
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000),
+  );
+  return seconds < 60
+    ? "now"
+    : seconds < 3600
+      ? `${Math.floor(seconds / 60)}m`
+      : seconds < 86400
+        ? `${Math.floor(seconds / 3600)}h`
+        : `${Math.floor(seconds / 86400)}d`;
+}
+function CommentAuthor({
+  author,
+  createdAt,
+}: {
+  author: string;
+  createdAt: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Avatar className="size-6">
+        <AvatarFallback
+          className={
+            author === "agent"
+              ? "bg-primary/15 text-signal"
+              : "bg-accent text-[10px]"
+          }
+        >
+          {author === "agent" ? <FileCode2 className="size-3" /> : "U"}
+        </AvatarFallback>
+      </Avatar>
+      <span className="text-xs font-medium">
+        {author === "agent" ? "Agent" : "You"}
+      </span>
+      <span
+        className="ml-auto text-[11px] text-muted-foreground"
+        title={createdAt}
+      >
+        {commentAge(createdAt)}
+      </span>
+    </div>
   );
 }

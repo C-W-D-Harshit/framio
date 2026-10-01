@@ -1,12 +1,88 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "@xyflow/react/dist/base.css";
 
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --color-chrome: #1c1c1c;
-  --color-chrome-line: #2b2b2b;
-  --color-canvas: #262626;
-  --color-accent: #4c8dff;
+:root {
+  --background: #1c1c1f;
+  --foreground: #ededef;
+  --card: #222226;
+  --card-foreground: #ededef;
+  --popover: #222226;
+  --popover-foreground: #ededef;
+  --primary: #2f6bf0;
+  --primary-foreground: #ffffff;
+  --secondary: #222226;
+  --secondary-foreground: #ededef;
+  --muted: #222226;
+  --muted-foreground: #8b8b93;
+  --accent: #2a2a2f;
+  --accent-foreground: #ededef;
+  --destructive: #f2555a;
+  --border: #2a2a2e;
+  --input: #2a2a2e;
+  --ring: #6e9bff;
+  --sidebar: #141416;
+  --sidebar-foreground: #ededef;
+  --sidebar-primary: #2f6bf0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #222226;
+  --sidebar-accent-foreground: #ededef;
+  --sidebar-border: #2a2a2e;
+  --sidebar-ring: #6e9bff;
+  --chrome: #141416;
+  --signal: #6e9bff;
+  --faint: #6a6a73;
+  --live: #3dd68c;
+  --danger-surface: #1e1517;
+  --warning: #e9b96e;
+  --frame-surface: #ffffff;
+  --radius: 0.375rem;
+  --sidebar-width: 248px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chrome: var(--chrome);
+  --color-signal: var(--signal);
+  --color-faint: var(--faint);
+  --color-live: var(--live);
+  --color-danger-surface: var(--danger-surface);
+  --color-warning: var(--warning);
+  --color-frame-surface: var(--frame-surface);
+  --color-canvas: var(--background);
+  --color-chrome-line: var(--border);
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 }
 
 html,
@@ -23,7 +99,7 @@ body {
 }
 
 body {
-  @apply bg-canvas font-sans text-neutral-200 antialiased;
+  @apply bg-canvas font-sans text-foreground antialiased;
   font-size: 13px;
 }
 
@@ -33,7 +109,7 @@ body {
 
 /* --zoom is set by the canvas so lines keep the same on-screen weight at any zoom. */
 .react-flow__edge-path {
-  stroke: #6b6b6b;
+  stroke: var(--faint);
   stroke-width: calc(1.5px / var(--zoom, 1));
   stroke-dasharray: calc(6px / var(--zoom, 1)) calc(5px / var(--zoom, 1));
 }
@@ -56,6 +132,18 @@ body {
 
 .react-flow__nodesselection-rect,
 .react-flow__selection {
-  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
-  border: 1px solid var(--color-accent);
+  background: color-mix(in oklab, var(--signal) 8%, transparent);
+  border: 1px solid var(--signal);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
+.lucide {
+  stroke-width: 1.5;
+}
+.studio-canvas {
+  background: var(--background);
 }

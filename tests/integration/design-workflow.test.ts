@@ -165,6 +165,36 @@ test("image width overrides keep aspect ratio and moodboards form a grid", async
   );
 });
 
+test("responsive variations stack below their parent and follow saved parent positions", async () => {
+  const p = project();
+  writeFileSync(
+    join(p.pages, "01-moodboard/welcome.tsx"),
+    'export const meta={name:"Welcome",widths:[1440,768,390],height:900};export default function Frame(){return <div/>}',
+  );
+  writeFileSync(
+    join(p.pages, "01-moodboard/welcome--illustrated.tsx"),
+    'export const meta={name:"Illustrated",widths:[1440,390],height:900,variationOf:"welcome"};export default function Frame(){return <div/>}',
+  );
+  const frames = (await scanProject(p))[0]!.frames.map((frame) => ({
+    ...frame,
+    version: 1,
+    error: null,
+  }));
+  const parent = frames.find((frame) => !frame.parent)!;
+  const child = frames.find((frame) => frame.parent)!;
+  const auto = layoutFrames(frames, {}, {});
+  expect(auto[child.id]!.x).toBe(auto[parent.id]!.x);
+  expect(auto[child.id]!.y).toBeGreaterThan(auto[parent.id]!.y + 900);
+  const moved = layoutFrames(frames, {}, { welcome: { x: 80, y: 90 } });
+  expect(moved[child.id]).toEqual({ x: 80, y: auto[child.id]!.y + 90 });
+  const explicit = layoutFrames(
+    frames,
+    {},
+    { welcome: { x: 80, y: 90 }, "welcome--illustrated": { x: 500, y: 600 } },
+  );
+  expect(explicit[child.id]).toEqual({ x: 500, y: 600 });
+});
+
 test("DESIGN.md tokens override the base theme and generate working Tailwind utilities", async () => {
   const p = project();
   writeFileSync(
