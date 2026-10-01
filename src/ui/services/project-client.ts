@@ -88,7 +88,13 @@ const make = Effect.gen(function* () {
     Effect.retry(Schedule.spaced("1 second")),
     Effect.forkScoped,
   );
-  return { changes: SubscriptionRef.changes(state), ...persistence };
+  return {
+    changes: SubscriptionRef.changes(state),
+    ...persistence,
+    renameLayer: (
+      payload: typeof import("../../contracts/layers").RenameRequest.Type,
+    ) => api.project.renameLayer({ payload }),
+  };
 });
 export class ProjectClient extends Context.Service<
   ProjectClient,

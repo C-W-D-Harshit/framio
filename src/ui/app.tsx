@@ -1,3 +1,4 @@
+import { LayersPanel } from "./layers-panel";
 import { useCallback, useEffect, useState } from "react";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
@@ -51,7 +52,7 @@ export function App() {
         <div className="px-4 pt-4 pb-2 text-[11px] font-medium text-neutral-500">
           Pages
         </div>
-        <nav className="flex-1 overflow-y-auto px-2">
+        <nav className="max-h-[35%] shrink-0 overflow-y-auto px-2 pb-3">
           {pages.map((p) => (
             <button
               key={p.id}
@@ -70,6 +71,10 @@ export function App() {
             </button>
           ))}
         </nav>
+        <LayersPanel
+          frame={selectedFrames.length === 1 ? selectedFrames[0] : undefined}
+          project={snapshot?.projectName ?? "Framio"}
+        />
         {snapshot?.cssError && (
           <div className="m-2 rounded-md bg-red-500/10 p-2 text-[11px] break-words text-red-300">
             {snapshot.cssError}

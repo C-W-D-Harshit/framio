@@ -44,6 +44,7 @@ export type ElementInfo = typeof ElementContract.Type;
 export type CanvasSelection = {
   readonly frames: readonly string[];
   readonly element: ElementInfo | null;
+  readonly layer?: { readonly path: string; readonly name: string };
 };
 
 const nodeTypes: NodeTypes = { frame: FrameNode };
@@ -200,7 +201,7 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
   useEffect(() => {
     postToFrames(
       { type: "clear-selection" },
-      selection.element ? selection.frames[0] : undefined,
+      selection.element || selection.layer ? selection.frames[0] : undefined,
     );
   }, [selection]);
 
@@ -365,6 +366,13 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
       if (!iframe || e.origin !== location.origin) return;
       const frame: string = msg.frame;
       switch (msg.type) {
+        case "layers":
+          window.dispatchEvent(
+            new CustomEvent("framio:layers", {
+              detail: { frame, report: msg.report },
+            }),
+          );
+          break;
         case "size":
         case "ready":
           if (typeof msg.height === "number")
@@ -374,7 +382,11 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
           break;
         case "select":
           selectFrames([frame]);
-          setSelection({ frames: [frame], element: msg.element });
+          setSelection({
+            frames: [frame],
+            element: msg.element,
+            layer: msg.layer,
+          });
           break;
         case "dblclick":
           zoomToFrames([frame]);
@@ -450,7 +462,13 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
               return prev;
             const keepElement =
               prev.element && ids.length === 1 && ids[0] === prev.frames[0];
-            return { frames: ids, element: keepElement ? prev.element : null };
+            return {
+              frames: ids,
+              element: keepElement ? prev.element : null,
+              ...(ids.length === 1 && ids[0] === prev.frames[0] && prev.layer
+                ? { layer: prev.layer }
+                : {}),
+            };
           });
         }}
         onNodeDoubleClick={(_, node) => zoomToFrames([node.id])}
