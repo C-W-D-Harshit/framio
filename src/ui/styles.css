@@ -16,10 +16,15 @@ body,
   margin: 0;
 }
 
+/* History swipes use the root viewport; body alone does not contain them. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 body {
   @apply bg-canvas font-sans text-neutral-200 antialiased;
   font-size: 13px;
-  overscroll-behavior: none;
 }
 
 .react-flow__node-frame {

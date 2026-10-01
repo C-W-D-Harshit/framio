@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import puppeteer from "puppeteer-core";
+import { ensureBrowser } from "../../src/lib/browser";
 import {
   mkdtempSync,
   mkdirSync,
@@ -8,7 +10,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { Effect, Layer, Option, Stream } from "effect";
 import { RpcClient, RpcSerialization } from "effect/rpc";
@@ -242,3 +244,98 @@ test("RPC publishes watched generations, stale reports are ignored and canvas fi
     rmSync(root, { recursive: true, force: true });
   }
 }, 30_000);
+
+test(
+  "canvas contains browser overscroll while wheel panning and pinch zoom still work",
+  () =>
+    withProjectServer(
+      (root) => {
+        writeFileSync(
+          join(root, ".framio/pages/01-test/one.tsx"),
+          'export const meta={name:"Wheel fixture",width:390,height:300};export default function Frame(){return <div style={{height:300}}>Wheel fixture</div>}',
+        );
+      },
+      async (url, root) => {
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          await page.setViewport({ width: 1280, height: 800 });
+          // A saved viewport keeps initial auto-fit from masking wheel movement.
+          await page.evaluateOnNewDocument((project) => {
+            localStorage.setItem(
+              `framio:viewport:${project}/01-test`,
+              JSON.stringify({ x: 100, y: 100, zoom: 1 }),
+            );
+          }, basename(root));
+          await page.goto(url);
+          await page.waitForFunction(
+            () =>
+              document.querySelector<HTMLIFrameElement>("iframe[data-frame]")
+                ?.contentWindow?.__framio?.ready,
+          );
+          expect(
+            await page.evaluate(
+              () =>
+                getComputedStyle(document.documentElement).overscrollBehaviorX,
+            ),
+          ).toBe("none");
+          const originalUrl = page.url();
+          const transform = () =>
+            page.$eval(
+              ".react-flow__viewport",
+              (el) => (el as HTMLElement).style.transform,
+            );
+          for (const overFrame of [false, true]) {
+            for (const deltaX of [-80, 80]) {
+              const target = await page.$(
+                overFrame ? "iframe[data-frame]" : ".react-flow",
+              );
+              const box = (await target!.boundingBox())!;
+              await page.mouse.move(
+                overFrame ? box.x + box.width / 2 : box.x + box.width - 40,
+                overFrame ? box.y + box.height / 2 : box.y + box.height - 40,
+              );
+              const before = await transform();
+              await page.mouse.wheel({ deltaX, deltaY: 0 });
+              await page.waitForFunction(
+                (before) =>
+                  (
+                    document.querySelector(
+                      ".react-flow__viewport",
+                    ) as HTMLElement
+                  ).style.transform !== before,
+                {},
+                before,
+              );
+              expect(page.url()).toBe(originalUrl);
+            }
+          }
+          const beforeZoom = await page.evaluate(() =>
+            getComputedStyle(document.documentElement).getPropertyValue(
+              "--zoom",
+            ),
+          );
+          await page.keyboard.down("Control");
+          await page.mouse.wheel({ deltaY: -80 });
+          await page.keyboard.up("Control");
+          await page.waitForFunction(
+            (before) =>
+              getComputedStyle(document.documentElement).getPropertyValue(
+                "--zoom",
+              ) !== before,
+            {},
+            beforeZoom,
+          );
+          expect(page.url()).toBe(originalUrl);
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  60_000,
+);
