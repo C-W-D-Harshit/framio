@@ -15,7 +15,14 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SyntheticEvent,
+} from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -56,6 +63,12 @@ export const standaloneUrl = (f: SnapshotFrame) =>
     : `/f/${enc(f.page)}/${enc(f.slug)}?width=${f.meta.width}&height=${f.meta.height}`;
 const thumbUrl = (f: SnapshotFrame, css: number) =>
   `/thumb/${enc(f.page)}/${enc(f.slug)}.png?v=${f.version}-${css}&width=${f.meta.width}`;
+
+function enableFrameInput(event: SyntheticEvent<HTMLIFrameElement>) {
+  // Until the runtime is installed, input must hit the canvas below.
+  if (event.currentTarget.contentWindow?.__framio)
+    event.currentTarget.dataset.inputReady = "true";
+}
 
 export const FrameNode = memo(function FrameNode({
   data,
@@ -258,6 +271,7 @@ export const FrameNode = memo(function FrameNode({
               ref={v === pending ? pendingRef : undefined}
               title={frame.meta.name}
               data-frame={frame.id}
+              onLoad={enableFrameInput}
               src={frameUrl(frame, v)}
               className="absolute inset-0 block border-0"
               style={{

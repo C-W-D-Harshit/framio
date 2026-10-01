@@ -82,6 +82,29 @@ async function withCanvas(check: (page: Page) => Promise<void>) {
   }
 }
 
+test("frame pinch reaches the canvas even when design content stops bubbling", () =>
+  withCanvas(async (page) => {
+    const result = await page.evaluate(() => {
+      const iframe = document.querySelector("iframe")!;
+      const win = iframe.contentWindow! as Window & typeof globalThis;
+      const box = iframe.contentDocument!.querySelector(".scroll-box")!;
+      box.addEventListener("wheel", (event) => event.stopPropagation());
+      const forwarded: boolean[] = [];
+      iframe.addEventListener("wheel", (event) =>
+        forwarded.push(event.ctrlKey),
+      );
+      const pinch = new win.WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true,
+        deltaY: -80,
+      });
+      box.dispatchEvent(pinch);
+      return { prevented: pinch.defaultPrevented, forwarded };
+    });
+    expect(result).toEqual({ prevented: true, forwarded: [true] });
+  }));
+
 test(
   "canvas frames remove document and nested scrollbar gutters without disabling scrolling",
   () =>

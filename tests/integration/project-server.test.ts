@@ -284,6 +284,28 @@ test(
                 getComputedStyle(document.documentElement).overscrollBehaviorX,
             ),
           ).toBe("none");
+          // Pinches that cross studio chrome must never become page zoom.
+          const cancellation = await page.evaluate(() => {
+            const sidebar = document.querySelector("aside")!;
+            const pinch = new WheelEvent("wheel", {
+              bubbles: true,
+              cancelable: true,
+              ctrlKey: true,
+              deltaY: -80,
+            });
+            const scroll = new WheelEvent("wheel", {
+              bubbles: true,
+              cancelable: true,
+              deltaY: 80,
+            });
+            sidebar.dispatchEvent(pinch);
+            sidebar.dispatchEvent(scroll);
+            return {
+              pinch: pinch.defaultPrevented,
+              scroll: scroll.defaultPrevented,
+            };
+          });
+          expect(cancellation).toEqual({ pinch: true, scroll: false });
           const originalUrl = page.url();
           const transform = () =>
             page.$eval(
@@ -315,13 +337,116 @@ test(
               expect(page.url()).toBe(originalUrl);
             }
           }
-          const beforeZoom = await page.evaluate(() =>
-            getComputedStyle(document.documentElement).getPropertyValue(
-              "--zoom",
-            ),
+          const studioSize = () =>
+            page.evaluate(() => ({
+              width: window.innerWidth,
+              sidebarWidth: document
+                .querySelector("aside")!
+                .getBoundingClientRect().width,
+              scale: window.visualViewport!.scale,
+            }));
+          const beforeSize = await studioSize();
+          for (const overFrame of [true, false]) {
+            const target = await page.$(
+              overFrame ? "iframe[data-frame]" : ".react-flow",
+            );
+            const box = (await target!.boundingBox())!;
+            await page.mouse.move(
+              overFrame ? box.x + box.width / 2 : box.x + box.width - 40,
+              overFrame ? box.y + box.height / 2 : box.y + box.height - 40,
+            );
+            const beforeZoom = await page.evaluate(() =>
+              getComputedStyle(document.documentElement).getPropertyValue(
+                "--zoom",
+              ),
+            );
+            await page.keyboard.down("Control");
+            await page.mouse.wheel({ deltaY: -80 });
+            await page.keyboard.up("Control");
+            await page.waitForFunction(
+              (before) =>
+                getComputedStyle(document.documentElement).getPropertyValue(
+                  "--zoom",
+                ) !== before,
+              {},
+              beforeZoom,
+            );
+            expect(await studioSize()).toEqual(beforeSize);
+            expect(page.url()).toBe(originalUrl);
+          }
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  60_000,
+);
+
+test(
+  "pinch stays on the canvas while zoomed-out thumbnails become loading iframes",
+  () =>
+    withProjectServer(
+      (root) => {
+        for (let i = 0; i < 9; i++) {
+          writeFileSync(
+            join(root, `.framio/pages/01-test/frame-${i}.tsx`),
+            'import React from "react";export const meta={name:"Pinch transition",width:390,height:300};export default function Frame(){return <div style={{height:300}}>Pinch transition</div>}',
           );
+        }
+      },
+      async (url, root) => {
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          await page.setViewport({ width: 1280, height: 800 });
+          await page.evaluateOnNewDocument((project) => {
+            localStorage.setItem(
+              `framio:viewport:${project}/01-test`,
+              JSON.stringify({ x: 100, y: 100, zoom: 0.24 }),
+            );
+          }, basename(root));
+          // Hold the new iframe documents so the test exercises the input gap,
+          // rather than depending on a lucky millisecond during real loading.
+          let hold = true;
+          const loading: import("puppeteer-core").HTTPRequest[] = [];
+          await page.setRequestInterception(true);
+          page.on("request", (request) => {
+            if (hold && new URL(request.url()).pathname.startsWith("/f/"))
+              loading.push(request);
+            else void request.continue();
+          });
+          await page.goto(url);
+          await page.waitForSelector(".react-flow__node img");
+          expect(await page.$$("iframe[data-frame]")).toHaveLength(0);
+          const node = await page.$(".react-flow__node");
+          const box = (await node!.boundingBox())!;
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
           await page.keyboard.down("Control");
           await page.mouse.wheel({ deltaY: -80 });
+          await page.waitForSelector("iframe[data-frame]");
+          const during = await page.evaluate(() => ({
+            pointerEvents: [
+              ...document.querySelectorAll("iframe[data-frame]"),
+            ].map((frame) => getComputedStyle(frame).pointerEvents),
+            zoom: getComputedStyle(document.documentElement).getPropertyValue(
+              "--zoom",
+            ),
+            scale: window.visualViewport!.scale,
+            sidebarWidth: document
+              .querySelector("aside")!
+              .getBoundingClientRect().width,
+          }));
+          expect(during.pointerEvents.length).toBeGreaterThan(0);
+          expect(during.pointerEvents.every((value) => value === "none")).toBe(
+            true,
+          );
+          // Continue the same pinch over a frame whose runtime is not loaded yet.
+          await page.mouse.wheel({ deltaY: -20 });
           await page.keyboard.up("Control");
           await page.waitForFunction(
             (before) =>
@@ -329,9 +454,39 @@ test(
                 "--zoom",
               ) !== before,
             {},
-            beforeZoom,
+            during.zoom,
           );
-          expect(page.url()).toBe(originalUrl);
+          expect(await page.evaluate(() => window.visualViewport!.scale)).toBe(
+            1,
+          );
+          expect(during.scale).toBe(1);
+          expect(during.sidebarWidth).toBe(240);
+          await page.waitForFunction(
+            () => !document.documentElement.classList.contains("is-zooming"),
+          );
+          // A slow iframe remains protected even after the gesture has finished.
+          expect(
+            await page.$$eval("iframe[data-frame]", (frames) =>
+              frames.every(
+                (frame) => getComputedStyle(frame).pointerEvents === "none",
+              ),
+            ),
+          ).toBe(true);
+          hold = false;
+          for (const request of loading) await request.continue();
+          await page.waitForFunction(
+            () =>
+              !document.documentElement.classList.contains("is-zooming") &&
+              [
+                ...document.querySelectorAll<HTMLIFrameElement>(
+                  "iframe[data-frame]",
+                ),
+              ].every(
+                (frame) =>
+                  frame.contentWindow?.__framio?.ready &&
+                  getComputedStyle(frame).pointerEvents === "all",
+              ),
+          );
         } finally {
           await browser.close();
         }

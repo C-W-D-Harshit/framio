@@ -1,12 +1,16 @@
 import type { LayerReport, RenameRequest } from "../contracts/layers";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as Layer from "effect/Layer";
+import { studioInputLayer } from "./services/studio-input";
 import { Atom } from "effect/reactivity";
 import type { CanvasRequest, SelectionRequest } from "../contracts/requests";
 import type { Tool } from "./toolbar";
 import { ProjectClient, type LiveState } from "./services/project-client";
 
-export const runtime = Atom.runtime(ProjectClient.layer);
+export const runtime = Atom.runtime(
+  Layer.merge(ProjectClient.layer, studioInputLayer),
+);
 export const liveAtom = runtime.atom(
   Stream.unwrap(Effect.map(ProjectClient, (client) => client.changes)),
   {
