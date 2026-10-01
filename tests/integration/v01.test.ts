@@ -309,6 +309,39 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
               expect(
                 await page.$$eval(".react-flow__node", (nodes) => nodes.length),
               ).toBe(3);
+              // Studio chrome keeps the canvas unobstructed and persists its own theme.
+              expect(await page.$("main > header")).toBeNull();
+              expect(
+                await page.$eval(
+                  '[data-slot="sidebar-footer"]',
+                  (element) => element.textContent,
+                ),
+              ).toContain("Powered by Framio");
+              await page.click('[role="switch"][aria-label="Dark theme"]');
+              await page.waitForFunction(
+                () => document.documentElement.dataset.theme === "light",
+              );
+              expect(
+                await page.$eval(
+                  '[aria-label="Project navigation"] [data-slot="sidebar-inner"]',
+                  (element) => getComputedStyle(element).backgroundColor,
+                ),
+              ).toBe("rgb(255, 255, 255)");
+              await page.reload();
+              await page.waitForFunction(
+                () => document.documentElement.dataset.theme === "light",
+              );
+              await page.click('[role="switch"][aria-label="Dark theme"]');
+              await page.waitForFunction(
+                () => document.documentElement.dataset.theme === "dark",
+              );
+              await page.waitForFunction(() =>
+                [
+                  ...document.querySelectorAll<HTMLIFrameElement>(
+                    "iframe[data-frame]",
+                  ),
+                ].every((frame) => frame.contentWindow?.__framio?.ready),
+              );
               // Studio chrome uses flat tool controls and a keyboard-accessible frame finder.
               expect(
                 await page.$eval(

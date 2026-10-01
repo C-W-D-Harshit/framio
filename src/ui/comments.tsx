@@ -214,7 +214,7 @@ export function CommentsPanel({
       side="right"
       data-ui
       aria-label="Comments"
-      className="absolute -top-14 right-0 bottom-0 z-30 h-[calc(100%+56px)]! w-[296px]! border-l bg-sidebar text-foreground"
+      className="absolute inset-y-0 right-0 z-30 h-full! w-[296px]! border-l bg-sidebar text-foreground"
     >
       <SidebarHeader className="h-14 flex-row items-center justify-between border-b px-4">
         <h2 className="font-medium">

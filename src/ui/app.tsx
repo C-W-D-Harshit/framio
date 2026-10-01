@@ -2,7 +2,6 @@ import { EmptyCanvas, DisconnectedNotice } from "./empty-canvas";
 import type { CSSProperties } from "react";
 import {
   ChevronRight,
-  FileCode2,
   Frame,
   Image,
   Layers,
@@ -10,8 +9,11 @@ import {
   Smartphone,
   CornerDownLeft,
   AlertTriangle,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
+import { Switch } from "./components/ui/switch";
 import { Badge } from "./components/ui/badge";
 import { Kbd } from "./components/ui/kbd";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -52,7 +54,6 @@ import {
   selectionAtom,
   toolAtom,
   layersAtom,
-  activityAtom,
 } from "./state";
 import { imageUrl, standaloneUrl } from "./frame-node";
 import { Canvas } from "./canvas";
@@ -79,8 +80,24 @@ function useTool() {
 }
 
 export function App() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      return localStorage.getItem("framio:theme") === "light"
+        ? "light"
+        : "dark";
+    } catch {
+      return "dark";
+    }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.style.colorScheme = theme;
+    try {
+      localStorage.setItem("framio:theme", theme);
+    } catch {}
+  }, [theme]);
   const live = useAtomValue(liveAtom);
-  const activity = useAtomValue(activityAtom);
   const { snapshot, connected, saveError } = AsyncResult.isSuccess(live)
     ? live.value
     : { snapshot: null, connected: false, saveError: null };
@@ -277,56 +294,34 @@ export function App() {
                   {error}
                 </p>
               ))}
-            <p className="text-[11px] text-muted-foreground">Activity</p>
-            {activity.entries.length ? (
-              activity.entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center gap-2.5 text-xs"
-                >
-                  <span
-                    className={`size-1.5 shrink-0 rounded-full ${entry.tone === "signal" ? "bg-signal" : entry.tone === "danger" ? "bg-destructive" : "bg-faint"}`}
-                  />
-                  <span className="flex-1 truncate text-muted-foreground">
-                    {entry.verb}{" "}
-                    <span className="text-foreground">{entry.name}</span>
-                  </span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    {entry.version}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {connected
-                  ? "Waiting for design changes"
-                  : "Reconnecting to Studio…"}
-              </p>
-            )}
+            <div className="flex min-h-8 items-center justify-between gap-3">
+              <a
+                href="https://github.com/C-W-D-Harshit/framio"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Powered by Framio
+              </a>
+              <Switch
+                checked={theme === "dark"}
+                onCheckedChange={(dark) => setTheme(dark ? "dark" : "light")}
+                aria-label="Dark theme"
+                className="h-5! w-11! data-checked:bg-accent data-unchecked:bg-accent"
+                thumbClassName="flex! size-7! items-center justify-center border border-border bg-sidebar! text-foreground data-checked:translate-x-4! data-unchecked:translate-x-0!"
+                thumbIcon={
+                  theme === "dark" ? (
+                    <Moon className="size-4" />
+                  ) : (
+                    <Sun className="size-4" />
+                  )
+                }
+              />
+            </div>
           </SidebarFooter>
         </Sidebar>
         <main className="studio-canvas relative flex min-w-0 flex-1 flex-col overflow-hidden">
-          <header className="z-10 flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background/95 px-5">
-            <div className="flex min-w-0 items-center gap-2">
-              <SidebarTrigger className="shrink-0 md:hidden" />
-              <span className="hidden truncate text-muted-foreground lg:inline">
-                {snapshot?.projectName ?? "Framio"}
-              </span>
-              <ChevronRight className="hidden size-3 text-faint lg:block" />
-              <span className="truncate">{page?.name ?? "Studio"}</span>
-              <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                {page?.frames.length ?? 0} frames
-              </span>
-            </div>
-            <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-              <FileCode2 className="size-3.5" />
-              {saveError
-                ? "Changes could not be saved"
-                : connected
-                  ? "Changes saved"
-                  : "Reconnecting…"}
-            </div>
-          </header>
+          <SidebarTrigger className="absolute top-3 left-3 z-40 border bg-sidebar md:hidden" />
           <div className="relative min-h-0 flex-1">
             {!snapshot ? (
               <EmptyCanvas connecting tool={tool} onTool={setTool} />

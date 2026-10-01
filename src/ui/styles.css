@@ -3,6 +3,8 @@
 @import "tw-animate-css";
 @import "@xyflow/react/dist/base.css";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #1c1c1f;
   --foreground: #ededef;
@@ -39,6 +41,35 @@
   --frame-surface: #ffffff;
   --radius: 0.375rem;
   --sidebar-width: 248px;
+}
+
+:root[data-theme="light"] {
+  --background: #f4f4f5;
+  --foreground: #202024;
+  --card: #ffffff;
+  --card-foreground: #202024;
+  --popover: #ffffff;
+  --popover-foreground: #202024;
+  --secondary: #ececef;
+  --secondary-foreground: #202024;
+  --muted: #ececef;
+  --muted-foreground: #64646e;
+  --accent: #e8e8ed;
+  --accent-foreground: #202024;
+  --destructive: #c9323a;
+  --border: #dcdce2;
+  --input: #dcdce2;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #202024;
+  --sidebar-accent: #ececef;
+  --sidebar-accent-foreground: #202024;
+  --sidebar-border: #dcdce2;
+  --chrome: #ffffff;
+  --signal: #245dcc;
+  --faint: #83838d;
+  --live: #168755;
+  --danger-surface: #fff0f1;
+  --warning: #926411;
 }
 
 @theme inline {
