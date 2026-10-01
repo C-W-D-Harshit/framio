@@ -31,9 +31,16 @@ export function parseMeta(source: string): Partial<FrameMeta> {
   const input = Schema.decodeUnknownSync(FrameMetaInput)(
     parseMetaLiteral(source, match.index + match[0].length),
   );
+  if (
+    input.heights &&
+    (!input.widths || input.heights.length !== input.widths.length)
+  )
+    throw new Error("meta.heights must have the same length as meta.widths");
   return {
     ...input,
-    width: input.width === undefined ? undefined : Number(input.width) || 1440,
+    width:
+      input.widths?.[0] ??
+      (input.width === undefined ? undefined : Number(input.width) || 1440),
     height:
       input.height === undefined ? undefined : Number(input.height) || 900,
   };

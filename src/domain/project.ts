@@ -3,12 +3,20 @@ import * as Schema from "effect/Schema";
 export const PositiveNumber = Schema.Finite.pipe(
   Schema.check(Schema.isGreaterThan(0)),
 );
+export const ViewportDimension = PositiveNumber.pipe(
+  Schema.check(Schema.isInt()),
+);
+export const Widths = Schema.Array(ViewportDimension).pipe(
+  Schema.check(Schema.isMinLength(1), Schema.isUnique()),
+);
 export const Position = Schema.Struct({ x: Schema.Finite, y: Schema.Finite });
 export const Positions = Schema.Record(Schema.String, Position);
 export const FrameMeta = Schema.Struct({
   name: Schema.String,
   width: PositiveNumber,
   height: PositiveNumber,
+  widths: Schema.optional(Widths),
+  heights: Schema.optional(Schema.Array(ViewportDimension)),
   variationOf: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.Literals(["light", "dark"])),
 });
@@ -17,6 +25,8 @@ export const FrameMetaInput = Schema.Struct({
   name: Schema.optional(Schema.String),
   width: Schema.optional(Schema.Union([Schema.Number, Schema.String])),
   height: Schema.optional(Schema.Union([Schema.Number, Schema.String])),
+  widths: Schema.optional(Widths),
+  heights: Schema.optional(Schema.Array(ViewportDimension)),
   variationOf: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.Literals(["light", "dark"])),
 });
