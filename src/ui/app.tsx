@@ -110,6 +110,9 @@ export function App() {
   const [pageId, setPageId] = useHashPage();
   const [tool, setTool] = useTool();
   const [selection, setSelection] = useAtom(selectionAtom);
+  const [collapsedFrames, setCollapsedFrames] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [finder, setFinder] = useState(false);
   const [finderValue, setFinderValue] = useState("");
   const [rightPanel, setRightPanel] = useState<"comments" | "inspect" | null>(
@@ -247,16 +250,26 @@ export function App() {
                         ? Smartphone
                         : Frame;
                   const selected = selectedIds.has(f.id);
+                  const expanded = selected && !collapsedFrames.has(f.id);
                   return (
                     <SidebarMenuItem key={f.id}>
                       <SidebarMenuButton
                         className={`h-8 text-xs font-normal ${selected ? "bg-primary/15 text-foreground data-active:bg-primary/15" : "text-muted-foreground"}`}
                         isActive={selected}
-                        onClick={() => jump(page.id, f.id)}
+                        aria-expanded={expanded}
+                        onClick={() => {
+                          setCollapsedFrames((current) => {
+                            const next = new Set(current);
+                            if (expanded) next.add(f.id);
+                            else next.delete(f.id);
+                            return next;
+                          });
+                          if (!selected) jump(page.id, f.id);
+                        }}
                         title={f.relFile}
                       >
                         <ChevronRight
-                          className={`size-3! ${selected ? "rotate-90 text-signal" : "text-faint"}`}
+                          className={`size-3! ${expanded ? "rotate-90 text-signal" : "text-faint"}`}
                         />
                         <Icon
                           className={`size-3.5! ${selected ? "text-signal" : "text-faint"}`}
@@ -272,7 +285,7 @@ export function App() {
                           )
                         )}
                       </SidebarMenuButton>
-                      {selected && (
+                      {expanded && (
                         <LayersPanel
                           onInspect={() => {
                             setRightPanel("inspect");
