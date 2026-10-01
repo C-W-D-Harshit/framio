@@ -1,3 +1,9 @@
+import {
+  InspectRequest,
+  InspectResponse,
+  RenameRequest,
+  RenameResponse,
+} from "./layers";
 import { CommentOperation, CommentResponse } from "./comments";
 import * as Schema from "effect/Schema";
 import {
@@ -22,6 +28,14 @@ export const Health = Schema.Struct({
   protocol: Schema.Literal("framio-v4-1"),
 });
 export class ProjectApi extends HttpApiGroup.make("project").add(
+  HttpApiEndpoint.post("inspect", "/api/inspect", {
+    payload: InspectRequest,
+    success: InspectResponse,
+  }),
+  HttpApiEndpoint.post("renameLayer", "/api/layers/rename", {
+    payload: RenameRequest,
+    success: RenameResponse,
+  }),
   HttpApiEndpoint.get("health", "/api/health", { success: Health }),
   HttpApiEndpoint.get("snapshot", "/api/project", { success: Snapshot }),
   HttpApiEndpoint.post("comments", "/api/comments", {

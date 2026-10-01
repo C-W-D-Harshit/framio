@@ -47,6 +47,7 @@ export type ElementInfo = typeof ElementContract.Type;
 export type CanvasSelection = {
   readonly frames: readonly string[];
   readonly element: ElementInfo | null;
+  readonly layer?: { readonly path: string; readonly name: string };
 };
 
 const nodeTypes: NodeTypes = { frame: FrameNode };
@@ -297,8 +298,11 @@ function CanvasInner({
 
   // --- Selection ------------------------------------------------------------
   const [selection, setSelection] = useAtom(selectionAtom);
+  // Ignore React Flow's old selection until it acknowledges an iframe selection.
+  const pendingSelection = useRef<readonly string[] | null>(null);
   const selectFrames = useCallback(
     (ids: readonly string[]) => {
+      pendingSelection.current = [...ids].sort();
       const selected = new Set(ids);
       setNodes((ns) => ns.map((n) => ({ ...n, selected: selected.has(n.id) })));
     },
@@ -308,7 +312,7 @@ function CanvasInner({
   useEffect(() => {
     postToFrames(
       { type: "clear-selection" },
-      selection.element
+      selection.element || selection.layer
         ? selection.width
           ? `__viewport__/${selection.frames[0]}/${selection.width}`
           : selection.frames[0]
@@ -497,6 +501,13 @@ function CanvasInner({
       if (!iframe || e.origin !== location.origin) return;
       const frame: string = msg.frame;
       switch (msg.type) {
+        case "layers":
+          window.dispatchEvent(
+            new CustomEvent("framio:layers", {
+              detail: { frame, report: msg.report },
+            }),
+          );
+          break;
         case "size":
         case "ready":
           if (typeof msg.height === "number")
@@ -519,6 +530,7 @@ function CanvasInner({
           setSelection({
             frames: [viewport?.frameId ?? frame],
             element: msg.element,
+            layer: msg.layer,
             ...(viewport?.meta.widths ? { width: viewport.meta.width } : {}),
           });
           break;
@@ -591,6 +603,16 @@ function CanvasInner({
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onSelectionChange={({ nodes: sel }) => {
+          const pending = pendingSelection.current;
+          if (pending && pending.every((id) => layoutIndex.nodes.has(id))) {
+            const actual = sel.map((node) => node.id).sort();
+            if (
+              actual.length !== pending.length ||
+              actual.some((id, index) => id !== pending[index])
+            )
+              return;
+          }
+          pendingSelection.current = null;
           const ids = [
             ...new Set(sel.map((n) => n.data.frame.frameId ?? n.id)),
           ].sort();
@@ -614,6 +636,12 @@ function CanvasInner({
               frames: ids,
               element: keep ? prev.element : null,
               ...(width ? { width } : {}),
+              ...(ids.length === 1 &&
+              ids[0] === prev.frames[0] &&
+              prev.width === width &&
+              prev.layer
+                ? { layer: prev.layer }
+                : {}),
             };
           });
         }}

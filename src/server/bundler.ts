@@ -1,3 +1,4 @@
+import { injectLayerSources } from "./layers/source";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { join, relative } from "node:path";
@@ -84,11 +85,19 @@ export const buildFrames = Effect.fn("Frames.build")(function* (
           {
             name: "generation-frame-sources",
             setup(build) {
-              build.onLoad({ filter: /\.tsx$/ }, (args) => {
+              build.onLoad({ filter: /\.[jt]sx$/ }, async (args) => {
                 const frame = sourceFrames.get(args.path);
-                return frame?.content === undefined
-                  ? undefined
-                  : { contents: frame.content, loader: "tsx" };
+                if (
+                  !args.path.startsWith(p.pages + "/") &&
+                  !args.path.startsWith(join(p.framio, "components") + "/")
+                )
+                  return undefined;
+                const content =
+                  frame?.content ?? (await Bun.file(args.path).text());
+                return {
+                  contents: injectLayerSources(content, args.path),
+                  loader: args.path.endsWith(".jsx") ? "jsx" : "tsx",
+                };
               });
             },
           },

@@ -1,3 +1,4 @@
+import { makeLayersApi } from "./layers/api";
 import { randomUUID } from "node:crypto";
 import { frameViewports, viewports, viewportId } from "../domain/viewports";
 import { makeScreenshotHandler } from "../services/screenshot-request";
@@ -120,7 +121,15 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
     Screenshots,
   );
 
-  const screenshot = yield* makeScreenshotHandler(root, p, project, shots, fs);
+  const layers = yield* makeLayersApi(p.framio, project, shots);
+  const screenshot = yield* makeScreenshotHandler(
+    root,
+    p,
+    project,
+    shots,
+    fs,
+    layers.warnings,
+  );
   const commentsFile = join(p.framio, "comments.json");
   const comments = yield* makeComments({
     read: fs
@@ -146,6 +155,8 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
   });
   const Handlers = HttpApiBuilder.group(Api, "project", (handlers) =>
     handlers.handleAll({
+      renameLayer: ({ payload }) => layers.renameLayer(payload),
+      inspect: ({ payload }) => layers.inspect(payload),
       health: () =>
         Effect.succeed({
           ok: true,
@@ -185,6 +196,9 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
                 element: frames.length === 1 ? payload.element : null,
                 ...(frames.length === 1 && payload.width !== undefined
                   ? { width: payload.width }
+                  : {}),
+                ...(frames.length === 1 && payload.layer
+                  ? { layer: payload.layer }
                   : {}),
                 selectedAt: DateTime.formatIso(yield* DateTime.now),
               },
@@ -244,12 +258,19 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
               frame && payload.width
                 ? viewportId(payload.id, frame.meta, payload.width)
                 : payload.id;
-            if ((state.runtimeErrors.get(id) ?? null) === payload.error)
+            if (
+              (state.runtimeErrors.get(id) ?? null) === payload.error &&
+              (payload.warnings === undefined ||
+                JSON.stringify(state.layerWarnings?.get(id) ?? []) ===
+                  JSON.stringify(payload.warnings))
+            )
               return state;
             const runtimeErrors = new Map(state.runtimeErrors);
             if (payload.error) runtimeErrors.set(id, payload.error);
             else runtimeErrors.delete(id);
-            return { ...state, runtimeErrors };
+            const layerWarnings = new Map(state.layerWarnings);
+            if (payload.warnings) layerWarnings.set(id, payload.warnings);
+            return { ...state, runtimeErrors, layerWarnings };
           })
           .pipe(Effect.as({ ok: true as const })),
       screenshot: ({ payload }) => screenshot(payload),
@@ -351,6 +372,7 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
             },
             join(p.state, "thumbs", frame.page, `${frame.slug}@${width}.png`),
             0.5,
+            { emitLayers: false },
           );
         }),
       ),

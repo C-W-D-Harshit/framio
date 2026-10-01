@@ -117,7 +117,14 @@ const make = Effect.gen(function* () {
         ),
       ),
   );
-  return { comment, changes: SubscriptionRef.changes(state), ...persistence };
+  return {
+    comment,
+    changes: SubscriptionRef.changes(state),
+    ...persistence,
+    renameLayer: (
+      payload: typeof import("../../contracts/layers").RenameRequest.Type,
+    ) => api.project.renameLayer({ payload }),
+  };
 });
 export class ProjectClient extends Context.Service<
   ProjectClient,

@@ -1,3 +1,4 @@
+import { useLayerReport } from "./layers-panel";
 import { CommentPins } from "./comments";
 import type { Comment } from "../contracts/comments";
 import {
@@ -55,6 +56,7 @@ export const FrameNode = memo(function FrameNode({
   positionAbsoluteY,
 }: NodeProps<FrameNodeType>) {
   const { frame, height, cssVersion, useThumbs } = data;
+  const layers = useLayerReport(frame.id);
   const { width } = frame.meta;
   const setHeights = useAtomSet(heightsAtom(frame.page));
   const zoom = useStore((s) => s.transform[2]);
@@ -79,7 +81,9 @@ export const FrameNode = memo(function FrameNode({
       (data.showResolved || c.status === "open"),
   );
   const live =
-    !isImage && visible && (!useThumbs || zoom >= LIVE_ZOOM || hasPins);
+    !isImage &&
+    (visible || selected) &&
+    (selected || !useThumbs || zoom >= LIVE_ZOOM || hasPins);
 
   // Double-buffered reloads: the new version loads hidden and replaces the old one once rendered.
   const [shown, setShown] = useState(frame.version);
@@ -132,6 +136,14 @@ export const FrameNode = memo(function FrameNode({
         style={{ fontSize: 12, paddingBottom: 6 }}
         title="Drag to move · Double-click to zoom · Right-click for more"
       >
+        {!!layers?.warnings.length && (
+          <span
+            className="text-amber-300"
+            title={layers.warnings.map((w) => w.message).join("\n")}
+          >
+            ⚠ {layers.warnings.length}
+          </span>
+        )}
         {frame.error && (
           <span className="inline-block size-[0.6em] shrink-0 self-center rounded-full bg-red-500" />
         )}

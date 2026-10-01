@@ -26,6 +26,14 @@ export const validateScreenshot = Effect.fn("validateScreenshot")(function* (
   ).pipe(
     Effect.mapError((error) => new InvalidInput({ message: error.message })),
   );
+  if (
+    request.layers?.length &&
+    (request.url !== undefined || request.page || all)
+  )
+    return yield* new InvalidInput({
+      message:
+        "--layer requires frame arguments and cannot be combined with --url, --page, or --all",
+    });
   if (request.url !== undefined) {
     yield* Schema.decodeUnknownEffect(HttpUrl)(request.url).pipe(
       Effect.mapError((error) => new InvalidInput({ message: error.message })),

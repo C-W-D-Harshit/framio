@@ -245,3 +245,42 @@ test(
     }),
   30_000,
 );
+
+test(
+  "layer reports and selection exclude hidden responsive alternatives",
+  () =>
+    withCanvas(async (page) => {
+      const report = await page.evaluate(() => {
+        const iframe = document.querySelector("iframe")!;
+        iframe.contentDocument!.getElementById("root")!.innerHTML =
+          '<section data-layer="Actions"><button data-layer="Button" style="display:none">Hidden</button><button data-layer="Button" style="width:48px;height:48px">Visible</button><button style="display:none">Hidden unnamed target</button></section>';
+        return iframe.contentWindow!.__framio.layers();
+      });
+      expect(report.tree[0]!.children).toHaveLength(1);
+      expect(report.tree[0]!.children[0]!.path).toBe("Actions/Button");
+      expect(
+        report.checks.some((check) => check.message.includes("target")),
+      ).toBe(false);
+      await page.evaluate(() => {
+        window.addEventListener("message", (event) => {
+          if (event.data.type === "select")
+            (window as Window & { layerSelected?: string }).layerSelected =
+              event.data.element.text;
+        });
+        document.querySelector("iframe")!.contentWindow!.postMessage(
+          {
+            source: "framio-canvas",
+            type: "layer-select",
+            path: "Actions/Button",
+          },
+          location.origin,
+        );
+      });
+      await page.waitForFunction(
+        () =>
+          (window as Window & { layerSelected?: string }).layerSelected ===
+          "Visible",
+      );
+    }),
+  30_000,
+);

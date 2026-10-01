@@ -1,3 +1,4 @@
+import type { LayerReport, RenameRequest } from "../contracts/layers";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Atom } from "effect/reactivity";
@@ -54,6 +55,14 @@ export const pageAtom = Atom.make(
   ),
 );
 
+export const layersAtom = Atom.family((frame: string) =>
+  Atom.make<LayerReport | null>(null),
+);
+export const renameLayerAtom = Atom.family((_frame: string) =>
+  runtime.fn((payload: typeof RenameRequest.Type) =>
+    Effect.flatMap(ProjectClient, (client) => client.renameLayer(payload)),
+  ),
+);
 export const saveCommentAtom = runtime.fn(
   (payload: import("../contracts/comments").CommentOperation) =>
     Effect.flatMap(ProjectClient, (client) => client.comment(payload)),

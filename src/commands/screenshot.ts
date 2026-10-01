@@ -1,3 +1,4 @@
+import { flattenLayers } from "../domain/layers";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -16,6 +17,7 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
   page: Option.Option<string>;
   all: boolean;
   scale: number;
+  layers: readonly string[];
   url: Option.Option<string>;
   compare: Option.Option<string>;
   into: Option.Option<string>;
@@ -27,6 +29,7 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
       frames: options.frames,
       page: Option.getOrUndefined(options.page),
       scale: options.scale,
+      layers: options.layers,
       url: Option.getOrUndefined(options.url),
       compare: Option.getOrUndefined(options.compare),
       into: Option.getOrUndefined(options.into),
@@ -46,6 +49,18 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
     if (r.path)
       yield* Console.log(
         `${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`,
+      );
+    if (r.report) {
+      for (const warning of r.report.warnings)
+        yield* Console.error(`warning in ${r.frame}: ${warning.message}`);
+      for (const node of flattenLayers(r.report.tree))
+        yield* Console.log(
+          `  ${node.path}  (${Math.round(node.box.width)}×${Math.round(node.box.height)})`,
+        );
+    }
+    for (const crop of r.crops ?? [])
+      yield* Console.log(
+        `${relative(process.cwd(), crop.path)}  (${crop.width}×${crop.height}, ${crop.layer})`,
       );
     if (r.error) {
       failed = true;

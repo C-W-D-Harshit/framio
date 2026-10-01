@@ -4,14 +4,27 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import baseline from "../../docs/effect-v4-baseline.json";
 
-test("user code stays byte-identical and contains no Effect dependency", () => {
-  const updatedSkillFiles = new Set([
+test("scaffold changes are limited to layer examples and agent guidance, with no Effect imports", () => {
+  const layerUpdates = new Set([
     "src/scaffold/skill/SKILL.md",
     "src/scaffold/skill/references/process.md",
     "src/scaffold/skill/references/skills.md",
+    "src/scaffold/pages/00-example/sign-in.tsx",
+    "src/scaffold/pages/00-example/sign-in--split.tsx",
   ]);
   for (const [file, hash] of Object.entries(baseline.scaffold)) {
-    if (updatedSkillFiles.has(file)) continue;
+    if (layerUpdates.has(file)) {
+      const content = readFileSync(
+        resolve(import.meta.dir, "../..", file),
+        "utf8",
+      );
+      expect(content).not.toMatch(/from ["'](?:effect|@effect\/)/);
+      if (!file.endsWith("skills.md"))
+        expect(content).toContain(
+          file.includes("process.md") ? "framio inspect" : "data-layer",
+        );
+      continue;
+    }
     expect(
       createHash("sha256")
         .update(readFileSync(resolve(import.meta.dir, "../..", file)))

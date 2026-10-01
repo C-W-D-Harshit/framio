@@ -1,3 +1,4 @@
+import type { LayerWarning } from "../contracts/layers";
 import { readComments } from "./comments";
 import type { Comment } from "../contracts/comments";
 import { viewports, viewportId } from "../domain/viewports";
@@ -43,6 +44,7 @@ export type ProjectGeneration = {
   css: { text: string; error: string | null; version: number };
   imageVersions: ReadonlyMap<string, number>;
   runtimeErrors: ReadonlyMap<string, string>;
+  layerWarnings?: ReadonlyMap<string, readonly (typeof LayerWarning.Type)[]>;
 };
 export function projectSnapshot(
   root: string,
@@ -266,6 +268,11 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         artifacts: built.artifacts,
         imageVersions,
         runtimeErrors,
+        layerWarnings: new Map(
+          [...(previous.layerWarnings ?? [])].filter(
+            ([id]) => currentViewportIds.has(id) && !changedViewportIds.has(id),
+          ),
+        ),
         css: {
           text: theme.css,
           error: theme.error,
@@ -362,7 +369,28 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
           });
         yield* fs.writeFileString(
           p.errorsFile,
-          JSON.stringify({ errors }, null, 2) + "\n",
+          JSON.stringify(
+            {
+              errors,
+              warnings: value.pages.flatMap((page) =>
+                page.frames.flatMap((frame) =>
+                  viewports(frame.meta).flatMap((v) =>
+                    (
+                      value.layerWarnings?.get(
+                        viewportId(frame.id, frame.meta, v.width),
+                      ) ?? []
+                    ).map((w) => ({
+                      frame: frame.id,
+                      ...(frame.meta.widths ? { width: v.width } : {}),
+                      ...w,
+                    })),
+                  ),
+                ),
+              ),
+            },
+            null,
+            2,
+          ) + "\n",
         );
       }).pipe(
         Effect.catch((error) =>

@@ -25,11 +25,15 @@ with TemporaryDirectory(prefix="framio-binary-init-") as directory:
         timeout=30,
     )
     count = 0
-    # User code keeps the migration baseline. Skills intentionally evolve with product features.
+    # Compare intentional layer examples and skill updates against the checked-out sources.
+    updated_examples = {
+        "src/scaffold/pages/00-example/sign-in.tsx",
+        "src/scaffold/pages/00-example/sign-in--split.tsx",
+    }
     expected_files = {
         source: expected
         for source, expected in baseline["scaffold"].items()
-        if not source.startswith("src/scaffold/skill/")
+        if not source.startswith("src/scaffold/skill/") and source not in updated_examples
     }
     expected_files.update(
         {
@@ -38,6 +42,12 @@ with TemporaryDirectory(prefix="framio-binary-init-") as directory:
             ).hexdigest()
             for source in (repo / "src/scaffold/skill").rglob("*")
             if source.is_file()
+        }
+    )
+    expected_files.update(
+        {
+            source: hashlib.sha256((repo / source).read_bytes()).hexdigest()
+            for source in updated_examples
         }
     )
     for source, expected in expected_files.items():

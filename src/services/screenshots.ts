@@ -1,3 +1,4 @@
+import { captureFrameLayers, type LayerShot } from "../server/layers/capture";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,13 +18,13 @@ import {
 } from "../server/page-composition";
 import { BrowserUnavailable, CaptureFailed } from "../domain/errors";
 
-type Shot = {
-  path: string;
-  width: number;
-  height: number;
-  error: string | null;
-};
+type Shot = LayerShot;
 type CaptureError = CaptureFailed | BrowserUnavailable;
+type CaptureOptions = {
+  layers?: readonly string[];
+  inspectOnly?: boolean;
+  emitLayers?: boolean;
+};
 export class Screenshots extends Context.Service<
   Screenshots,
   {
@@ -31,6 +32,7 @@ export class Screenshots extends Context.Service<
       frame: Frame,
       out: string,
       scale?: number,
+      options?: CaptureOptions,
     ) => Effect.Effect<Shot, CaptureError>;
     captureUrl: (
       url: string,
@@ -98,7 +100,16 @@ export class Screenshots extends Context.Service<
         );
 
         const capture = Effect.fn("Screenshots.capture")(
-          (frame: Frame, out: string, scale = 1) =>
+          (
+            frame: Frame,
+            out: string,
+            scale = 1,
+            {
+              layers = [],
+              inspectOnly = false,
+              emitLayers = true,
+            }: CaptureOptions = {},
+          ) =>
             resources.withPage((page) =>
               Effect.gen(function* () {
                 const { width, height } = frame.meta;
@@ -106,6 +117,10 @@ export class Screenshots extends Context.Service<
                   page.setViewport({ width, height, deviceScaleFactor: scale }),
                 );
                 if (frame.kind === "image") {
+                  if (layers.length)
+                    return yield* new CaptureFailed({
+                      message: "Image frames have no DOM layers.",
+                    });
                   const src = `${baseUrl}/img/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}?v=${Date.now()}`;
                   yield* chromiumOperation(() =>
                     page.setContent(
@@ -168,18 +183,17 @@ export class Screenshots extends Context.Service<
                       ),
                   ),
                 );
-                yield* write(
+                return yield* captureFrameLayers(
+                  page,
                   out,
-                  yield* chromiumOperation(() =>
-                    page.screenshot({ type: "png" }),
-                  ),
-                );
-                return {
-                  path: out,
                   width,
-                  height: fullHeight,
-                  error: state.error,
-                };
+                  fullHeight,
+                  state.error,
+                  layers,
+                  inspectOnly,
+                  write,
+                  emitLayers,
+                );
               }),
             ),
         );

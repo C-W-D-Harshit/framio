@@ -156,7 +156,8 @@ first, then change what the brief calls for.
 
 **Goal:** catch what a senior designer would catch.
 
-1. `framio screenshot --page <page>` and look at the whole flow together, then at single frames.
+1. Run `framio inspect <page>/<frame>` and fix its findings, then review the layer crops.
+   Finish with full-frame and `framio screenshot --page <page>` reviews.
 2. Critique against the loaded skills (`impeccable`, `critique`, `better-ui`): hierarchy,
    alignment, spacing, contrast, density, consistency with DESIGN.md, generic "AI-looking"
    patterns (purple gradients, nested cards, emoji icons, centered-everything layouts).

@@ -15,10 +15,11 @@ import { Effect } from "effect";
 import puppeteer from "puppeteer-core";
 import { ensureBrowser } from "../../src/lib/browser";
 import { runServer } from "../../src/server/server";
+import type { LayerReport } from "../../src/contracts/layers";
 import { imageSize } from "../../src/server/image-size";
 
 const source = (title = "Invoice overview", margin = 40) =>
-  `export const meta={name:"Invoices",widths:[1440,768,390],height:900};export default function Frame(){return <main style={{padding:${margin}, minHeight:"100vh",background:"#f7f5f2"}}><h1 style={{fontSize:32}}>${title}</h1><p>Responsive test fixture</p></main>}`;
+  `export const meta={name:"Invoices",widths:[1440,768,390],height:900};export default function Frame(){return <main data-layer="Content" style={{padding:${margin}, minHeight:"100vh",background:"#f7f5f2"}}><h1 data-layer="Heading" style={{fontSize:32}}>${title}</h1><p>Responsive test fixture</p></main>}`;
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "framio-v01-"));
   mkdirSync(join(root, ".framio/pages/01-test"), { recursive: true });
@@ -121,6 +122,11 @@ test("URL handoff, compare, imports, and responsive captures render actual PNGs"
               "invoices@768.png",
               "invoices@390.png",
             ]);
+            expect(
+              responsive.results.map(
+                (shot: { report: LayerReport }) => shot.report.width,
+              ),
+            ).toEqual([1440, 768, 390]);
             for (const [i, width] of [1440, 768, 390].entries())
               expect(
                 imageSize(
@@ -183,6 +189,42 @@ test("URL handoff, compare, imports, and responsive captures render actual PNGs"
               "390": "Mobile-only diagnostic",
             });
             expect(updated.pages[0].frames[0].error).toBeNull();
+            for (const width of [1440, 390])
+              await post(info.url, "frame-status", {
+                id: "01-test/invoices",
+                width,
+                version: snapshot.pages[0].frames[0].version,
+                error: null,
+                warnings: [{ path: "Content", message: `Warning at ${width}` }],
+              });
+            await waitUntil(() =>
+              [1440, 390].every((width) =>
+                json(root, ".state/errors.json").warnings.some(
+                  (warning: {
+                    frame: string;
+                    width: number;
+                    message: string;
+                  }) =>
+                    warning.frame === "01-test/invoices" &&
+                    warning.width === width &&
+                    warning.message === `Warning at ${width}`,
+                ),
+              ),
+            );
+            await post(info.url, "frame-status", {
+              id: "01-test/invoices",
+              width: 390,
+              version: snapshot.pages[0].frames[0].version - 1,
+              error: null,
+              warnings: [{ path: "", message: "Stale warning" }],
+            });
+            expect(
+              json(root, ".state/errors.json").warnings.some(
+                (warning: { message: string }) =>
+                  warning.message === "Stale warning",
+              ),
+            ).toBe(false);
+
             expect(
               (await fetch(`${info.url}/f/01-test/invoices?width=0`)).status,
             ).toBe(400);
@@ -450,6 +492,40 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
               expect(json(root, ".state/selection.json").frames[0].frame).toBe(
                 "01-test/invoices",
               );
+              await page.waitForSelector('[data-layer-row="Content"]');
+              await waitUntil(
+                () =>
+                  json(root, ".state/selection.json").layer?.path ===
+                  "Content/Heading",
+              );
+              expect(json(root, ".state/selection.json").layer.path).toBe(
+                "Content/Heading",
+              );
+              const layerButton = await page.$(
+                '[data-layer-row="Content"] button[title="Content"]',
+              );
+              await layerButton!.click();
+              await waitUntil(
+                () =>
+                  json(root, ".state/selection.json").layer?.path === "Content",
+              );
+              expect(json(root, ".state/selection.json").width).toBe(390);
+              // Switching the selected viewport keeps layer actions on that viewport.
+              const desktopLabel = await page.$(
+                '[data-id="__viewport__/01-test/invoices/1440"] .frame-drag',
+              );
+              await desktopLabel!.click();
+              await waitUntil(
+                () => json(root, ".state/selection.json").width === 1440,
+              );
+              await page.click(
+                '[data-layer-row="Content"] button[title="Content"]',
+              );
+              await waitUntil(
+                () =>
+                  json(root, ".state/selection.json").layer?.path === "Content",
+              );
+              expect(json(root, ".state/selection.json").width).toBe(1440);
               // Drag one label; all siblings share one persisted frame position.
               const handle = await page.$(
                 '[data-id="__viewport__/01-test/invoices/1440"] .frame-drag',

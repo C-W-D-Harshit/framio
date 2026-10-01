@@ -1,6 +1,7 @@
 import * as Predicate from "effect/Predicate";
 import * as Effect from "effect/Effect";
 import { readFileSync, renameSync, unlinkSync } from "node:fs";
+import { basename } from "node:path";
 import { InvalidInput } from "../domain/errors";
 /** Compare immediately before rename without an asynchronous gap in this process. */
 export const publishIfUnchanged = (
@@ -27,6 +28,6 @@ export const publishIfUnchanged = (
     },
     catch: (cause) =>
       new InvalidInput({
-        message: `Could not save comments.json: ${String(cause)}`,
+        message: `Could not save ${basename(file)}: ${String(cause)}`,
       }),
   });

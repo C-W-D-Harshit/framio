@@ -175,6 +175,8 @@ describe("v0.1 files and commands", () => {
       );
       for (const input of [
         { url: "file:///etc/passwd" },
+        { url: "https://example.com", layers: ["Header"] },
+        { page: "one", layers: ["Header"] },
         { url: "invalid" },
         { url: "https://example.com", frames: ["one"] },
         { compare: "page/frame" },

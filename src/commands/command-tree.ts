@@ -1,3 +1,4 @@
+import { inspect } from "./inspect";
 import * as Effect from "effect/Effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { add } from "./add";
@@ -47,9 +48,22 @@ const makeRoot = () =>
         ({ items, overwrite }) => add(items, overwrite),
       ),
       Command.make(
+        "inspect",
+        {
+          frame: Argument.String("frame"),
+          width: Flag.Finite("width").pipe(
+            Flag.withSchema(ViewportDimension),
+            Flag.optional,
+          ),
+          layer: Flag.String("layer").pipe(Flag.optional),
+        },
+        inspect,
+      ),
+      Command.make(
         "screenshot",
         {
           frames: Argument.String("frame").pipe(Argument.variadic()),
+          layers: Flag.String("layer").pipe(Flag.atLeast(0)),
           page: Flag.String("page").pipe(Flag.optional),
           url: Flag.String("url").pipe(Flag.optional),
           compare: Flag.String("compare").pipe(Flag.optional),

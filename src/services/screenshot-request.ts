@@ -1,3 +1,4 @@
+import type { LayerObservation } from "../server/layers/api";
 import * as Semaphore from "effect/Semaphore";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -25,6 +26,9 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
     project: ProjectState["Service"],
     shots: Screenshots["Service"],
     fs: FileSystem.FileSystem,
+    reportWarnings: (
+      reports: readonly LayerObservation[],
+    ) => Effect.Effect<unknown> = () => Effect.void,
   ) {
     const serial = yield* Semaphore.make(1);
     return Effect.fn("Server.screenshot")(function* (
@@ -40,7 +44,8 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
             { frame: body.url ?? "screenshot", error: valid.failure.message },
           ],
         };
-      return yield* project.withStableState((state) =>
+      const reports: LayerObservation[] = [];
+      const result = yield* project.withStableState((state) =>
         Effect.gen(function* () {
           const capture = (
             frame: Frame,
@@ -55,8 +60,21 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                   `${frame.slug}${frame.meta.widths || body.width ? `@${frame.meta.width}` : ""}.png`,
                 ),
                 scale,
+                { layers: body.layers },
               )
               .pipe(
+                Effect.tap((shot) =>
+                  Effect.sync(() => {
+                    if (shot.report)
+                      reports.push({
+                        id: frame.id,
+                        width: frame.meta.width,
+                        version:
+                          state.artifacts.frames.get(frame.id)?.version ?? 0,
+                        report: shot.report,
+                      });
+                  }),
+                ),
                 Effect.map((shot) => ({
                   frame: frame.id,
                   file: frame.relFile,
@@ -299,6 +317,8 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
           };
         }),
       );
+      yield* reportWarnings(reports);
+      return result;
     }, serial.withPermit);
   },
 );
