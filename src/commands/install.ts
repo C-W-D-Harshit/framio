@@ -1,11 +1,17 @@
+import * as Effect from "effect/Effect";
 import { runBun } from "../lib/bun";
 import { projectPaths } from "../lib/paths";
-import { CliError, requireProject } from "./shared";
+import { requireProject } from "./shared";
+import { PackageCommandFailed } from "../domain/errors";
 
-/** Adds packages to .framio/package.json using the Bun bundled inside framio. */
-export async function install(args: string[]) {
-  const p = projectPaths(requireProject());
-  const pkgs = args.filter((a) => !a.startsWith("-"));
-  const { code } = await runBun(pkgs.length ? ["add", ...pkgs] : ["install"], p.framio);
-  if (code !== 0) throw new CliError("Install failed.");
-}
+export const install = Effect.fn("install")(function* (
+  packages: readonly string[],
+) {
+  const p = projectPaths(yield* requireProject);
+  const result = yield* runBun(
+    packages.length ? ["add", ...packages] : ["install"],
+    p.framio,
+  );
+  if (result.code !== 0)
+    return yield* new PackageCommandFailed({ message: "Install failed." });
+});

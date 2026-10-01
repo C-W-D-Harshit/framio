@@ -1,6 +1,5 @@
-import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 export const FRAMIO_DIR = ".framio";
 
@@ -8,21 +7,10 @@ export const FRAMIO_DIR = ".framio";
 export const GLOBAL_DIR = join(homedir(), ".framio");
 export const BROWSERS_DIR = join(GLOBAL_DIR, "browsers");
 
-/** Walks up from `from` to find the nearest directory containing `.framio`. */
-export function findProjectRoot(from = process.cwd()): string | null {
-  let dir = resolve(from);
-  while (true) {
-    if (existsSync(join(dir, FRAMIO_DIR))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
 export type ProjectPaths = ReturnType<typeof projectPaths>;
 
 export function projectPaths(root: string) {
-  root = realpathSync(root);
+  root = resolve(root);
   const framio = join(root, FRAMIO_DIR);
   const state = join(framio, ".state");
   return {

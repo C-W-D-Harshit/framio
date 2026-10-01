@@ -1,4 +1,4 @@
-import type { SnapshotFrame } from "../server/server";
+import type { SnapshotFrame } from "../contracts/snapshot";
 
 type Pos = { x: number; y: number };
 
@@ -11,7 +11,7 @@ const GAP_Y = 200;
  * to its parent, so a new variation of a moved frame still lands next to it.
  */
 export function layoutFrames(
-  frames: SnapshotFrame[],
+  frames: readonly SnapshotFrame[],
   heights: Record<string, number>,
   saved: Record<string, Pos>,
 ): Record<string, Pos> {
@@ -30,7 +30,10 @@ export function layoutFrames(
   const subtreeHeight = new Map<string, number>();
   const measure = (f: SnapshotFrame): number => {
     const kids = children.get(f.id) ?? [];
-    const kidsHeight = kids.reduce((sum, k, i) => sum + measure(k) + (i ? GAP_Y : 0), 0);
+    const kidsHeight = kids.reduce(
+      (sum, k, i) => sum + measure(k) + (i ? GAP_Y : 0),
+      0,
+    );
     const total = Math.max(h(f), kidsHeight);
     subtreeHeight.set(f.id, total);
     return total;
@@ -75,7 +78,10 @@ export function layoutFrames(
     else if (parent && final[parent.id]) {
       const pa = auto[parent.id]!;
       const pf = final[parent.id]!;
-      final[f.id] = { x: pf.x + auto[f.id]!.x - pa.x, y: pf.y + auto[f.id]!.y - pa.y };
+      final[f.id] = {
+        x: pf.x + auto[f.id]!.x - pa.x,
+        y: pf.y + auto[f.id]!.y - pa.y,
+      };
     } else final[f.id] = auto[f.id]!;
     for (const k of children.get(f.id) ?? []) resolve(k);
   };

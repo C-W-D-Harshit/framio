@@ -11,6 +11,6 @@
     "noUncheckedIndexedAccess": true,
     "types": ["bun"]
   },
-  "include": ["src", "scripts", "tests"],
+  "include": ["src", "scripts", "tests", "vitest.effect.config.ts"],
   "exclude": ["src/scaffold"]
 }

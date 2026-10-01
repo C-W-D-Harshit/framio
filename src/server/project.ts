@@ -1,89 +1,76 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Schema from "effect/Schema";
 import { join, relative } from "node:path";
 import type { ProjectPaths } from "../lib/paths";
+import { InvalidInput } from "../domain/errors";
+import { parseMetaLiteral } from "./meta-literal";
 import { imageSize } from "./image-size";
-
-export type FrameMeta = {
-  name: string;
-  /** Viewport width in px. */
-  width: number;
-  /** Viewport height in px. `h-screen` / `vh` units resolve against this. */
-  height: number;
-  /** Slug of the frame this one is a variation of ("slug" in the same page, or "page/slug"). */
-  variationOf?: string;
-  theme?: "light" | "dark";
-};
-
-export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "svg"];
-
-export type Frame = {
-  id: string; // "<page>/<slug>"
-  /** "tsx": a React mockup. "image": a reference, moodboard shot, or generated image placed on the canvas. */
-  kind: "tsx" | "image";
-  page: string;
-  /** File name without extension for tsx frames, full file name for images. */
-  slug: string;
-  /** Images only: a caption shown under the frame, e.g. what to borrow from a reference. */
-  note?: string;
-  /** Images only: where the image came from (Mobbin link, URL). */
-  source?: string;
-  file: string; // absolute
-  relFile: string; // relative to the project root
-  meta: FrameMeta;
-  /** Resolved id of the parent frame, when variationOf points at an existing frame. */
-  parent: string | null;
-  metaError?: string;
-};
-
-export type Page = {
-  id: string; // directory name
-  name: string;
-  frames: Frame[];
-  positions: Record<string, { x: number; y: number }>;
-};
-
+import {
+  FrameMeta,
+  FrameMetaInput,
+  ImageSidecar,
+  CanvasFile,
+  IMAGE_EXTENSIONS,
+  type Frame,
+  type Page,
+} from "../domain/project";
+export { IMAGE_EXTENSIONS };
+export type { FrameMeta, Frame, Page } from "../domain/project";
 const DEFAULT_META: FrameMeta = { name: "", width: 1440, height: 900 };
-
 export function prettyPageName(dir: string) {
-  const name = dir.replace(/^\d+[-_ ]+/, "").replace(/[-_]+/g, " ").trim();
+  const name = dir
+    .replace(/^\d+[-_ ]+/, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
   return name ? name[0]!.toUpperCase() + name.slice(1) : dir;
 }
-
-/** Extracts the object literal after `export const meta =` without executing the frame module. */
 export function parseMeta(source: string): Partial<FrameMeta> {
   const match = /export\s+const\s+meta\s*(?::[^=]+)?=\s*/.exec(source);
   if (!match) return {};
-  const start = source.indexOf("{", match.index + match[0].length - 1);
-  if (start === -1) return {};
-  let depth = 0;
-  let quote: string | null = null;
-  for (let i = start; i < source.length; i++) {
-    const ch = source[i]!;
-    if (quote) {
-      if (ch === "\\") i++;
-      else if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
-    else if (ch === "{") depth++;
-    else if (ch === "}" && --depth === 0) {
-      const literal = source.slice(start, i + 1).replace(/\}\s*as\s+const\s*$/, "}");
-      return new Function(`return (${literal});`)() as Partial<FrameMeta>;
-    }
-  }
-  return {};
+  const input = Schema.decodeUnknownSync(FrameMetaInput)(
+    parseMetaLiteral(source, match.index + match[0].length),
+  );
+  return {
+    ...input,
+    width: input.width === undefined ? undefined : Number(input.width) || 1440,
+    height:
+      input.height === undefined ? undefined : Number(input.height) || 900,
+  };
 }
 
-function readFrame(p: ProjectPaths, page: string, fileName: string): Frame {
+const readFrame = Effect.fn("Project.readFrame")(function* (
+  p: ProjectPaths,
+  page: string,
+  fileName: string,
+): Effect.fn.Return<
+  Frame,
+  import("effect/PlatformError").PlatformError,
+  FileSystem.FileSystem
+> {
+  const fs = yield* FileSystem.FileSystem;
   const slug = fileName.replace(/\.tsx$/, "");
   const file = join(p.pages, page, fileName);
-  let meta: Partial<FrameMeta> = {};
-  let metaError: string | undefined;
-  try {
-    meta = parseMeta(readFileSync(file, "utf8"));
-  } catch (err) {
-    metaError = `Could not read \`export const meta\`: ${(err as Error).message}`;
-  }
+  const source = yield* fs.readFileString(file).pipe(Effect.result);
+  const result =
+    source._tag === "Failure"
+      ? source
+      : yield* Effect.try({
+          try: () => {
+            const meta = parseMeta(source.success);
+            return Schema.decodeUnknownSync(FrameMeta)({
+              ...DEFAULT_META,
+              name: slug,
+              ...meta,
+              width: meta.width ?? 1440,
+              height: meta.height ?? 900,
+            });
+          },
+          catch: (cause) =>
+            new InvalidInput({
+              message: cause instanceof Error ? cause.message : String(cause),
+            }),
+        }).pipe(Effect.result);
   return {
     id: `${page}/${slug}`,
     kind: "tsx",
@@ -91,47 +78,65 @@ function readFrame(p: ProjectPaths, page: string, fileName: string): Frame {
     slug,
     file,
     relFile: relative(p.root, file),
-    meta: {
-      ...DEFAULT_META,
-      name: slug,
-      ...meta,
-      width: Number(meta.width) || DEFAULT_META.width,
-      height: Number(meta.height) || DEFAULT_META.height,
-    },
+    content: source._tag === "Success" ? source.success : undefined,
+    meta:
+      result._tag === "Success"
+        ? result.success
+        : { ...DEFAULT_META, name: slug },
     parent: null,
-    metaError,
-  };
-}
-
-/**
- * Images get their size from the file. Optional sidecar `<file>.json` sets
- * { name, width, note, source, variationOf }. Images 2400px or wider are assumed to be @2x.
- */
-function readImage(p: ProjectPaths, page: string, fileName: string): Frame {
+    metaError:
+      result._tag === "Failure"
+        ? `Could not read \`export const meta\`: ${result.failure.message}`
+        : undefined,
+  } satisfies Frame;
+});
+const readImage = Effect.fn("Project.readImage")(function* (
+  p: ProjectPaths,
+  page: string,
+  fileName: string,
+): Effect.fn.Return<
+  Frame,
+  import("effect/PlatformError").PlatformError,
+  FileSystem.FileSystem
+> {
+  const fs = yield* FileSystem.FileSystem;
   const file = join(p.pages, page, fileName);
-  const ext = fileName.split(".").pop()!.toLowerCase();
-  let side: { name?: string; width?: number; note?: string; source?: string; variationOf?: string } = {};
-  let metaError: string | undefined;
-  const sidecar = `${file}.json`;
-  if (existsSync(sidecar)) {
-    try {
-      const parsed = JSON.parse(readFileSync(sidecar, "utf8"));
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Expected an object");
-      for (const key of ["name", "note", "source", "variationOf"]) {
-        if (parsed[key] !== undefined && typeof parsed[key] !== "string") throw new Error(`${key} must be a string`);
-      }
-      if (parsed.width !== undefined && (typeof parsed.width !== "number" || !Number.isFinite(parsed.width) || parsed.width <= 0))
-        throw new Error("width must be a positive number");
-      side = parsed;
-    } catch (err) {
-      metaError = `Could not parse ${fileName}.json: ${(err as Error).message}`;
-    }
-  }
-  const detected = imageSize(new Uint8Array(readFileSync(file)), ext);
-  if (!detected) metaError ??= `Could not read dimensions of ${fileName}. Check the image format or file contents.`;
+  const sidecar = yield* fs
+    .readFileString(`${file}.json`)
+    .pipe(
+      Effect.catchReason("PlatformError", "NotFound", () =>
+        Effect.succeed(null),
+      ),
+    );
+  const result = yield* (
+    sidecar === null
+      ? Effect.succeed({})
+      : Schema.decodeUnknownEffect(Schema.fromJsonString(ImageSidecar))(sidecar)
+  ).pipe(Effect.result);
+  const side: typeof ImageSidecar.Type =
+    result._tag === "Success" ? result.success : {};
+  let metaError =
+    result._tag === "Failure"
+      ? `Could not parse ${fileName}.json: ${result.failure.message}`
+      : undefined;
+  const imageContent = yield* fs.readFile(file);
+  const detected = imageSize(
+    imageContent,
+    fileName.split(".").pop()!.toLowerCase(),
+  );
+  if (!detected)
+    metaError ??= `Could not read dimensions of ${fileName}. Check the image format or file contents.`;
   const natural = detected ?? { width: 1440, height: 900 };
-  const width = Math.max(1, Math.round(side.width ?? (natural.width >= 2400 ? natural.width / 2 : natural.width)));
-  const height = Math.max(1, Math.round((natural.height * width) / natural.width));
+  const width = Math.max(
+    1,
+    Math.round(
+      side.width ?? (natural.width >= 2400 ? natural.width / 2 : natural.width),
+    ),
+  );
+  const height = Math.max(
+    1,
+    Math.round((natural.height * width) / natural.width),
+  );
   return {
     id: `${page}/${fileName}`,
     kind: "image",
@@ -139,57 +144,98 @@ function readImage(p: ProjectPaths, page: string, fileName: string): Frame {
     slug: fileName,
     file,
     relFile: relative(p.root, file),
-    meta: { name: side.name ?? fileName.replace(/\.[^.]+$/, ""), width, height, variationOf: side.variationOf },
+    meta: {
+      name: side.name ?? fileName.replace(/\.[^.]+$/, ""),
+      width,
+      height,
+      variationOf: side.variationOf,
+    },
+    imageContent,
     note: side.note,
     source: side.source,
     parent: null,
     metaError,
-  };
-}
-
-function readPositions(p: ProjectPaths, page: string): Page["positions"] {
-  const file = join(p.pages, page, "canvas.json");
-  if (!existsSync(file)) return {};
-  try {
-    return JSON.parse(readFileSync(file, "utf8")).positions ?? {};
-  } catch {
-    return {};
-  }
-}
-
-export function scanProject(p: ProjectPaths): Page[] {
-  if (!existsSync(p.pages)) return [];
-  const pages: Page[] = readdirSync(p.pages)
-    .filter((dir) => !dir.startsWith(".") && statSync(join(p.pages, dir)).isDirectory())
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    .map((dir) => ({
+  } satisfies Frame;
+});
+export const scanProject = Effect.fn("Project.scan")(function* (
+  p: ProjectPaths,
+): Effect.fn.Return<
+  Page[],
+  import("effect/PlatformError").PlatformError,
+  FileSystem.FileSystem
+> {
+  const fs = yield* FileSystem.FileSystem;
+  if (!(yield* fs.exists(p.pages))) return [];
+  const dirs = (yield* fs.readDirectory(p.pages))
+    .filter((dir) => !dir.startsWith("."))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const pages: Page[] = [];
+  for (const dir of dirs) {
+    if ((yield* fs.stat(join(p.pages, dir))).type !== "Directory") continue;
+    const files = (yield* fs.readDirectory(join(p.pages, dir)))
+      .filter(
+        (file) =>
+          file.endsWith(".tsx") ||
+          IMAGE_EXTENSIONS.includes(file.split(".").pop()!.toLowerCase()),
+      )
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const frames = yield* Effect.forEach(
+      files,
+      (file) =>
+        file.endsWith(".tsx")
+          ? readFrame(p, dir, file)
+          : readImage(p, dir, file),
+      { concurrency: 8 },
+    );
+    const canvas = yield* fs
+      .readFileString(join(p.pages, dir, "canvas.json"))
+      .pipe(
+        Effect.catchReason("PlatformError", "NotFound", () =>
+          Effect.succeed("{}"),
+        ),
+      );
+    const parsed = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(CanvasFile),
+    )(canvas).pipe(Effect.result);
+    pages.push({
       id: dir,
       name: prettyPageName(dir),
-      frames: readdirSync(join(p.pages, dir))
-        .filter((f) => f.endsWith(".tsx") || IMAGE_EXTENSIONS.includes(f.split(".").pop()!.toLowerCase()))
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-        .map((f) => (f.endsWith(".tsx") ? readFrame(p, dir, f) : readImage(p, dir, f))),
-      positions: readPositions(p, dir),
-    }));
-
-  const byId = new Map(pages.flatMap((pg) => pg.frames.map((f) => [f.id, f] as const)));
-  for (const frame of byId.values()) {
-    const ref = frame.meta.variationOf;
-    if (!ref) continue;
-    const id = ref.includes("/") ? ref : `${frame.page}/${ref}`;
-    if (id !== frame.id && byId.has(id)) frame.parent = id;
+      frames,
+      positions:
+        parsed._tag === "Success" ? (parsed.success.positions ?? {}) : {},
+    });
   }
-  return pages;
-}
-
+  const byId = new Map(
+    pages.flatMap((page) =>
+      page.frames.map((frame) => [frame.id, frame] as const),
+    ),
+  );
+  return pages.map((page) => ({
+    ...page,
+    frames: page.frames.map((frame) => {
+      const ref = frame.meta.variationOf;
+      if (!ref) return frame;
+      const id = ref.includes("/") ? ref : `${frame.page}/${ref}`;
+      return id !== frame.id && byId.has(id) ? { ...frame, parent: id } : frame;
+    }),
+  }));
+});
 /** Resolves "page/slug" or a bare "slug" (if unique across pages) to a frame. */
-export function findFrame(pages: Page[], ref: string): Frame | { error: string } {
+export function findFrame(
+  pages: readonly Page[],
+  ref: string,
+): Frame | { error: string } {
   const all = pages.flatMap((pg) => pg.frames);
   const clean = ref.replace(/^\.framio\/pages\//, "").replace(/\.tsx$/, "");
   const exact = all.find((f) => f.id === clean);
   if (exact) return exact;
   const matches = all.filter((f) => f.slug === clean);
   if (matches.length === 1) return matches[0]!;
-  if (matches.length > 1) return { error: `"${ref}" is ambiguous: ${matches.map((f) => f.id).join(", ")}` };
-  return { error: `No frame "${ref}". Frames: ${all.map((f) => f.id).join(", ") || "(none)"}` };
+  if (matches.length > 1)
+    return {
+      error: `"${ref}" is ambiguous: ${matches.map((f) => f.id).join(", ")}`,
+    };
+  return {
+    error: `No frame "${ref}". Frames: ${all.map((f) => f.id).join(", ") || "(none)"}`,
+  };
 }

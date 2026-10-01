@@ -1,6 +1,6 @@
 {
   "name": "framio",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A design canvas for coding agents.",
   "license": "MIT",
   "author": "Harshit",
@@ -20,24 +20,42 @@
     "dev:ui": "bun run scripts/build-ui.ts --watch",
     "build:binary": "bun run scripts/build-binary.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test tests"
+    "test": "bun run test:all",
+    "test:effect": "vitest run --config vitest.effect.config.ts",
+    "test:integration": "bun test tests/integration",
+    "test:all": "bun run test:effect && bun run test:integration",
+    "check": "bun run typecheck && bun run test:all",
+    "format": "prettier --write src scripts tests package.json tsconfig.json vitest.effect.config.ts .github",
+    "format:check": "prettier --check src scripts tests package.json tsconfig.json vitest.effect.config.ts .github"
   },
   "dependencies": {
+    "@effect/atom-react": "4.0.0",
+    "@effect/platform-bun": "4.0.0",
     "@puppeteer/browsers": "3.2.3",
     "@tailwindcss/node": "^4.3.3",
     "@tailwindcss/oxide": "^4.3.3",
     "@xyflow/react": "^12.12.0",
+    "acorn": "8.15.0",
+    "effect": "4.0.0",
     "lucide-react": "^1.49.0",
     "puppeteer-core": "^25.12.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "scheduler": "0.27.0",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@effect/vitest": "4.0.0",
     "@types/bun": "latest",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "bun-plugin-tailwind": "latest",
-    "typescript": "^5.9.0"
+    "prettier": "3.9.9",
+    "typescript": "^5.9.0",
+    "vitest": "5.0.3"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
   }
 }

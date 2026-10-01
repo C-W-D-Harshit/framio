@@ -9,8 +9,30 @@ import {
   type NodeTypes,
   type Viewport,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { Snapshot } from "../server/server";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import * as Schema from "effect/Schema";
+import * as Result from "effect/Result";
+import {
+  FrameMessage,
+  Viewport as ViewportSchema,
+} from "../contracts/frame-message";
+import { useAtom, useAtomSet } from "@effect/atom-react";
+import {
+  heightsAtom,
+  movedAtom,
+  selectionAtom,
+  saveSelectionAtom,
+  saveCanvasAtom,
+} from "./state";
+import type { ElementInfo as ElementContract } from "../contracts/requests";
+import type { Snapshot } from "../contracts/snapshot";
 import { ContextMenu } from "./context-menu";
 import { FrameNode, standaloneUrl, type FrameNodeType } from "./frame-node";
 import { layoutFrames } from "./layout";
@@ -18,8 +40,11 @@ import { Toolbar, type Tool } from "./toolbar";
 
 type Page = Snapshot["pages"][number];
 type Pos = { x: number; y: number };
-export type ElementInfo = { tag: string; text: string; selector: string };
-export type CanvasSelection = { frames: string[]; element: ElementInfo | null };
+export type ElementInfo = typeof ElementContract.Type;
+export type CanvasSelection = {
+  readonly frames: readonly string[];
+  readonly element: ElementInfo | null;
+};
 
 const nodeTypes: NodeTypes = { frame: FrameNode };
 const FIT = { padding: 0.15 };
@@ -32,7 +57,6 @@ type Props = {
   cssVersion: number;
   tool: Tool;
   onTool(tool: Tool): void;
-  onSelection(selection: CanvasSelection): void;
 };
 
 export function Canvas(props: Props) {
@@ -44,32 +68,63 @@ export function Canvas(props: Props) {
 }
 
 function postToFrames(msg: Record<string, unknown>, except?: string) {
-  for (const iframe of document.querySelectorAll<HTMLIFrameElement>("iframe[data-frame]")) {
-    if (iframe.dataset.frame !== except) iframe.contentWindow?.postMessage({ source: "framio-canvas", ...msg }, "*");
+  for (const iframe of document.querySelectorAll<HTMLIFrameElement>(
+    "iframe[data-frame]",
+  )) {
+    if (iframe.dataset.frame !== except)
+      iframe.contentWindow?.postMessage(
+        { source: "framio-canvas", ...msg },
+        "*",
+      );
   }
 }
 
 function useSavedViewport(key: string) {
   const [initial] = useState<Viewport | null>(() => {
     try {
-      return JSON.parse(localStorage.getItem(key) ?? "null");
+      const decoded = Schema.decodeUnknownResult(
+        Schema.fromJsonString(Schema.NullOr(ViewportSchema)),
+      )(localStorage.getItem(key) ?? "null");
+      return Result.isSuccess(decoded) ? decoded.success : null;
     } catch {
       return null;
     }
   });
-  const save = useCallback((vp: Viewport) => localStorage.setItem(key, JSON.stringify(vp)), [key]);
+  const save = useCallback(
+    (vp: Viewport) => localStorage.setItem(key, JSON.stringify(vp)),
+    [key],
+  );
   return [initial, save] as const;
 }
 
-function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection }: Props) {
+function CanvasInner({ page, projectName, cssVersion, tool, onTool }: Props) {
   const flow = useReactFlow<FrameNodeType>();
-  const [heights, setHeights] = useState<Record<string, number>>({});
-  const [savedViewport, saveViewport] = useSavedViewport(`framio:viewport:${projectName}/${page.id}`);
+  const [heights, setHeights] = useAtom(heightsAtom(page.id));
+  const saveSelection = useAtomSet(saveSelectionAtom);
+  const saveCanvas = useAtomSet(saveCanvasAtom);
+  const [savedViewport, saveViewport] = useSavedViewport(
+    `framio:viewport:${projectName}/${page.id}`,
+  );
 
   // --- Layout ---------------------------------------------------------------
   // Positions dragged in this session, applied before the server echoes canvas.json back.
-  const [moved, setMoved] = useState<Record<string, Pos>>({});
-  const saved = useMemo(() => ({ ...page.positions, ...moved }), [page.positions, moved]);
+  const [moved, setMoved] = useAtom(movedAtom(page.id));
+  useEffect(() => {
+    setMoved((current) => {
+      const entries = Object.entries(current).filter(
+        ([slug, position]) =>
+          page.positions[slug]?.x !== position.x ||
+          page.positions[slug]?.y !== position.y,
+      );
+      return entries.length === Object.keys(current).length
+        ? current
+        : Object.fromEntries(entries);
+    });
+  }, [page.positions, setMoved]);
+  const saved = useMemo(
+    () => ({ ...page.positions, ...moved }),
+    [page.positions, moved],
+  );
   const useThumbs = page.frames.length > THUMB_THRESHOLD;
 
   const laidOut = useMemo<FrameNodeType[]>(() => {
@@ -79,18 +134,28 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
       type: "frame",
       position: pos[frame.id]!,
       dragHandle: ".frame-drag",
-      data: { frame, height: heights[frame.id] ?? frame.meta.height, cssVersion, useThumbs },
+      data: {
+        frame,
+        height: heights[frame.id] ?? frame.meta.height,
+        cssVersion,
+        useThumbs,
+      },
     }));
   }, [page.frames, heights, saved, cssVersion, useThumbs]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<FrameNodeType>(laidOut);
+  const [nodes, setNodes, onNodesChange] =
+    useNodesState<FrameNodeType>(laidOut);
   useEffect(() => {
     setNodes((prev) => {
       const old = new Map(prev.map((n) => [n.id, n]));
       return laidOut.map((n) => {
         const o = old.get(n.id);
         if (!o) return n;
-        return { ...n, selected: o.selected, ...(o.dragging ? { position: o.position, dragging: true } : {}) };
+        return {
+          ...n,
+          selected: o.selected,
+          ...(o.dragging ? { position: o.position, dragging: true } : {}),
+        };
       });
     });
   }, [laidOut, setNodes]);
@@ -99,7 +164,12 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
     () =>
       page.frames
         .filter((f) => f.parent && page.frames.some((p) => p.id === f.parent))
-        .map((f) => ({ id: `${f.parent}->${f.id}`, source: f.parent!, target: f.id, selectable: false })),
+        .map((f) => ({
+          id: `${f.parent}->${f.id}`,
+          source: f.parent!,
+          target: f.id,
+          selectable: false,
+        })),
     [page.frames],
   );
 
@@ -108,7 +178,8 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
   const userMoved = useRef(savedViewport !== null);
   const autoFitting = useRef(false);
   useEffect(() => {
-    if (userMoved.current || performance.now() - mountedAt.current > 3000) return;
+    if (userMoved.current || performance.now() - mountedAt.current > 3000)
+      return;
     const raf = requestAnimationFrame(() => {
       autoFitting.current = true;
       flow.fitView(FIT).finally(() => (autoFitting.current = false));
@@ -117,16 +188,21 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
   }, [laidOut, flow]);
 
   // --- Selection ------------------------------------------------------------
-  const [selection, setSelection] = useState<CanvasSelection>({ frames: [], element: null });
+  const [selection, setSelection] = useAtom(selectionAtom);
   const selectFrames = useCallback(
-    (ids: string[]) => setNodes((ns) => ns.map((n) => ({ ...n, selected: ids.includes(n.id) }))),
+    (ids: readonly string[]) => {
+      const selected = new Set(ids);
+      setNodes((ns) => ns.map((n) => ({ ...n, selected: selected.has(n.id) })));
+    },
     [setNodes],
   );
 
   useEffect(() => {
-    onSelection(selection);
-    postToFrames({ type: "clear-selection" }, selection.element ? selection.frames[0] : undefined);
-  }, [selection, onSelection]);
+    postToFrames(
+      { type: "clear-selection" },
+      selection.element ? selection.frames[0] : undefined,
+    );
+  }, [selection]);
 
   // selection.json is what the agent reads; skip the initial empty state so reloads don't wipe it.
   const firstSave = useRef(true);
@@ -135,19 +211,18 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
       firstSave.current = false;
       return;
     }
-    const t = setTimeout(() => {
-      fetch("/api/selection", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(selection),
-      });
-    }, 150);
-    return () => clearTimeout(t);
-  }, [selection]);
+    saveSelection(selection);
+  }, [selection, saveSelection]);
 
   // --- Navigation helpers ---------------------------------------------------
   const zoomToFrames = useCallback(
-    (ids: string[]) => ids.length && flow.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.1, duration: 250 }),
+    (ids: readonly string[]) =>
+      ids.length &&
+      flow.fitView({
+        nodes: ids.map((id) => ({ id })),
+        padding: 0.1,
+        duration: 250,
+      }),
     [flow],
   );
 
@@ -166,7 +241,11 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
       const from = panFrom.current;
       if (!from) return;
       const vp = flow.getViewport();
-      flow.setViewport({ x: vp.x + x - from.x, y: vp.y + y - from.y, zoom: vp.zoom });
+      flow.setViewport({
+        x: vp.x + x - from.x,
+        y: vp.y + y - from.y,
+        zoom: vp.zoom,
+      });
       panFrom.current = { x, y };
       userMoved.current = true;
     },
@@ -192,7 +271,11 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
   };
 
   // --- Context menu ---------------------------------------------------------
-  const [menu, setMenu] = useState<{ x: number; y: number; frame: string } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    frame: string;
+  } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const menuFrame = menu && page.frames.find((f) => f.id === menu.frame);
 
@@ -200,7 +283,11 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
   const [showHelp, setShowHelp] = useState(false);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return;
       const mod = e.metaKey || e.ctrlKey;
       if (e.code === "Space") {
         e.preventDefault();
@@ -218,9 +305,17 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
         selectFrames(page.frames.map((f) => f.id));
       } else if (mod || e.altKey) {
         return;
-      } else if (e.shiftKey && e.code === "Digit1") flow.fitView({ ...FIT, duration: 250 });
-      else if (e.shiftKey && e.code === "Digit2") zoomToFrames(flow.getNodes().filter((n) => n.selected).map((n) => n.id));
-      else if (e.shiftKey && e.code === "Digit0") flow.zoomTo(1, { duration: 200 });
+      } else if (e.shiftKey && e.code === "Digit1")
+        flow.fitView({ ...FIT, duration: 250 });
+      else if (e.shiftKey && e.code === "Digit2")
+        zoomToFrames(
+          flow
+            .getNodes()
+            .filter((n) => n.selected)
+            .map((n) => n.id),
+        );
+      else if (e.shiftKey && e.code === "Digit0")
+        flow.zoomTo(1, { duration: 200 });
       else if (e.key === "?") setShowHelp((v) => !v);
       else if (e.key === "v" || e.key === "V") onTool("select");
       else if (e.key === "h" || e.key === "H") onTool("hand");
@@ -230,7 +325,8 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
         setSelection({ frames: [], element: null });
       }
     };
-    const onKeyUp = (e: KeyboardEvent) => e.code === "Space" && setSpaceHeld(false);
+    const onKeyUp = (e: KeyboardEvent) =>
+      e.code === "Space" && setSpaceHeld(false);
     const onBlur = () => {
       setSpaceHeld(false);
       endPan();
@@ -243,19 +339,38 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [flow, page.frames, onTool, selectFrames, zoomToFrames, endPan]);
+  }, [
+    flow,
+    page.frames,
+    onTool,
+    selectFrames,
+    zoomToFrames,
+    endPan,
+    setSelection,
+  ]);
 
   // --- Messages from frame iframes ------------------------------------------
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
-      const msg = e.data;
-      if (msg?.source !== "framio") return;
+      const decoded = Schema.decodeUnknownResult(FrameMessage)(e.data);
+      if (Result.isFailure(decoded)) return;
+      const msg = decoded.success;
+      const iframe = [
+        ...document.querySelectorAll<HTMLIFrameElement>("iframe[data-frame]"),
+      ].find(
+        (iframe) =>
+          iframe.dataset.frame === msg.frame &&
+          iframe.contentWindow === e.source,
+      );
+      if (!iframe || e.origin !== location.origin) return;
       const frame: string = msg.frame;
       switch (msg.type) {
         case "size":
         case "ready":
           if (typeof msg.height === "number")
-            setHeights((h) => (h[frame] === msg.height ? h : { ...h, [frame]: msg.height }));
+            setHeights((h) =>
+              h[frame] === msg.height ? h : { ...h, [frame]: msg.height },
+            );
           break;
         case "select":
           selectFrames([frame]);
@@ -294,12 +409,21 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [selectFrames, zoomToFrames, startPan, movePan, endPan]);
+  }, [
+    selectFrames,
+    zoomToFrames,
+    startPan,
+    movePan,
+    endPan,
+    setHeights,
+    setSelection,
+  ]);
 
   // Restyle frames in place when theme.css changes, instead of reloading every iframe.
   const firstCss = useRef(cssVersion);
   useEffect(() => {
-    if (cssVersion !== firstCss.current) postToFrames({ type: "css", version: cssVersion });
+    if (cssVersion !== firstCss.current)
+      postToFrames({ type: "css", version: cssVersion });
   }, [cssVersion]);
 
   return (
@@ -319,8 +443,13 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
         onSelectionChange={({ nodes: sel }) => {
           const ids = sel.map((n) => n.id).sort();
           setSelection((prev) => {
-            if (prev.frames.length === ids.length && prev.frames.every((id, i) => id === ids[i])) return prev;
-            const keepElement = prev.element && ids.length === 1 && ids[0] === prev.frames[0];
+            if (
+              prev.frames.length === ids.length &&
+              prev.frames.every((id, i) => id === ids[i])
+            )
+              return prev;
+            const keepElement =
+              prev.element && ids.length === 1 && ids[0] === prev.frames[0];
             return { frames: ids, element: keepElement ? prev.element : null };
           });
         }}
@@ -334,14 +463,14 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
           const positions: Record<string, Pos> = {};
           for (const n of dragged) {
             const frame = page.frames.find((f) => f.id === n.id);
-            if (frame) positions[frame.slug] = { x: Math.round(n.position.x), y: Math.round(n.position.y) };
+            if (frame)
+              positions[frame.slug] = {
+                x: Math.round(n.position.x),
+                y: Math.round(n.position.y),
+              };
           }
           setMoved((m) => ({ ...m, ...positions }));
-          fetch("/api/canvas", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ page: page.id, positions }),
-          });
+          saveCanvas({ page: page.id, positions });
         }}
         onMoveStart={() => {
           if (!autoFitting.current) userMoved.current = true;
@@ -368,7 +497,12 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
         proOptions={{ hideAttribution: true }}
       >
         <ZoomVar />
-        <Toolbar tool={tool} onTool={onTool} showHelp={showHelp} onToggleHelp={() => setShowHelp((v) => !v)} />
+        <Toolbar
+          tool={tool}
+          onTool={onTool}
+          showHelp={showHelp}
+          onToggleHelp={() => setShowHelp((v) => !v)}
+        />
       </ReactFlow>
 
       {menu && menuFrame && (
@@ -377,9 +511,19 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
           y={menu.y}
           onClose={closeMenu}
           items={[
-            { label: "Zoom to frame", hint: "Double-click", onSelect: () => zoomToFrames([menuFrame.id]) },
-            { label: "Open in new tab", onSelect: () => window.open(standaloneUrl(menuFrame), "_blank") },
-            { label: "Copy file path", onSelect: () => navigator.clipboard.writeText(menuFrame.relFile) },
+            {
+              label: "Zoom to frame",
+              hint: "Double-click",
+              onSelect: () => zoomToFrames([menuFrame.id]),
+            },
+            {
+              label: "Open in new tab",
+              onSelect: () => window.open(standaloneUrl(menuFrame), "_blank"),
+            },
+            {
+              label: "Copy file path",
+              onSelect: () => navigator.clipboard.writeText(menuFrame.relFile),
+            },
           ]}
         />
       )}
@@ -390,6 +534,9 @@ function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection 
 /** Exposes the zoom level to CSS so lines keep the same on-screen weight at any zoom. */
 function ZoomVar() {
   const zoom = useStore((s) => s.transform[2]);
-  useEffect(() => document.documentElement.style.setProperty("--zoom", String(zoom)), [zoom]);
+  useEffect(
+    () => document.documentElement.style.setProperty("--zoom", String(zoom)),
+    [zoom],
+  );
   return null;
 }
