@@ -92,7 +92,8 @@ Check each result at its intended display size and keep essential information in
 
 ## Precedence
 
-Framio's rules override any skill: frames are static React + Tailwind mockups inside `.framio`,
+When building the real app, follow `references/handoff.md` and the app's own conventions.
+During design work, Framio's rules override any skill: frames are static React + Tailwind mockups inside `.framio`,
 styled from DESIGN.md. Ignore instructions to scaffold apps, write HTML files, add routing, wire
 real data, or install packages anywhere but `.framio` (use `framio install` / `framio add`).
 Skills that describe animation still apply: design the resting and key states, and pick motion

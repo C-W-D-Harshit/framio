@@ -1,3 +1,4 @@
+import { Comment } from "./comments";
 import * as Schema from "effect/Schema";
 import { FrameMeta, Positions } from "../domain/project";
 
@@ -9,6 +10,8 @@ export const SnapshotFrame = Schema.Struct({
   relFile: Schema.String,
   meta: FrameMeta,
   parent: Schema.NullOr(Schema.String),
+  frameId: Schema.optional(Schema.String),
+  viewportErrors: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   note: Schema.optional(Schema.String),
   source: Schema.optional(Schema.String),
   version: Schema.Finite,
@@ -19,6 +22,8 @@ export const Snapshot = Schema.Struct({
   projectName: Schema.String,
   cssVersion: Schema.Finite,
   cssError: Schema.NullOr(Schema.String),
+  comments: Schema.optional(Schema.Array(Comment)),
+  commentsError: Schema.optional(Schema.NullOr(Schema.String)),
   pages: Schema.Array(
     Schema.Struct({
       id: Schema.String,

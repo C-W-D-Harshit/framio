@@ -1,8 +1,16 @@
 import { useReactFlow, useStore } from "@xyflow/react";
-import { Hand, Keyboard, Minus, MousePointer2, Plus } from "lucide-react";
+import {
+  PanelRight,
+  MessageCircle,
+  Hand,
+  Keyboard,
+  Minus,
+  MousePointer2,
+  Plus,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
-export type Tool = "select" | "hand";
+export type Tool = "select" | "hand" | "comment";
 
 const isMac =
   typeof navigator !== "undefined" &&
@@ -14,10 +22,19 @@ type Props = {
   onTool(tool: Tool): void;
   showHelp: boolean;
   onToggleHelp(): void;
+  onToggleComments(): void;
+  showComments: boolean;
 };
 
 /** Floating bottom toolbar. Elements marked data-ui are excluded from canvas panning. */
-export function Toolbar({ tool, onTool, showHelp, onToggleHelp }: Props) {
+export function Toolbar({
+  tool,
+  onTool,
+  showHelp,
+  onToggleHelp,
+  onToggleComments,
+  showComments,
+}: Props) {
   const flow = useReactFlow();
   const zoom = useStore((s) => s.transform[2]);
   return (
@@ -39,6 +56,21 @@ export function Toolbar({ tool, onTool, showHelp, onToggleHelp }: Props) {
           shortcut="H"
         >
           <Hand className="size-4" />
+        </ToolButton>
+        <ToolButton
+          active={tool === "comment"}
+          onClick={() => onTool("comment")}
+          label="Comment"
+          shortcut="C"
+        >
+          <MessageCircle className="size-4" />
+        </ToolButton>
+        <ToolButton
+          active={showComments}
+          onClick={onToggleComments}
+          label="Comments panel"
+        >
+          <PanelRight className="size-4" />
         </ToolButton>
         <Divider />
         <ToolButton
@@ -81,14 +113,16 @@ function ToolButton(props: {
   active?: boolean;
   onClick(): void;
   label: string;
-  shortcut: string;
+  shortcut?: string;
   children: ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
-      title={`${props.label} (${props.shortcut})`}
+      title={
+        props.shortcut ? `${props.label} (${props.shortcut})` : props.label
+      }
       aria-label={props.label}
       aria-pressed={props.active}
       className={`flex size-8 items-center justify-center rounded-lg ${
@@ -109,6 +143,7 @@ const SHORTCUTS: [string, [string, string][]][] = [
     "Tools",
     [
       ["Select", "V"],
+      ["Comment", "C"],
       ["Hand (pan by dragging)", "H"],
     ],
   ],

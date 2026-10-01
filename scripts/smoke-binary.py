@@ -25,7 +25,22 @@ with TemporaryDirectory(prefix="framio-binary-init-") as directory:
         timeout=30,
     )
     count = 0
-    for source, expected in baseline["scaffold"].items():
+    # User code keeps the migration baseline. Skills intentionally evolve with product features.
+    expected_files = {
+        source: expected
+        for source, expected in baseline["scaffold"].items()
+        if not source.startswith("src/scaffold/skill/")
+    }
+    expected_files.update(
+        {
+            str(source.relative_to(repo)): hashlib.sha256(
+                source.read_bytes()
+            ).hexdigest()
+            for source in (repo / "src/scaffold/skill").rglob("*")
+            if source.is_file()
+        }
+    )
+    for source, expected in expected_files.items():
         relative = source.removeprefix("src/scaffold/")
         if relative.startswith("skill/"):
             destinations = [
