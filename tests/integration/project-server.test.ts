@@ -284,6 +284,28 @@ test(
                 getComputedStyle(document.documentElement).overscrollBehaviorX,
             ),
           ).toBe("none");
+          // Pinches that cross studio chrome must never become page zoom.
+          const cancellation = await page.evaluate(() => {
+            const sidebar = document.querySelector("aside")!;
+            const pinch = new WheelEvent("wheel", {
+              bubbles: true,
+              cancelable: true,
+              ctrlKey: true,
+              deltaY: -80,
+            });
+            const scroll = new WheelEvent("wheel", {
+              bubbles: true,
+              cancelable: true,
+              deltaY: 80,
+            });
+            sidebar.dispatchEvent(pinch);
+            sidebar.dispatchEvent(scroll);
+            return {
+              pinch: pinch.defaultPrevented,
+              scroll: scroll.defaultPrevented,
+            };
+          });
+          expect(cancellation).toEqual({ pinch: true, scroll: false });
           const originalUrl = page.url();
           const transform = () =>
             page.$eval(
@@ -315,23 +337,43 @@ test(
               expect(page.url()).toBe(originalUrl);
             }
           }
-          const beforeZoom = await page.evaluate(() =>
-            getComputedStyle(document.documentElement).getPropertyValue(
-              "--zoom",
-            ),
-          );
-          await page.keyboard.down("Control");
-          await page.mouse.wheel({ deltaY: -80 });
-          await page.keyboard.up("Control");
-          await page.waitForFunction(
-            (before) =>
+          const studioSize = () =>
+            page.evaluate(() => ({
+              width: window.innerWidth,
+              sidebarWidth: document
+                .querySelector("aside")!
+                .getBoundingClientRect().width,
+              scale: window.visualViewport!.scale,
+            }));
+          const beforeSize = await studioSize();
+          for (const overFrame of [true, false]) {
+            const target = await page.$(
+              overFrame ? "iframe[data-frame]" : ".react-flow",
+            );
+            const box = (await target!.boundingBox())!;
+            await page.mouse.move(
+              overFrame ? box.x + box.width / 2 : box.x + box.width - 40,
+              overFrame ? box.y + box.height / 2 : box.y + box.height - 40,
+            );
+            const beforeZoom = await page.evaluate(() =>
               getComputedStyle(document.documentElement).getPropertyValue(
                 "--zoom",
-              ) !== before,
-            {},
-            beforeZoom,
-          );
-          expect(page.url()).toBe(originalUrl);
+              ),
+            );
+            await page.keyboard.down("Control");
+            await page.mouse.wheel({ deltaY: -80 });
+            await page.keyboard.up("Control");
+            await page.waitForFunction(
+              (before) =>
+                getComputedStyle(document.documentElement).getPropertyValue(
+                  "--zoom",
+                ) !== before,
+              {},
+              beforeZoom,
+            );
+            expect(await studioSize()).toEqual(beforeSize);
+            expect(page.url()).toBe(originalUrl);
+          }
         } finally {
           await browser.close();
         }

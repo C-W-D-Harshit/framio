@@ -328,6 +328,7 @@ Effect.runFork(
           return { x: rect.left + x * scale, y: rect.top + y * scale };
         };
 
+        // Capture before design content can stop propagation and let a pinch zoom the browser.
         // Wheel events inside an iframe never reach the canvas, so re-dispatch them on the iframe element.
         windowEvents.addEventListener(
           "wheel",
@@ -354,7 +355,7 @@ Effect.runFork(
               }),
             );
           },
-          { passive: false },
+          { passive: false, capture: true },
         );
 
         // Canvas shortcuts (V, H, Space, Shift+1, Cmd+=...) must work while the pointer is over a frame.
