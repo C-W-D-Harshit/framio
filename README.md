@@ -11,7 +11,8 @@ canvas, so you can watch the work and point at what to change.
 curl -fsSL https://raw.githubusercontent.com/C-W-D-Harshit/framio/main/install.sh | sh
 ```
 
-Works on macOS and Linux. `framio add` also needs Node.js.
+Works on macOS with Apple Silicon and Linux with x64 or arm64 CPUs. Intel Macs are
+not supported. `framio add` also needs Node.js.
 
 ## Quick start
 

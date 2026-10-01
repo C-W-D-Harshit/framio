@@ -28,6 +28,10 @@ if [ "$os" = darwin ] && [ "$arch" = x64 ] && [ "$(sysctl -n sysctl.proc_transla
   arch=arm64
 fi
 
+if [ "$os" = darwin ] && [ "$arch" != arm64 ]; then
+  fail "framio requires Apple Silicon on macOS. Intel Macs are not supported."
+fi
+
 asset="framio-$os-$arch.tar.gz"
 if [ -n "${FRAMIO_DOWNLOAD_URL:-}" ]; then
   url="$FRAMIO_DOWNLOAD_URL/$asset"
