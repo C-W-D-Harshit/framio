@@ -380,48 +380,69 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
               };
               await page.click('button[aria-label="Select"]');
               await clickHeading();
-              await page.waitForSelector('[aria-label="Agent selection"]');
-              const calloutGap = () =>
-                page.evaluate(() => {
-                  const iframe = document.querySelector<HTMLIFrameElement>(
-                    'iframe[data-frame="__viewport__/01-test/invoices/390"]',
-                  )!;
-                  const box = iframe.getBoundingClientRect();
-                  const heading = iframe
-                    .contentDocument!.querySelector("h1")!
-                    .getBoundingClientRect();
-                  const callout = document
-                    .querySelector('[aria-label="Agent selection"]')!
-                    .getBoundingClientRect();
-                  return (
-                    callout.top -
-                    (box.y + (heading.bottom * box.width) / iframe.offsetWidth)
-                  );
-                });
-              await waitUntil(
-                async () => Math.abs((await calloutGap()) - 12) < 1,
+              await page.waitForSelector(
+                '[role="treeitem"][aria-selected="true"]',
               );
-              const pane = await page.$(".react-flow__pane");
-              const paneBox = (await pane!.boundingBox())!;
-              await page.mouse.move(paneBox.x + 20, paneBox.y + 20);
-              await page.mouse.wheel({ deltaY: 30 });
-              await waitUntil(
-                async () => Math.abs((await calloutGap()) - 12) < 1,
-              );
+              expect(await page.$('[aria-label="Agent selection"]')).toBeNull();
               // Layer inspection and feedback share one right-side panel slot.
               await page.waitForSelector(
                 '[role="treeitem"][aria-selected="true"]',
               );
+              const readViewport = () =>
+                page.$eval(".react-flow__viewport", (element) => {
+                  const matrix = new DOMMatrix(
+                    getComputedStyle(element).transform,
+                  );
+                  return { x: matrix.e, y: matrix.f, zoom: matrix.a };
+                });
+              const beforeInspect = await readViewport();
               await page.click(
                 '[role="treeitem"][aria-selected="true"] button:last-child',
               );
               await page.waitForSelector('[aria-label="Layer inspection"]');
+              await page.evaluate(
+                () =>
+                  new Promise<void>((resolve) =>
+                    requestAnimationFrame(() =>
+                      requestAnimationFrame(() => resolve()),
+                    ),
+                  ),
+              );
+              expect(await readViewport()).toEqual(beforeInspect);
               expect(await page.$('[aria-label="Comments"]')).toBeNull();
+              await page.click('button[aria-label="Close layer inspection"]');
+              await page.waitForSelector('[aria-label="Layer inspection"]', {
+                hidden: true,
+              });
+              await page.evaluate(
+                () =>
+                  new Promise<void>((resolve) =>
+                    requestAnimationFrame(() =>
+                      requestAnimationFrame(() => resolve()),
+                    ),
+                  ),
+              );
+              expect(await readViewport()).toEqual(beforeInspect);
+              await page.click(
+                '[role="treeitem"][aria-selected="true"] button:last-child',
+              );
+              await page.waitForSelector('[aria-label="Layer inspection"]');
               await page.click('button[aria-label="Comments panel"]');
               await page.waitForSelector('[aria-label="Comments"]');
+              await page.evaluate(
+                () =>
+                  new Promise<void>((resolve) =>
+                    requestAnimationFrame(() =>
+                      requestAnimationFrame(() => resolve()),
+                    ),
+                  ),
+              );
+              expect(await readViewport()).toEqual(beforeInspect);
               expect(
                 await page.$('[aria-label="Layer inspection"]'),
               ).toBeNull();
+              // Fit is deliberate here to reveal every viewport before creating feedback.
+              await page.click('button[aria-label="Fit all frames"]');
               await page.click('button[aria-label="Comment"]');
               await clickHeading();
               await page.waitForSelector('textarea[aria-label="New comment"]');

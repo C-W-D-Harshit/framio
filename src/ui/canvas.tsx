@@ -1,4 +1,3 @@
-import { SelectionCallout } from "./selection-callout";
 import { viewportId, viewports } from "../domain/viewports";
 import { CommentsPanel, type CommentDraft } from "./comments";
 import type { Comment } from "../contracts/comments";
@@ -362,14 +361,8 @@ function CanvasInner({
     zoomToFrames,
   ]);
 
-  const canvasWidth = useStore((state) => state.width);
-  const previousWidth = useRef(0);
-  useEffect(() => {
-    const before = previousWidth.current;
-    previousWidth.current = canvasWidth;
-    if (!before || before === canvasWidth) return;
-    void flow.fitView({ padding: 0.15 });
-  }, [canvasWidth, selection.frames, selection.width, flow]);
+  // Opening a sidebar changes the available width, not the user's viewport.
+  // Keep pan and zoom untouched; fitting is an explicit navigation action.
 
   // --- Panning: Hand tool, Space + drag, middle-button drag -----------------
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -785,7 +778,6 @@ function CanvasInner({
           proOptions={{ hideAttribution: true }}
         >
           <ZoomVar />
-          <SelectionCallout />
           <Toolbar
             tool={tool}
             onTool={onTool}
