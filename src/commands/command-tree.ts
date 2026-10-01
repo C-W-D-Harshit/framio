@@ -6,7 +6,7 @@ import { install } from "./install";
 import { screenshot } from "./screenshot";
 import { list, open, start, status, stop } from "./server";
 import { serve } from "../services/server-application";
-import { PositiveNumber } from "../domain/project";
+import { PositiveNumber, ViewportDimension } from "../domain/project";
 const startFlags = {
   background: Flag.Boolean("background").pipe(Flag.withDefault(false)),
   noOpen: Flag.Boolean("no-open").pipe(Flag.withDefault(false)),
@@ -51,6 +51,17 @@ const makeRoot = () =>
         {
           frames: Argument.String("frame").pipe(Argument.variadic()),
           page: Flag.String("page").pipe(Flag.optional),
+          url: Flag.String("url").pipe(Flag.optional),
+          compare: Flag.String("compare").pipe(Flag.optional),
+          into: Flag.String("into").pipe(Flag.optional),
+          width: Flag.Finite("width").pipe(
+            Flag.withSchema(ViewportDimension),
+            Flag.optional,
+          ),
+          height: Flag.Finite("height").pipe(
+            Flag.withSchema(ViewportDimension),
+            Flag.optional,
+          ),
           all: Flag.Boolean("all").pipe(Flag.withDefault(false)),
           scale: Flag.Finite("scale").pipe(
             Flag.withDefault(1),
