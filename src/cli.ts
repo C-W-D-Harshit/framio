@@ -5,6 +5,9 @@ import { screenshot } from "./commands/screenshot";
 import { open, start, status, stop } from "./commands/server";
 import { CliError } from "./commands/shared";
 
+declare const FRAMIO_VERSION: string | undefined;
+const VERSION = typeof FRAMIO_VERSION === "string" ? FRAMIO_VERSION : "dev";
+
 const HELP = `framio: a design canvas for coding agents
 
 Usage:
@@ -47,6 +50,10 @@ try {
       await runServer(args[0]!);
       break;
     }
+    case "--version":
+    case "-v":
+      console.log(VERSION);
+      break;
     case "help":
     case "--help":
     case "-h":

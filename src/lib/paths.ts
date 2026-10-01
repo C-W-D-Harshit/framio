@@ -4,11 +4,6 @@ import { dirname, join, resolve } from "node:path";
 
 export const FRAMIO_DIR = ".framio";
 
-/** Root of the framio source tree (src/). */
-export const SRC_DIR = resolve(import.meta.dir, "..");
-export const SCAFFOLD_DIR = join(SRC_DIR, "scaffold");
-export const DIST_DIR = resolve(SRC_DIR, "../dist");
-
 /** Machine-wide framio data (downloaded browsers, caches). Never inside the user's project. */
 export const GLOBAL_DIR = join(homedir(), ".framio");
 export const BROWSERS_DIR = join(GLOBAL_DIR, "browsers");

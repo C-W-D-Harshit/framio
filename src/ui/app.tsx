@@ -1,12 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Snapshot } from "../server/server";
-import { Canvas } from "./canvas";
-
-type ElementInfo = { tag: string; text: string; selector: string };
-type FrameMessage =
-  | { source: "framio"; frame: string; type: "size" | "ready"; height: number }
-  | { source: "framio"; frame: string; type: "select"; element: ElementInfo | null }
-  | { source: "framio"; frame: string; type: "escape" | "error" };
+import { Canvas, type CanvasSelection } from "./canvas";
+import type { Tool } from "./toolbar";
 
 function useSnapshot() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -48,65 +43,24 @@ function useHashPage() {
   return [page, (id: string) => (location.hash = `/${encodeURIComponent(id)}`)] as const;
 }
 
-function postToFrames(msg: Record<string, unknown>, except?: string) {
-  for (const iframe of document.querySelectorAll<HTMLIFrameElement>("iframe[data-frame]")) {
-    if (iframe.dataset.frame !== except) iframe.contentWindow?.postMessage({ source: "framio-canvas", ...msg }, "*");
-  }
-}
-
-function saveSelection(frame: string | null, element: ElementInfo | null = null) {
-  fetch("/api/selection", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ frame, element }),
-  });
+function useTool() {
+  const [tool, setTool] = useState<Tool>(() => (localStorage.getItem("framio:tool") === "hand" ? "hand" : "select"));
+  const set = useCallback((t: Tool) => {
+    localStorage.setItem("framio:tool", t);
+    setTool(t);
+  }, []);
+  return [tool, set] as const;
 }
 
 export function App() {
   const { snapshot, connected } = useSnapshot();
   const [pageId, setPageId] = useHashPage();
-  const [heights, setHeights] = useState<Record<string, number>>({});
-  const [selection, setSelection] = useState<{ frame: string; element: ElementInfo | null } | null>(null);
+  const [tool, setTool] = useTool();
+  const [selection, setSelection] = useState<CanvasSelection>({ frames: [], element: null });
 
   const pages = snapshot?.pages ?? [];
   const page = pages.find((p) => p.id === pageId) ?? pages[0];
-
-  const selectFrame = useCallback((frame: string | null) => {
-    postToFrames({ type: "clear-selection" });
-    setSelection(frame ? { frame, element: null } : null);
-    saveSelection(frame);
-  }, []);
-
-  useEffect(() => {
-    const onMessage = (e: MessageEvent<FrameMessage>) => {
-      const msg = e.data;
-      if (msg?.source !== "framio") return;
-      if (msg.type === "size" || msg.type === "ready")
-        setHeights((h) => (h[msg.frame] === msg.height ? h : { ...h, [msg.frame]: msg.height }));
-      else if (msg.type === "select") {
-        postToFrames({ type: "clear-selection" }, msg.frame);
-        setSelection({ frame: msg.frame, element: msg.element });
-        saveSelection(msg.frame, msg.element);
-      } else if (msg.type === "escape") selectFrame(null);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && selectFrame(null);
-    window.addEventListener("message", onMessage);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("message", onMessage);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [selectFrame]);
-
-  // Restyle frames in place when theme.css changes, instead of reloading every iframe.
-  const cssVersion = snapshot?.cssVersion;
-  const firstCss = useRef(cssVersion);
-  useEffect(() => {
-    if (cssVersion === undefined || cssVersion === firstCss.current) return;
-    postToFrames({ type: "css", version: cssVersion });
-  }, [cssVersion]);
-
-  const selectedFrame = page?.frames.find((f) => f.id === selection?.frame);
+  const selectedFrames = page?.frames.filter((f) => selection.frames.includes(f.id)) ?? [];
 
   return (
     <div className="flex h-full">
@@ -140,7 +94,7 @@ export function App() {
         </div>
       </aside>
 
-      <main className="relative flex-1">
+      <main className="relative flex-1 overflow-hidden">
         {!snapshot ? null : !page ? (
           <EmptyState title="No pages yet" hint="Ask your agent to design something. Frames live in .framio/pages/<page>/<frame>.tsx" />
         ) : page.frames.length === 0 ? (
@@ -149,23 +103,28 @@ export function App() {
           <Canvas
             key={page.id}
             page={page}
-            heights={heights}
-            selectedFrame={selection?.frame ?? null}
-            onSelectFrame={selectFrame}
+            projectName={snapshot.projectName}
+            cssVersion={snapshot.cssVersion}
+            tool={tool}
+            onTool={setTool}
+            onSelection={setSelection}
           />
         )}
 
-        {selectedFrame && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 flex max-w-[70%] -translate-x-1/2 items-center gap-2 rounded-lg border border-chrome-line bg-chrome px-3 py-1.5 text-xs text-neutral-300 shadow-lg">
+        {selectedFrames.length > 0 && (
+          <div className="pointer-events-none absolute top-3 left-1/2 z-10 flex max-w-[70%] -translate-x-1/2 items-center gap-2 rounded-lg border border-chrome-line bg-chrome px-3 py-1.5 text-xs text-neutral-300 shadow-lg">
             <span className="size-1.5 shrink-0 rounded-full bg-accent" />
             <span className="truncate">
-              {selection?.element ? (
+              {selectedFrames.length > 1 ? (
+                `${selectedFrames.length} frames`
+              ) : selection.element ? (
                 <>
                   <span className="font-mono text-accent">{selection.element.tag}</span>
-                  {selection.element.text && <> “{selection.element.text.slice(0, 40)}”</>} in{" "}
+                  {selection.element.text && <> “{selection.element.text.slice(0, 40)}”</>} in {selectedFrames[0]!.meta.name}
                 </>
-              ) : null}
-              {selectedFrame.meta.name}
+              ) : (
+                selectedFrames[0]!.meta.name
+              )}
             </span>
             <span className="shrink-0 text-neutral-500">· your agent can see this</span>
           </div>

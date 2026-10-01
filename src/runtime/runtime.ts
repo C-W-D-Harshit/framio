@@ -128,6 +128,15 @@ if (inCanvas) {
     if (root) ro.observe(root);
   });
 
+  /** Converts a point in this frame to client coordinates of the canvas page. */
+  const toParent = (x: number, y: number) => {
+    const frameEl = window.frameElement as HTMLIFrameElement | null;
+    if (!frameEl) return { x, y };
+    const rect = frameEl.getBoundingClientRect();
+    const scale = rect.width / window.innerWidth;
+    return { x: rect.left + x * scale, y: rect.top + y * scale };
+  };
+
   // Wheel events inside an iframe never reach the canvas, so re-dispatch them on the iframe element.
   window.addEventListener(
     "wheel",
@@ -135,8 +144,7 @@ if (inCanvas) {
       e.preventDefault();
       const frameEl = window.frameElement as HTMLIFrameElement | null;
       if (!frameEl) return;
-      const rect = frameEl.getBoundingClientRect();
-      const scale = rect.width / window.innerWidth;
+      const at = toParent(e.clientX, e.clientY);
       const ParentWheel = (frameEl.ownerDocument.defaultView as typeof window).WheelEvent;
       frameEl.dispatchEvent(
         new ParentWheel("wheel", {
@@ -148,13 +156,44 @@ if (inCanvas) {
           ctrlKey: e.ctrlKey,
           metaKey: e.metaKey,
           shiftKey: e.shiftKey,
-          clientX: rect.left + e.clientX * scale,
-          clientY: rect.top + e.clientY * scale,
+          clientX: at.x,
+          clientY: at.y,
         }),
       );
     },
     { passive: false },
   );
+
+  // Canvas shortcuts (V, H, Space, Shift+1, Cmd+=...) must work while the pointer is over a frame.
+  for (const phase of ["keydown", "keyup"] as const) {
+    window.addEventListener(phase, (e) => {
+      const zoomKey = (e.metaKey || e.ctrlKey) && ["=", "+", "-", "0"].includes(e.key);
+      if (e.code === "Space" || zoomKey || (e.metaKey && e.key === "a")) e.preventDefault();
+      postParent({
+        type: "key",
+        phase,
+        key: e.key,
+        code: e.code,
+        repeat: e.repeat,
+        shiftKey: e.shiftKey,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        altKey: e.altKey,
+      });
+    });
+  }
+
+  // Middle-button drag pans the canvas, even when it starts over a frame.
+  let middleDown = false;
+  window.addEventListener("pointermove", (e) => {
+    if (middleDown) postParent({ type: "pan-move", screenX: e.screenX, screenY: e.screenY });
+  });
+  window.addEventListener("pointerup", (e) => {
+    if (middleDown && e.button === 1) {
+      middleDown = false;
+      postParent({ type: "pan-end" });
+    }
+  });
 
   // Element hover + selection. Mockups are static, so clicks never reach the frame's own handlers.
   const hover = makeOverlay("1px solid #3b82f6", "transparent");
@@ -194,17 +233,46 @@ if (inCanvas) {
   });
   document.addEventListener("mouseleave", () => place(hover, null));
 
-  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "submit", "dblclick", "contextmenu"]) {
+  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "submit", "auxclick"]) {
     window.addEventListener(type, (e) => {
       e.preventDefault();
       e.stopPropagation();
     }, true);
   }
   window.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (e.button !== 1) return;
+      middleDown = true;
+      postParent({ type: "pan-start", screenX: e.screenX, screenY: e.screenY });
+    },
+    true,
+  );
+  window.addEventListener(
+    "dblclick",
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      postParent({ type: "dblclick" });
+    },
+    true,
+  );
+  window.addEventListener(
+    "contextmenu",
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const at = toParent(e.clientX, e.clientY);
+      postParent({ type: "contextmenu", clientX: at.x, clientY: at.y });
+    },
+    true,
+  );
+  window.addEventListener(
     "click",
     (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (e.button !== 0) return;
       const el = document.elementFromPoint(e.clientX, e.clientY);
       selectedEl = isOwn(el) ? null : el;
       place(selected, selectedEl);
@@ -212,9 +280,6 @@ if (inCanvas) {
     },
     true,
   );
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") postParent({ type: "escape" });
-  });
   window.addEventListener("message", (e) => {
     if (e.data?.source !== "framio-canvas") return;
     if (e.data.type === "clear-selection") {

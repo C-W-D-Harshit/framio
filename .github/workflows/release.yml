@@ -1,0 +1,48 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest # arm64
+          - runner: macos-13 # x64
+          - runner: ubuntu-latest # x64
+          - runner: ubuntu-24.04-arm # arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.22
+      - run: bun install --frozen-lockfile
+      - run: bun run build:binary
+      - name: Smoke test
+        run: |
+          bin=$(ls dist/bin/framio-* | grep -v '\.tar\.gz$')
+          $bin --version
+          mkdir smoke && cd smoke && ../$bin init --skip-install
+      - uses: actions/upload-artifact@v4
+        with:
+          name: framio-${{ matrix.runner }}
+          path: dist/bin/*.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - run: gh release create "$GITHUB_REF_NAME" artifacts/*.tar.gz --repo "$GITHUB_REPOSITORY" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

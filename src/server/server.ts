@@ -1,16 +1,16 @@
 import type { ServerWebSocket } from "bun";
 import { existsSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { basename, join, normalize, relative, sep } from "node:path";
-import { DIST_DIR, projectPaths } from "../lib/paths";
+import { runtimeFile, uiFiles } from "../generated/assets.js";
+import { projectPaths } from "../lib/paths";
 import type { ServerInfo } from "../lib/server-state";
 import { FrameBundler } from "./bundler";
 import { findFrame, scanProject, type Frame, type Page } from "./project";
 import { Screenshotter } from "./screenshotter";
 import { buildThemeCss } from "./tailwind";
+import { layoutFrames } from "../ui/layout";
 
 const FIRST_PORT = 4747;
-const UI_DIR = join(DIST_DIR, "ui");
-const RUNTIME_JS = join(DIST_DIR, "runtime.js");
 
 export type SnapshotFrame = Pick<Frame, "id" | "page" | "slug" | "relFile" | "meta" | "parent"> & {
   version: number;
@@ -22,6 +22,16 @@ export type Snapshot = {
   cssError: string | null;
   pages: (Omit<Page, "frames"> & { frames: SnapshotFrame[] })[];
 };
+
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".woff2": "font/woff2",
+};
+const mimeType = (path: string) => MIME[path.slice(path.lastIndexOf("."))];
 
 const log = (...args: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...args);
 
@@ -102,28 +112,25 @@ export async function runServer(root: string) {
     log(`built ${allFrames().length} frames in ${Math.round(performance.now() - t)}ms`);
   }
 
+  const isCode = (f: string) => /\.(tsx?|jsx?)$/.test(f);
+  const isDeps = (f: string) => /^(package\.json|bun\.lockb?|tsconfig\.json)$/.test(f);
+
   async function applyChanges(changed: Set<string>) {
     const t = performance.now();
-    const before = new Set(allFrames().map((f) => f.id));
     pages = scanProject(p);
     const frames = allFrames();
-    bundler.forget(new Set(frames.map((f) => f.id)));
     for (const id of runtimeErrors.keys()) if (!frames.some((f) => f.id === id)) runtimeErrors.delete(id);
 
     const files = [...changed];
-    const isCode = (f: string) => /\.(tsx?|jsx?)$/.test(f);
-    const sharedChanged = files.some(
-      (f) => (isCode(f) && !f.startsWith(`pages${sep}`)) || /^(package\.json|bun\.lockb?|tsconfig\.json)$/.test(f),
-    );
-    const toBuild = sharedChanged
-      ? frames
-      : frames.filter((f) => !before.has(f.id) || changed.has(relative(p.framio, f.file)));
+    const codeChanged = files.some((f) => isCode(f) || isDeps(f));
     const cssChanged = files.some((f) => f.endsWith(".css") || isCode(f));
-
-    await Promise.all([bundler.build(toBuild), cssChanged ? rebuildCss() : null]);
-    for (const f of toBuild) runtimeErrors.delete(f.id);
-    if (toBuild.length || cssChanged)
-      log(`rebuilt ${toBuild.length} frames${cssChanged ? " + css" : ""} in ${Math.round(performance.now() - t)}ms`);
+    const [rebuilt] = await Promise.all([
+      codeChanged ? bundler.build(frames) : Promise.resolve([]),
+      cssChanged ? rebuildCss() : null,
+    ]);
+    for (const id of rebuilt) runtimeErrors.delete(id);
+    if (codeChanged || cssChanged)
+      log(`build: ${rebuilt.length} frames changed${cssChanged ? " + css" : ""} in ${Math.round(performance.now() - t)}ms`);
     broadcast();
   }
 
@@ -172,16 +179,35 @@ export async function runServer(root: string) {
 </html>`;
   }
 
-  function staticFile(path: string) {
-    const file = Bun.file(path);
-    return file.size > 0 ? new Response(file) : new Response("Not found", { status: 404 });
+  function staticFile(path: string, type?: string) {
+    const file = Bun.file(path, type ? { type } : undefined);
+    return new Response(file);
   }
 
   let screenshotter: Screenshotter | null = null;
 
+  /** Small cached renders for zoomed-out canvases, keyed by frame + css version. */
+  const thumbs = new Map<string, { key: string; file: Promise<string> }>();
+  async function thumbnail(frame: Frame) {
+    const key = `${bundler.get(frame.id)?.version ?? 0}-${css.version}`;
+    let entry = thumbs.get(frame.id);
+    if (entry?.key !== key) {
+      const out = join(p.state, "thumbs", frame.page, `${frame.slug}.png`);
+      entry = { key, file: screenshotter!.capture(frame, out, 0.5).then((r) => r.path) };
+      thumbs.set(frame.id, entry);
+      entry.file.catch(() => thumbs.delete(frame.id));
+    }
+    try {
+      return new Response(Bun.file(await entry.file), { headers: { "cache-control": "no-store" } });
+    } catch (err) {
+      return new Response(String(err), { status: 500 });
+    }
+  }
+
   async function handleScreenshot(req: Request) {
-    const body = (await req.json()) as { frames?: string[]; scale?: number };
+    const body = (await req.json()) as { frames?: string[]; page?: string; scale?: number };
     await queue; // never screenshot a stale build
+    if (body.page) return handlePageScreenshot(body.page, body.scale);
     const refs = body.frames?.length ? body.frames : allFrames().map((f) => f.id);
     const results = [];
     for (const ref of refs) {
@@ -203,6 +229,43 @@ export async function runServer(root: string) {
     return json({ results });
   }
 
+  /** One image of a whole page, laid out like the canvas, so agents can compare variations. */
+  async function handlePageScreenshot(ref: string, scale = 1) {
+    const page = pages.find((pg) => pg.id === ref || pg.name.toLowerCase() === ref.toLowerCase());
+    if (!page) return json({ results: [{ frame: ref, error: `No page "${ref}". Pages: ${pages.map((pg) => pg.id).join(", ")}` }] });
+    const shots = await Promise.all(
+      page.frames.map(async (f) => {
+        const out = join(p.screenshots, f.page, `${f.slug}.png`);
+        try {
+          return { frame: f, ...(await screenshotter!.capture(f, out, 1)) };
+        } catch (err) {
+          return { frame: f, path: null, height: f.meta.height, error: `Screenshot failed: ${(err as Error).message}` };
+        }
+      }),
+    );
+    const heights = Object.fromEntries(shots.map((s) => [s.frame.id, s.height]));
+    const out = join(p.screenshots, `${page.id}.png`);
+    const overview = await screenshotter!.composePage(
+      shots.map((s) => ({
+        id: s.frame.id,
+        name: s.frame.meta.name,
+        parent: s.frame.parent,
+        width: s.frame.meta.width,
+        height: s.height,
+        src: s.path ? `/shots/${encodeURIComponent(s.frame.page)}/${encodeURIComponent(s.frame.slug)}.png?t=${Date.now()}` : null,
+      })),
+      layoutFrames(snapshot().pages.find((pg) => pg.id === page.id)!.frames, heights, page.positions),
+      out,
+      scale,
+    );
+    const results = [
+      { frame: page.id, file: `.framio/pages/${page.id}`, path: out, width: overview.width, height: overview.height },
+      ...shots.filter((s) => s.error).map((s) => ({ frame: s.frame.id, file: s.frame.relFile, error: s.error })),
+    ];
+    broadcast();
+    return json({ results });
+  }
+
   async function startOn(port: number) {
     return Bun.serve({
       port,
@@ -217,18 +280,13 @@ export async function runServer(root: string) {
         if (path === "/api/project") return json(snapshot());
 
         if (path === "/api/selection" && req.method === "POST") {
-          const body = (await req.json()) as { frame: string | null; element: unknown };
-          const frame = body.frame ? allFrames().find((f) => f.id === body.frame) : null;
-          const selection = frame
-            ? {
-                page: frame.page,
-                frame: frame.id,
-                name: frame.meta.name,
-                file: frame.relFile,
-                element: body.element ?? null,
-                selectedAt: new Date().toISOString(),
-              }
-            : { frame: null, selectedAt: new Date().toISOString() };
+          const body = (await req.json()) as { frames: string[]; element: unknown };
+          const frames = allFrames().filter((f) => body.frames.includes(f.id));
+          const selection = {
+            frames: frames.map((f) => ({ frame: f.id, name: f.meta.name, file: f.relFile })),
+            element: frames.length === 1 ? (body.element ?? null) : null,
+            selectedAt: new Date().toISOString(),
+          };
           writeFileSync(p.selectionFile, JSON.stringify(selection, null, 2) + "\n");
           return json({ ok: true });
         }
@@ -262,7 +320,7 @@ export async function runServer(root: string) {
 
         if (path === "/_theme.css")
           return new Response(css.text, { headers: { "content-type": "text/css; charset=utf-8" } });
-        if (path === "/_runtime.js") return staticFile(RUNTIME_JS);
+        if (path === "/_runtime.js") return staticFile(runtimeFile, "text/javascript; charset=utf-8");
 
         const frameMatch = /^\/f\/([^/]+)\/([^/]+)$/.exec(path);
         if (frameMatch) {
@@ -273,18 +331,32 @@ export async function runServer(root: string) {
           });
         }
 
-        const jsMatch = /^\/js\/([^/]+)\/([^/]+)\.js$/.exec(path);
-        if (jsMatch) {
-          const built = bundler.get(`${jsMatch[1]}/${jsMatch[2]}`);
-          if (!built?.js) return new Response("// build failed", { status: 404 });
-          return new Response(built.js, {
-            headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" },
-          });
+        if (path.startsWith("/js/")) {
+          const rel = path.slice(4);
+          const js = bundler.file(rel);
+          if (js === undefined) return new Response("// not built", { status: 404 });
+          // Chunks are content-hashed, so iframes share one cached copy of React and components.
+          const cache = rel.startsWith("chunks/") ? "public, max-age=31536000, immutable" : "no-store";
+          return new Response(js, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": cache } });
         }
 
-        const uiPath = normalize(join(UI_DIR, path === "/" ? "index.html" : path));
-        if (uiPath.startsWith(UI_DIR) && existsSync(uiPath)) return staticFile(uiPath);
-        return staticFile(join(UI_DIR, "index.html"));
+        const thumbMatch = /^\/thumb\/([^/]+)\/([^/]+)\.png$/.exec(path);
+        if (thumbMatch) {
+          const frame = allFrames().find((f) => f.page === thumbMatch[1] && f.slug === thumbMatch[2]);
+          if (!frame) return new Response("Frame not found", { status: 404 });
+          return thumbnail(frame);
+        }
+
+        const shotMatch = /^\/shots\/(.+\.png)$/.exec(path);
+        if (shotMatch) {
+          const file = normalize(join(p.screenshots, shotMatch[1]!));
+          if (!file.startsWith(p.screenshots) || !existsSync(file)) return new Response("Not found", { status: 404 });
+          return new Response(Bun.file(file));
+        }
+
+        const asset = uiFiles[path.slice(1)];
+        if (asset) return staticFile(asset, mimeType(path));
+        return staticFile(uiFiles["index.html"]!, "text/html; charset=utf-8");
       },
       websocket: {
         open(ws) {

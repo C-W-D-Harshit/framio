@@ -1,8 +1,9 @@
-import { cpSync, existsSync, mkdirSync, renameSync } from "node:fs";
-import { join, sep } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { scaffoldFiles } from "../generated/assets.js";
 import { ensureBrowser, isBrowserInstalled } from "../lib/browser";
 import { runBun } from "../lib/bun";
-import { FRAMIO_DIR, SCAFFOLD_DIR, projectPaths } from "../lib/paths";
+import { FRAMIO_DIR, projectPaths } from "../lib/paths";
 import { CliError } from "./shared";
 
 /** Agent skill locations, one per harness. Written per project so they're versioned with the designs. */
@@ -13,15 +14,12 @@ export async function init(args: string[]) {
   const p = projectPaths(root);
   if (existsSync(p.framio)) throw new CliError(`${FRAMIO_DIR} already exists here.`);
 
-  const skillSrc = join(SCAFFOLD_DIR, "skill");
-  cpSync(SCAFFOLD_DIR, p.framio, {
-    recursive: true,
-    filter: (src) => src !== skillSrc && !src.startsWith(skillSrc + sep),
-  });
-  renameSync(join(p.framio, "_gitignore"), join(p.framio, ".gitignore"));
-  for (const dir of SKILL_DIRS) {
-    mkdirSync(join(root, dir), { recursive: true });
-    cpSync(join(skillSrc, "SKILL.md"), join(root, dir, "SKILL.md"));
+  for (const [rel, file] of Object.entries(scaffoldFiles)) {
+    if (rel === "skill/SKILL.md") {
+      for (const dir of SKILL_DIRS) await Bun.write(join(root, dir, "SKILL.md"), Bun.file(file));
+    } else {
+      await Bun.write(join(p.framio, rel === "_gitignore" ? ".gitignore" : rel), Bun.file(file));
+    }
   }
   console.log(`Created ${FRAMIO_DIR}/ with shadcn/ui, a theme, and an example page.`);
   console.log(`Added the framio skill for agents in ${SKILL_DIRS.join(" and ")}.`);

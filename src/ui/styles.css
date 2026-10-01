@@ -32,3 +32,24 @@ body {
   stroke-width: calc(1.5px / var(--zoom, 1));
   stroke-dasharray: calc(6px / var(--zoom, 1)) calc(5px / var(--zoom, 1));
 }
+
+/* Hand tool / Space held / middle-drag: frames stop taking input so the whole canvas pans. */
+.tool-hand iframe,
+.is-panning iframe {
+  pointer-events: none;
+}
+.tool-hand .react-flow__pane,
+.tool-hand .react-flow__node,
+.tool-hand .frame-drag {
+  cursor: grab !important;
+}
+.is-panning,
+.is-panning * {
+  cursor: grabbing !important;
+}
+
+.react-flow__nodesselection-rect,
+.react-flow__selection {
+  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  border: 1px solid var(--color-accent);
+}

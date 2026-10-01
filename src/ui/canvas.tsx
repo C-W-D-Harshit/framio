@@ -1,27 +1,38 @@
 import {
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   useNodesState,
   useReactFlow,
   useStore,
   type Edge,
   type NodeTypes,
+  type Viewport,
 } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { Snapshot } from "../server/server";
-import { FrameNode, type FrameNodeType } from "./frame-node";
+import { ContextMenu } from "./context-menu";
+import { FrameNode, frameUrl, type FrameNodeType } from "./frame-node";
 import { layoutFrames } from "./layout";
+import { Toolbar, type Tool } from "./toolbar";
 
 type Page = Snapshot["pages"][number];
 type Pos = { x: number; y: number };
+export type ElementInfo = { tag: string; text: string; selector: string };
+export type CanvasSelection = { frames: string[]; element: ElementInfo | null };
 
 const nodeTypes: NodeTypes = { frame: FrameNode };
+const FIT = { padding: 0.15 };
+/** Pages with more frames than this use thumbnails when zoomed out. */
+const THUMB_THRESHOLD = 8;
 
 type Props = {
   page: Page;
-  heights: Record<string, number>;
-  selectedFrame: string | null;
-  onSelectFrame(id: string | null): void;
+  projectName: string;
+  cssVersion: number;
+  tool: Tool;
+  onTool(tool: Tool): void;
+  onSelection(selection: CanvasSelection): void;
 };
 
 export function Canvas(props: Props) {
@@ -32,11 +43,34 @@ export function Canvas(props: Props) {
   );
 }
 
-function CanvasInner({ page, heights, selectedFrame, onSelectFrame }: Props) {
-  const flow = useReactFlow();
-  // Positions the user dragged in this session, applied before the server echoes canvas.json back.
+function postToFrames(msg: Record<string, unknown>, except?: string) {
+  for (const iframe of document.querySelectorAll<HTMLIFrameElement>("iframe[data-frame]")) {
+    if (iframe.dataset.frame !== except) iframe.contentWindow?.postMessage({ source: "framio-canvas", ...msg }, "*");
+  }
+}
+
+function useSavedViewport(key: string) {
+  const [initial] = useState<Viewport | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? "null");
+    } catch {
+      return null;
+    }
+  });
+  const save = useCallback((vp: Viewport) => localStorage.setItem(key, JSON.stringify(vp)), [key]);
+  return [initial, save] as const;
+}
+
+function CanvasInner({ page, projectName, cssVersion, tool, onTool, onSelection }: Props) {
+  const flow = useReactFlow<FrameNodeType>();
+  const [heights, setHeights] = useState<Record<string, number>>({});
+  const [savedViewport, saveViewport] = useSavedViewport(`framio:viewport:${projectName}/${page.id}`);
+
+  // --- Layout ---------------------------------------------------------------
+  // Positions dragged in this session, applied before the server echoes canvas.json back.
   const [moved, setMoved] = useState<Record<string, Pos>>({});
   const saved = useMemo(() => ({ ...page.positions, ...moved }), [page.positions, moved]);
+  const useThumbs = page.frames.length > THUMB_THRESHOLD;
 
   const laidOut = useMemo<FrameNodeType[]>(() => {
     const pos = layoutFrames(page.frames, heights, saved);
@@ -45,18 +79,18 @@ function CanvasInner({ page, heights, selectedFrame, onSelectFrame }: Props) {
       type: "frame",
       position: pos[frame.id]!,
       dragHandle: ".frame-drag",
-      selected: frame.id === selectedFrame,
-      data: { frame, height: heights[frame.id] ?? frame.meta.height },
+      data: { frame, height: heights[frame.id] ?? frame.meta.height, cssVersion, useThumbs },
     }));
-  }, [page.frames, heights, saved, selectedFrame]);
+  }, [page.frames, heights, saved, cssVersion, useThumbs]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FrameNodeType>(laidOut);
   useEffect(() => {
     setNodes((prev) => {
-      const dragging = new Map(prev.filter((n) => n.dragging).map((n) => [n.id, n]));
+      const old = new Map(prev.map((n) => [n.id, n]));
       return laidOut.map((n) => {
-        const d = dragging.get(n.id);
-        return d ? { ...n, position: d.position, dragging: true } : n;
+        const o = old.get(n.id);
+        if (!o) return n;
+        return { ...n, selected: o.selected, ...(o.dragging ? { position: o.position, dragging: true } : {}) };
       });
     });
   }, [laidOut, setNodes]);
@@ -69,78 +103,293 @@ function CanvasInner({ page, heights, selectedFrame, onSelectFrame }: Props) {
     [page.frames],
   );
 
-  // Frames report their real height after loading; keep the initial fit in sync until the user moves.
+  // Frames report their real height after loading; keep the first fit in sync until the user moves.
   const mountedAt = useRef(performance.now());
-  const userMoved = useRef(false);
+  const userMoved = useRef(savedViewport !== null);
+  const autoFitting = useRef(false);
   useEffect(() => {
     if (userMoved.current || performance.now() - mountedAt.current > 3000) return;
-    const raf = requestAnimationFrame(() => flow.fitView({ padding: 0.15 }));
+    const raf = requestAnimationFrame(() => {
+      autoFitting.current = true;
+      flow.fitView(FIT).finally(() => (autoFitting.current = false));
+    });
     return () => cancelAnimationFrame(raf);
   }, [laidOut, flow]);
 
+  // --- Selection ------------------------------------------------------------
+  const [selection, setSelection] = useState<CanvasSelection>({ frames: [], element: null });
+  const selectFrames = useCallback(
+    (ids: string[]) => setNodes((ns) => ns.map((n) => ({ ...n, selected: ids.includes(n.id) }))),
+    [setNodes],
+  );
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.shiftKey && e.code === "Digit1") flow.fitView({ padding: 0.15, duration: 200 });
-      if (e.shiftKey && e.code === "Digit0") flow.zoomTo(1, { duration: 200 });
+    onSelection(selection);
+    postToFrames({ type: "clear-selection" }, selection.element ? selection.frames[0] : undefined);
+  }, [selection, onSelection]);
+
+  // selection.json is what the agent reads; skip the initial empty state so reloads don't wipe it.
+  const firstSave = useRef(true);
+  useEffect(() => {
+    if (firstSave.current) {
+      firstSave.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      fetch("/api/selection", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(selection),
+      });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [selection]);
+
+  // --- Navigation helpers ---------------------------------------------------
+  const zoomToFrames = useCallback(
+    (ids: string[]) => ids.length && flow.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.1, duration: 250 }),
+    [flow],
+  );
+
+  // --- Panning: Hand tool, Space + drag, middle-button drag -----------------
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [panning, setPanning] = useState(false);
+  const panFrom = useRef<Pos | null>(null);
+  const hand = tool === "hand" || spaceHeld;
+
+  const startPan = useCallback((x: number, y: number) => {
+    panFrom.current = { x, y };
+    setPanning(true);
+  }, []);
+  const movePan = useCallback(
+    (x: number, y: number) => {
+      const from = panFrom.current;
+      if (!from) return;
+      const vp = flow.getViewport();
+      flow.setViewport({ x: vp.x + x - from.x, y: vp.y + y - from.y, zoom: vp.zoom });
+      panFrom.current = { x, y };
+      userMoved.current = true;
+    },
+    [flow],
+  );
+  const endPan = useCallback(() => {
+    if (!panFrom.current) return;
+    panFrom.current = null;
+    setPanning(false);
+    saveViewport(flow.getViewport());
+  }, [flow, saveViewport]);
+
+  const onPointerDownCapture = (e: ReactPointerEvent) => {
+    if ((e.target as Element).closest("[data-ui]")) return;
+    if (e.button === 1 || (e.button === 0 && hand)) {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
+      startPan(e.screenX, e.screenY);
+    }
+  };
+
+  // --- Context menu ---------------------------------------------------------
+  const [menu, setMenu] = useState<{ x: number; y: number; frame: string } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const menuFrame = menu && page.frames.find((f) => f.id === menu.frame);
+
+  // --- Keyboard -------------------------------------------------------------
+  const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (!e.repeat) setSpaceHeld(true);
+        return;
+      }
+      if (mod && (e.key === "=" || e.key === "+")) {
+        e.preventDefault();
+        flow.zoomIn({ duration: 150 });
+      } else if (mod && e.key === "-") {
+        e.preventDefault();
+        flow.zoomOut({ duration: 150 });
+      } else if (mod && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        selectFrames(page.frames.map((f) => f.id));
+      } else if (mod || e.altKey) {
+        return;
+      } else if (e.shiftKey && e.code === "Digit1") flow.fitView({ ...FIT, duration: 250 });
+      else if (e.shiftKey && e.code === "Digit2") zoomToFrames(flow.getNodes().filter((n) => n.selected).map((n) => n.id));
+      else if (e.shiftKey && e.code === "Digit0") flow.zoomTo(1, { duration: 200 });
+      else if (e.key === "?") setShowHelp((v) => !v);
+      else if (e.key === "v" || e.key === "V") onTool("select");
+      else if (e.key === "h" || e.key === "H") onTool("hand");
+      else if (e.key === "Escape") {
+        setShowHelp(false);
+        selectFrames([]);
+        setSelection({ frames: [], element: null });
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [flow]);
+    const onKeyUp = (e: KeyboardEvent) => e.code === "Space" && setSpaceHeld(false);
+    const onBlur = () => {
+      setSpaceHeld(false);
+      endPan();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [flow, page.frames, onTool, selectFrames, zoomToFrames, endPan]);
+
+  // --- Messages from frame iframes ------------------------------------------
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const msg = e.data;
+      if (msg?.source !== "framio") return;
+      const frame: string = msg.frame;
+      switch (msg.type) {
+        case "size":
+        case "ready":
+          if (typeof msg.height === "number")
+            setHeights((h) => (h[frame] === msg.height ? h : { ...h, [frame]: msg.height }));
+          break;
+        case "select":
+          selectFrames([frame]);
+          setSelection({ frames: [frame], element: msg.element });
+          break;
+        case "dblclick":
+          zoomToFrames([frame]);
+          break;
+        case "contextmenu":
+          setMenu({ x: msg.clientX, y: msg.clientY, frame });
+          break;
+        case "pan-start":
+          startPan(msg.screenX, msg.screenY);
+          break;
+        case "pan-move":
+          movePan(msg.screenX, msg.screenY);
+          break;
+        case "pan-end":
+          endPan();
+          break;
+        case "key":
+          // Keys pressed while a frame has focus drive the canvas too.
+          window.dispatchEvent(
+            new KeyboardEvent(msg.phase, {
+              key: msg.key,
+              code: msg.code,
+              repeat: msg.repeat,
+              shiftKey: msg.shiftKey,
+              metaKey: msg.metaKey,
+              ctrlKey: msg.ctrlKey,
+              altKey: msg.altKey,
+            }),
+          );
+          break;
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [selectFrames, zoomToFrames, startPan, movePan, endPan]);
+
+  // Restyle frames in place when theme.css changes, instead of reloading every iframe.
+  const firstCss = useRef(cssVersion);
+  useEffect(() => {
+    if (cssVersion !== firstCss.current) postToFrames({ type: "css", version: cssVersion });
+  }, [cssVersion]);
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      onNodeClick={(_, node) => onSelectFrame(node.id)}
-      onPaneClick={() => onSelectFrame(null)}
-      onMoveStart={(e) => {
-        if (e) userMoved.current = true;
-      }}
-      onNodeDragStop={(_, node) => {
-        const frame = page.frames.find((f) => f.id === node.id);
-        if (!frame) return;
-        const pos = { x: Math.round(node.position.x), y: Math.round(node.position.y) };
-        setMoved((m) => ({ ...m, [frame.slug]: pos }));
-        fetch("/api/canvas", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ page: page.id, positions: { [frame.slug]: pos } }),
-        });
-      }}
-      fitView
-      fitViewOptions={{ padding: 0.15 }}
-      minZoom={0.03}
-      maxZoom={4}
-      panOnScroll
-      zoomOnScroll={false}
-      zoomOnPinch
-      zoomOnDoubleClick={false}
-      selectionOnDrag={false}
-      nodesConnectable={false}
-      elementsSelectable
-      deleteKeyCode={null}
-      proOptions={{ hideAttribution: true }}
+    <div
+      className={`absolute inset-0 ${hand ? "tool-hand" : ""} ${panning ? "is-panning" : ""}`}
+      onPointerDownCapture={onPointerDownCapture}
+      onPointerMove={(e) => panFrom.current && movePan(e.screenX, e.screenY)}
+      onPointerUp={endPan}
+      onPointerCancel={endPan}
+      onMouseDownCapture={(e) => e.button === 1 && e.preventDefault()}
     >
-      <ZoomIndicator />
-    </ReactFlow>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onSelectionChange={({ nodes: sel }) => {
+          const ids = sel.map((n) => n.id).sort();
+          setSelection((prev) => {
+            if (prev.frames.length === ids.length && prev.frames.every((id, i) => id === ids[i])) return prev;
+            const keepElement = prev.element && ids.length === 1 && ids[0] === prev.frames[0];
+            return { frames: ids, element: keepElement ? prev.element : null };
+          });
+        }}
+        onNodeDoubleClick={(_, node) => zoomToFrames([node.id])}
+        onNodeContextMenu={(e, node) => {
+          e.preventDefault();
+          setMenu({ x: e.clientX, y: e.clientY, frame: node.id });
+        }}
+        onPaneContextMenu={(e) => e.preventDefault()}
+        onNodeDragStop={(_, _node, dragged) => {
+          const positions: Record<string, Pos> = {};
+          for (const n of dragged) {
+            const frame = page.frames.find((f) => f.id === n.id);
+            if (frame) positions[frame.slug] = { x: Math.round(n.position.x), y: Math.round(n.position.y) };
+          }
+          setMoved((m) => ({ ...m, ...positions }));
+          fetch("/api/canvas", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ page: page.id, positions }),
+          });
+        }}
+        onMoveStart={() => {
+          if (!autoFitting.current) userMoved.current = true;
+        }}
+        onMoveEnd={(_, vp) => userMoved.current && saveViewport(vp)}
+        defaultViewport={savedViewport ?? undefined}
+        fitView={!savedViewport}
+        fitViewOptions={FIT}
+        minZoom={0.03}
+        maxZoom={4}
+        panOnDrag={false}
+        panOnScroll
+        zoomOnScroll={false}
+        zoomOnPinch
+        zoomOnDoubleClick={false}
+        selectionOnDrag={!hand}
+        selectionMode={SelectionMode.Partial}
+        selectionKeyCode={null}
+        multiSelectionKeyCode="Shift"
+        nodesDraggable={!hand}
+        elementsSelectable={!hand}
+        nodesConnectable={false}
+        deleteKeyCode={null}
+        proOptions={{ hideAttribution: true }}
+      >
+        <ZoomVar />
+        <Toolbar tool={tool} onTool={onTool} showHelp={showHelp} onToggleHelp={() => setShowHelp((v) => !v)} />
+      </ReactFlow>
+
+      {menu && menuFrame && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={[
+            { label: "Zoom to frame", hint: "Double-click", onSelect: () => zoomToFrames([menuFrame.id]) },
+            { label: "Open in new tab", onSelect: () => window.open(frameUrl(menuFrame).replace("canvas=1&", ""), "_blank") },
+            { label: "Copy file path", onSelect: () => navigator.clipboard.writeText(menuFrame.relFile) },
+          ]}
+        />
+      )}
+    </div>
   );
 }
 
-function ZoomIndicator() {
+/** Exposes the zoom level to CSS so lines keep the same on-screen weight at any zoom. */
+function ZoomVar() {
   const zoom = useStore((s) => s.transform[2]);
-  const flow = useReactFlow();
   useEffect(() => document.documentElement.style.setProperty("--zoom", String(zoom)), [zoom]);
-  return (
-    <button
-      type="button"
-      onClick={() => flow.fitView({ padding: 0.15, duration: 200 })}
-      title="Zoom to fit (Shift+1)"
-      className="absolute right-3 bottom-3 z-10 rounded-md border border-chrome-line bg-chrome px-2 py-1 text-xs text-neutral-400 tabular-nums hover:text-neutral-200"
-    >
-      {Math.round(zoom * 100)}%
-    </button>
-  );
+  return null;
 }

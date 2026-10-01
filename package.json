@@ -9,6 +9,7 @@
   "scripts": {
     "build:ui": "bun run scripts/build-ui.ts",
     "dev:ui": "bun run scripts/build-ui.ts --watch",
+    "build:binary": "bun run scripts/build-binary.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "@tailwindcss/node": "^4.3.3",
     "@tailwindcss/oxide": "^4.3.3",
     "@xyflow/react": "^12.12.0",
+    "lucide-react": "^1.49.0",
     "puppeteer-core": "^25.12.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

@@ -18,6 +18,8 @@ no routing. Different states (empty, loading, error, dialog open) are separate f
   before designing. It is safe to run again.
 - `framio screenshot <page>/<frame>`: renders the frame to a PNG and prints its path.
   **Always look at the screenshot after creating or changing a frame**, then fix what looks off.
+- `framio screenshot --page <page>`: one PNG of the whole page, laid out like the canvas, with
+  variation lines. Use it to compare variations side by side or review a whole flow.
 - `framio install <package>`: adds an npm package for frames to use. Never run npm, pnpm, or
   yarn inside `.framio`, and never install design packages into the user's project.
 
@@ -75,9 +77,10 @@ export default function Frame() {
    `<frame>--<what-changed>.tsx`, set `variationOf` to the original slug and a new `name`,
    then change the copy. The canvas places it next to the original with a connecting line.
    Edit a frame in place only when the user asks to fix or update that frame.
-3. **"This" means the selection.** When the user says "this", "the selected", or "here",
-   read `.framio/.state/selection.json`. It has the frame file and, if an element was
-   clicked, its tag, text, classes, outer HTML, and a CSS selector.
+3. **"This" means the selection.** When the user says "this", "these", "the selected", or
+   "here", read `.framio/.state/selection.json`. `frames` lists the selected frames (name and
+   file). When the user clicked a single element inside a frame, `element` has its tag, text,
+   classes, outer HTML, and a CSS selector; find it in the frame file and change that.
 4. **Shared pieces** (headers, sidebars, nav) go in `.framio/components/` once and are
    imported by every frame that uses them.
 5. **Verify.** After changes, check `.framio/.state/errors.json` and screenshot the frames you
