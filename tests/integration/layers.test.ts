@@ -34,7 +34,7 @@ test("layer screenshot, inspect and source rename round trips use the live pipel
   const file = join(page, "home.tsx");
   writeFileSync(
     file,
-    'import {Rows} from "../../components/Rows";export const meta={name:"Home",width:390,height:844};export default function Frame(){return <div><header data-layer="Header" style={{height:80}}>Home</header><main data-layer="Content" style={{height:900,padding:16}}><section data-layer="Balance card" style={{height:120}}>Balance</section><Rows/></main><footer>Unnamed footer</footer></div>}',
+    'import {Rows} from "../../components/Rows";export const meta={name:"Home",width:390,height:844};export default function Frame(){return <div><header data-layer="Header" style={{height:80}}>Home</header><main data-layer="Content" style={{height:900,padding:16}}><section data-layer="Balance card" style={{height:120}}>Balance</section><Rows/></main><footer style={{height:18,lineHeight:"18px"}}>Unnamed footer</footer></div>}',
   );
   const run = async (...args: string[]) => {
     const child = Bun.spawn(
