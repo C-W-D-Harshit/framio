@@ -1,6 +1,6 @@
 {
   "name": "framio",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A design canvas for coding agents.",
   "license": "MIT",
   "author": "Harshit",
@@ -22,7 +22,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun run test:all",
     "test:effect": "vitest run --config vitest.effect.config.ts",
-    "test:integration": "bun test tests/integration",
+    "test:integration": "sh scripts/test-integration.sh",
     "test:all": "bun run test:effect && bun run test:integration",
     "check": "bun run typecheck && bun run test:all",
     "format": "prettier --write src scripts tests package.json tsconfig.json vitest.effect.config.ts .github",

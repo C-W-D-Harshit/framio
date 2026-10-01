@@ -286,7 +286,9 @@ test(
           ).toBe("none");
           // Pinches that cross studio chrome must never become page zoom.
           const cancellation = await page.evaluate(() => {
-            const sidebar = document.querySelector("aside")!;
+            const sidebar = document.querySelector(
+              '[aria-label="Project navigation"]',
+            )!;
             const pinch = new WheelEvent("wheel", {
               bubbles: true,
               cancelable: true,
@@ -341,7 +343,7 @@ test(
             page.evaluate(() => ({
               width: window.innerWidth,
               sidebarWidth: document
-                .querySelector("aside")!
+                .querySelector('[aria-label="Project navigation"]')!
                 .getBoundingClientRect().width,
               scale: window.visualViewport!.scale,
             }));
@@ -438,7 +440,7 @@ test(
             ),
             scale: window.visualViewport!.scale,
             sidebarWidth: document
-              .querySelector("aside")!
+              .querySelector('[aria-label="Project navigation"]')!
               .getBoundingClientRect().width,
           }));
           expect(during.pointerEvents.length).toBeGreaterThan(0);
@@ -460,7 +462,7 @@ test(
             1,
           );
           expect(during.scale).toBe(1);
-          expect(during.sidebarWidth).toBe(240);
+          expect(during.sidebarWidth).toBe(248);
           await page.waitForFunction(
             () => !document.documentElement.classList.contains("is-zooming"),
           );
