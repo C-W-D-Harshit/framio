@@ -46,6 +46,107 @@ async function withProjectServer(
 }
 
 test(
+  "frame groups collapse and reopen without clearing canvas selection",
+  () =>
+    withProjectServer(
+      (root) => {
+        for (const name of ["One", "Two"]) {
+          writeFileSync(
+            join(root, `.framio/pages/01-test/${name.toLowerCase()}.tsx`),
+            `export const meta={name:"${name}",width:390,height:300};export default function Frame(){return <h1>${name} content</h1>}`,
+          );
+        }
+      },
+      async (url) => {
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          await page.setViewport({ width: 1280, height: 800 });
+          await page.goto(url);
+          const row = (name: string) =>
+            page.locator(
+              `[aria-label="Project navigation"] button[title$="/${name.toLowerCase()}.tsx"]`,
+            );
+          const group = (name: string) =>
+            page.$eval(
+              '[aria-label="Project navigation"]',
+              (sidebar, name) => {
+                const button = [...sidebar.querySelectorAll("button")].find(
+                  (button) => button.textContent?.trim() === name,
+                )!;
+                return {
+                  expanded: button.getAttribute("aria-expanded"),
+                  selected: button.hasAttribute("data-active"),
+                  layers:
+                    button.parentElement!.querySelector("section") !== null,
+                };
+              },
+              name,
+            );
+          await row("One").click();
+          await page.waitForSelector(
+            '[aria-label="Project navigation"] button[title$="/one.tsx"][data-active]',
+          );
+          expect((await group("One")).layers).toBe(true);
+          await row("One").click();
+          expect(await group("One")).toEqual({
+            expanded: "false",
+            selected: true,
+            layers: false,
+          });
+          // The same native button supports keyboard disclosure.
+          await page.keyboard.press("Enter");
+          expect(await group("One")).toEqual({
+            expanded: "true",
+            selected: true,
+            layers: true,
+          });
+          await row("One").click();
+          await row("Two").click();
+          await page.waitForFunction(() =>
+            [...document.querySelectorAll("button")].some(
+              (button) =>
+                button.textContent?.trim() === "Two" &&
+                button.getAttribute("aria-expanded") === "true",
+            ),
+          );
+          expect(await group("One")).toEqual({
+            expanded: "false",
+            selected: false,
+            layers: false,
+          });
+          expect(await group("Two")).toEqual({
+            expanded: "true",
+            selected: true,
+            layers: true,
+          });
+          await row("One").click();
+          await page.waitForFunction(() =>
+            [...document.querySelectorAll("button")].some(
+              (button) =>
+                button.textContent?.trim() === "One" &&
+                button.getAttribute("aria-expanded") === "true",
+            ),
+          );
+          expect(await group("One")).toEqual({
+            expanded: "true",
+            selected: true,
+            layers: true,
+          });
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  60_000,
+);
+
+test(
   "an unreadable TSX frame remains diagnostic without hiding healthy frames",
   () =>
     withProjectServer(
