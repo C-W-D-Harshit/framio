@@ -41,8 +41,8 @@ function Trace() {
       <div className="mb-6 flex items-center justify-between font-mono text-[11px] text-landing-muted">
         <span>framio · save → rebuilt frame</span>
         <span className="flex items-center gap-1.5">
-          <span className="size-1.5 animate-pulse rounded-full bg-signal" />
-          5 saves
+          <span className="size-1.5 animate-pulse rounded-full bg-signal" />5
+          saves
         </span>
       </div>
 
@@ -229,8 +229,8 @@ export function Speed() {
             Fast enough to keep up with your agent.
           </h2>
           <p className="mx-auto mt-5 max-w-[540px] text-[16px] leading-[1.6] text-landing-muted md:text-[18px]">
-            One binary that serves your designs on localhost. Nothing to sign
-            in to, nothing to sync.
+            One binary that serves your designs on localhost. Nothing to sign in
+            to, nothing to sync.
           </p>
         </Reveal>
 
