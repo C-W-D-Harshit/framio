@@ -1,10 +1,8 @@
 <a href="https://framio.design">
-  <img src=".github/assets/framio-brand.png" alt="Framio" width="556" />
+  <img src=".github/assets/framio-brand.png" alt="Framio" width="356" />
 </a>
 
 A design canvas for coding agents.
-
-[Website](https://framio.design) · [Releases](https://github.com/C-W-D-Harshit/framio/releases)
 
 Your agent writes designs as React + Tailwind files. Framio shows them live on an infinite
 canvas, so you can watch the work and point at what to change.
