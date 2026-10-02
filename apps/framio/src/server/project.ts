@@ -79,7 +79,7 @@ const readFrame = Effect.fn("Project.readFrame")(function* (
     page,
     slug,
     file,
-    relFile: relative(p.root, file),
+    relFile: relative(p.root, file).replaceAll("\\", "/"),
     content: source._tag === "Success" ? source.success : undefined,
     meta:
       result._tag === "Success"
@@ -145,7 +145,7 @@ const readImage = Effect.fn("Project.readImage")(function* (
     page,
     slug: fileName,
     file,
-    relFile: relative(p.root, file),
+    relFile: relative(p.root, file).replaceAll("\\", "/"),
     meta: {
       name: side.name ?? fileName.replace(/\.[^.]+$/, ""),
       width,

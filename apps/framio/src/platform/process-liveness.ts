@@ -16,6 +16,19 @@ export function processBirth(pid: number): string | null {
       const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
       return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
     }
+    if (process.platform === "win32") {
+      const result = spawnSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`,
+        ],
+        { encoding: "utf8", timeout: 5000, maxBuffer: 8192, windowsHide: true },
+      );
+      return result.status === 0 ? result.stdout.trim() || null : null;
+    }
     const result = spawnSync("/bin/ps", ["-o", "lstart=", "-p", String(pid)], {
       encoding: "utf8",
       timeout: 1000,

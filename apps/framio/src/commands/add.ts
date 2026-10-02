@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { basename, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import { GLOBAL_DIR, projectPaths } from "../lib/paths";
 import { requireProject } from "./shared";
 import { InvalidInput, PackageCommandFailed } from "../domain/errors";
@@ -24,9 +24,12 @@ export const add = Effect.fn("add")(function* (
         "framio add needs Node.js (npx). Install Node from https://nodejs.org.",
     });
   const fs = yield* FileSystem.FileSystem;
-  const shim = join(SHIM_DIR, "bun");
+  const shim = join(SHIM_DIR, process.platform === "win32" ? "bun.cmd" : "bun");
   const executable = `'${process.execPath.replace(/'/g, "'\\''")}'`;
-  const script = `#!/bin/sh\nBUN_BE_BUN=1 exec ${executable} "$@"\n`;
+  const script =
+    process.platform === "win32"
+      ? '@echo off\r\nset "BUN_BE_BUN=1"\r\n"%FRAMIO_BUN_EXECUTABLE%" %*\r\n'
+      : `#!/bin/sh\nBUN_BE_BUN=1 exec ${executable} "$@"\n`;
   const current = yield* fs
     .readFileString(shim)
     .pipe(
@@ -50,7 +53,7 @@ export const add = Effect.fn("add")(function* (
             overwrite,
             {
               verbose,
-              path: `${SHIM_DIR}:${process.env.PATH ?? ""}`,
+              path: `${SHIM_DIR}${delimiter}${process.env.PATH ?? ""}`,
             },
           );
           for (const file of result.files)

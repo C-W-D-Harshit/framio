@@ -47,7 +47,7 @@ export const faqs = [
   },
   {
     q: "What operating systems does Framio support?",
-    a: "Framio runs on macOS on Apple Silicon and Linux on x64 or arm64. Intel Macs and Windows are not supported. framio add also needs Node.js.",
+    a: "Framio runs on macOS on Apple Silicon, Linux on x64 or arm64, and Windows x64 on Windows 10 version 1809 or later. Use the PowerShell installer linked in the docs on Windows. Intel Macs are not supported. framio add also needs Node.js.",
   },
   {
     q: "Can my agent use existing components?",
@@ -71,7 +71,12 @@ export const productSchema = {
   url: `${SITE_URL}/`,
   description: SITE_DESCRIPTION,
   applicationCategory: "DeveloperApplication",
-  operatingSystem: ["macOS on Apple Silicon", "Linux x64", "Linux arm64"],
+  operatingSystem: [
+    "macOS on Apple Silicon",
+    "Linux x64",
+    "Linux arm64",
+    "Windows x64",
+  ],
   isAccessibleForFree: true,
   license: `${REPO_URL}/blob/main/LICENSE`,
   downloadUrl: `${REPO_URL}/releases`,

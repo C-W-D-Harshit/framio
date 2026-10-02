@@ -2,7 +2,11 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/install.sh"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/install.sh",
+        "$TURBO_ROOT$/install.ps1"
+      ]
     }
   }
 }

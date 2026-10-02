@@ -8,13 +8,23 @@ Framio is a free, open-source design canvas for coding agents. Claude Code, Code
 
 ## Install
 
-Framio runs on macOS on Apple Silicon and Linux on x64 or arm64. Intel Macs and Windows are not supported. The installer downloads a binary from [Framio's GitHub releases](https://github.com/C-W-D-Harshit/framio/releases). No account or subscription is required.
+Framio runs on macOS on Apple Silicon, Linux on x64 or arm64, and Windows x64 on Windows 10 version 1809 or later. Intel Macs are not supported. The installer downloads a binary from [Framio's GitHub releases](https://github.com/C-W-D-Harshit/framio/releases). No account or subscription is required.
 
 Run this command in your terminal:
 
 ```sh
 curl -fsSL https://framio.design/install.sh | sh
 ```
+
+On Windows, use PowerShell:
+
+```powershell
+irm https://framio.design/install.ps1 | iex
+```
+
+The Windows installer adds `~/.framio/bin` to your user PATH. Open a new terminal
+after installation. You can [read the PowerShell installer](https://framio.design/install.ps1)
+before running it. Set `FRAMIO_VERSION` to a release tag to install a specific version.
 
 You can [read the installer](https://framio.design/install.sh) before running it. Adding registry components with `framio add` also requires Node.js.
 

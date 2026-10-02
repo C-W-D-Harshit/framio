@@ -13,7 +13,7 @@ binary = Path(sys.argv[1]).resolve()
 baseline = json.loads((repo / "tests/fixtures/effect-v4-baseline.json").read_text())
 with TemporaryDirectory(prefix="framio-binary-init-") as directory:
     root = Path(directory)
-    environment = {**os.environ, "PATH": "/usr/bin:/bin"}
+    environment = {**os.environ, "PATH": str(Path(os.environ["SystemRoot"]) / "System32") if os.name == "nt" else "/usr/bin:/bin"}
     subprocess.run(
         [str(binary), "--version"], cwd=root, env=environment, check=True, timeout=30
     )
@@ -38,7 +38,7 @@ with TemporaryDirectory(prefix="framio-binary-init-") as directory:
     }
     expected_files.update(
         {
-            str(source.relative_to(repo)): hashlib.sha256(
+            source.relative_to(repo).as_posix(): hashlib.sha256(
                 source.read_bytes()
             ).hexdigest()
             for source in (repo / "src/scaffold/skill").rglob("*")

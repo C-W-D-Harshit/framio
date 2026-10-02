@@ -12,11 +12,14 @@ export const serve = Effect.fn("serve")(function* (
   terminal = false,
   host = defaultHost,
 ) {
-  root = yield* (yield* FileSystem.FileSystem).realPath(root);
+  const fs = yield* FileSystem.FileSystem;
+  root = yield* fs.realPath(root);
   const registry = yield* ServerRegistry;
   const p = projectPaths(root);
   if (yield* registry.running(p)) return;
   if (!(yield* registry.lock(p))) return;
+  if (process.platform === "win32")
+    yield* fs.remove(`${p.state}/stop-${process.pid}`, { force: true });
   if (!process.env.FRAMIO_SERVER_PORT)
     yield* (yield* FileSystem.FileSystem).remove(`${p.state}/restart.json`, {
       force: true,
@@ -42,6 +45,26 @@ export const serve = Effect.fn("serve")(function* (
     );
     yield* tryOpenBrowser(server.info.url);
   }
-  yield* server.restart;
-  process.exitCode = 75;
+  if (process.platform === "win32") {
+    const stopFile = `${p.state}/stop-${process.pid}`;
+    yield* Effect.addFinalizer(() =>
+      fs
+        .remove(stopFile, { force: true })
+        .pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("Stop request cleanup failed", error.message),
+          ),
+        ),
+    );
+    process.exitCode = yield* Effect.raceFirst(
+      server.restart.pipe(Effect.as(75)),
+      Effect.gen(function* () {
+        while (!(yield* fs.exists(stopFile))) yield* Effect.sleep("100 millis");
+        return 0;
+      }),
+    );
+  } else {
+    yield* server.restart;
+    process.exitCode = 75;
+  }
 });

@@ -96,6 +96,7 @@ for (const file of [
   "assets/brand/framio-social.png",
   "assets/landing/hero-thread.webp",
   "install.sh",
+  "install.ps1",
 ])
   assert(existsSync(join(dist, file)));
 console.log(

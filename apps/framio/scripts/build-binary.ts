@@ -10,7 +10,9 @@ import { InvalidInput } from "../src/domain/errors";
 const root = join(import.meta.dir, "..");
 const target = `${process.platform}-${process.arch}`;
 const outDir = join(root, "dist/bin");
-const outfile = join(outDir, `framio-${target}`);
+const executable = `framio-${target}${process.platform === "win32" ? ".exe" : ""}`;
+const outfile = join(outDir, executable);
+const archive = join(outDir, `framio-${target}.tar.gz`);
 Effect.scoped(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -30,7 +32,7 @@ Effect.scoped(
                 { filter: /lightningcss[/\\]node[/\\]index\.js$/ },
                 async (args) => {
                   const source = await Bun.file(args.path).text();
-                  const addon = `lightningcss-${target}${process.platform === "linux" ? "-gnu" : ""}`;
+                  const addon = `lightningcss-${target}${process.platform === "linux" ? "-gnu" : process.platform === "win32" ? "-msvc" : ""}`;
                   const patched = source.replace(
                     /let native;[\s\S]*?\n}\n/,
                     `let native = require(${JSON.stringify(addon)});\n`,
@@ -55,14 +57,7 @@ Effect.scoped(
     const tar = yield* spawner.spawn(
       ChildProcess.make(
         "tar",
-        [
-          "--format=ustar",
-          "-czf",
-          `${outfile}.tar.gz`,
-          "-C",
-          outDir,
-          `framio-${target}`,
-        ],
+        ["--format=ustar", "-czf", archive, "-C", outDir, executable],
         {
           stdout: "inherit",
           stderr: "inherit",

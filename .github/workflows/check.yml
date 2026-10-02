@@ -28,3 +28,23 @@ jobs:
       - run: bun run build:binary
       - run: python3 apps/framio/scripts/smoke-binary.py apps/framio/dist/bin/framio-linux-x64
       - run: python3 apps/framio/scripts/smoke-updater.py apps/framio/dist/bin/framio-linux-x64
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun run typecheck
+      - run: bun run test:effect
+      - run: bun test apps/framio/tests/windows
+      - run: bun run build:binary
+      - run: python apps/framio/scripts/smoke-binary.py apps/framio/dist/bin/framio-win32-x64.exe
+      - run: python apps/framio/scripts/smoke-updater.py apps/framio/dist/bin/framio-win32-x64.exe
+      - run: python apps/framio/scripts/smoke-windows.py apps/framio/dist/bin/framio-win32-x64.exe

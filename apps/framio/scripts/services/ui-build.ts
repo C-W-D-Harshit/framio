@@ -97,7 +97,7 @@ export const buildUi = Effect.fn("Build.ui")(function* (root: string) {
   const entry = (file: string) => {
     const name = `f${imports.length}`;
     imports.push(
-      `import ${name} from ${JSON.stringify(relative(generated, file))} with { type: "file" };`,
+      `import ${name} from ${JSON.stringify(relative(generated, file).replaceAll("\\", "/"))} with { type: "file" };`,
     );
     return name;
   };
@@ -114,7 +114,7 @@ export const buildUi = Effect.fn("Build.ui")(function* (root: string) {
         const value = embedded
           ? `bytes(${JSON.stringify(Buffer.from(compressed ? gzipSync(yield* fs.readFile(join(dir, file))) : yield* fs.readFile(join(dir, file))).toString("base64"))})`
           : entry(join(dir, file));
-        return `  ${JSON.stringify(file)}: ${value},`;
+        return `  ${JSON.stringify(file.replaceAll("\\", "/"))}: ${value},`;
       }),
     );
     return `{\n${entries.join("\n")}\n}`;

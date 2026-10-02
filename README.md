@@ -15,7 +15,15 @@ canvas, so you can watch the work and point at what to change.
 curl -fsSL https://framio.design/install.sh | sh
 ```
 
-Works on macOS and Linux. `framio add` also needs Node.js.
+On Windows, run this in PowerShell:
+
+```powershell
+irm https://framio.design/install.ps1 | iex
+```
+
+Supports macOS on Apple Silicon, Linux x64 and arm64, and Windows x64 on Windows 10
+version 1809 or later. `framio add` also needs Node.js. Windows installation adds
+`~/.framio/bin` to your user PATH without administrator access.
 
 ## Quick start
 
@@ -249,7 +257,7 @@ Run `bun run dev:landing` to start Astro, `bun run build:landing` to build it, a
 `bun run deploy:landing` to deploy it with Wrangler. See [apps/landing/README.md](apps/landing/README.md)
 for the Cloudflare account and domain configuration.
 
-To release, push a tag. GitHub Actions builds the binaries that `install.sh` downloads.
+To release, push a tag. GitHub Actions builds the binaries that `install.sh` and `install.ps1` download.
 
 ```sh
 git tag v0.1.0 && git push origin v0.1.0

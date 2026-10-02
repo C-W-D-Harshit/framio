@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import * as Effect from "effect/Effect";
 import { selfCommand } from "../lib/bun";
@@ -52,7 +52,11 @@ export const acquireLoggedServer = (
             spawnError
           )
             return;
-          child.kill("SIGTERM");
+          if (process.platform === "win32" && child.pid) {
+            spawnSync("taskkill.exe", ["/pid", String(child.pid), "/T", "/F"], {
+              windowsHide: true,
+            });
+          } else child.kill("SIGTERM");
           if (
             (yield* wait.pipe(Effect.timeoutOption("10 seconds")))._tag ===
             "None"
