@@ -14,6 +14,10 @@ export const serve = Effect.fn("serve")(function* (
   const p = projectPaths(root);
   if (yield* registry.running(p)) return;
   if (!(yield* registry.lock(p))) return;
+  if (!process.env.FRAMIO_SERVER_PORT)
+    yield* (yield* FileSystem.FileSystem).remove(`${p.state}/restart.json`, {
+      force: true,
+    });
   const ui = terminal ? yield* TerminalUI : null;
   if (ui) {
     yield* ui.banner(basename(root));
@@ -35,5 +39,6 @@ export const serve = Effect.fn("serve")(function* (
     );
     yield* openBrowser(server.info.url);
   }
-  yield* Effect.never;
+  yield* server.restart;
+  process.exitCode = 75;
 });

@@ -6,6 +6,9 @@ export const ServerInfo = Schema.Struct({
   port: PositiveNumber,
   url: Schema.String,
   startedAt: Schema.String,
+  version: Schema.optional(Schema.String),
+  installationId: Schema.optional(Schema.String),
+  supervisorPid: Schema.optional(Schema.Int),
 });
 export type ServerInfo = typeof ServerInfo.Type;
 export const RegisteredServer = Schema.Struct({
@@ -18,4 +21,5 @@ export const Health = Schema.Struct({
   root: Schema.String,
   pid: Schema.Int,
   protocol: Schema.optional(Schema.String),
+  version: Schema.optional(Schema.String),
 });

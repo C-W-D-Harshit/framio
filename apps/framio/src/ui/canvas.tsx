@@ -1,3 +1,4 @@
+import { projectSession } from "./project-session";
 import { sourceFrame } from "./frame-bridge";
 import { runPreviewController } from "./services/preview-controller";
 import {
@@ -9,7 +10,7 @@ import * as Effect from "effect/Effect";
 import { Atom } from "effect/reactivity";
 import { viewportId, viewports } from "../domain/viewports";
 import { CommentsPanel, type CommentDraft } from "./comments";
-import type { Comment } from "../contracts/comments";
+import { CommentAnchor, type Comment } from "../contracts/comments";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -139,8 +140,35 @@ function CanvasInner({
 }: Props) {
   const flow = useReactFlow<FrameNodeType>();
   const [showResolved, setShowResolved] = useState(false);
-  const [activeComment, setActiveComment] = useState<string | null>(null);
-  const [draft, setDraft] = useState<CommentDraft | null>(null);
+  const [activeComment, setActiveComment] = useState<string | null>(() =>
+    projectSession.getItem(`active-comment:${page.id}`),
+  );
+  useEffect(() => {
+    if (activeComment)
+      projectSession.setItem(`active-comment:${page.id}`, activeComment);
+    else projectSession.removeItem(`active-comment:${page.id}`);
+  }, [activeComment, page.id]);
+  const [draft, setDraftState] = useState<CommentDraft | null>(() => {
+    const decoded = Schema.decodeUnknownResult(
+      Schema.fromJsonString(
+        Schema.NullOr(
+          Schema.Struct({ frame: Schema.String, anchor: CommentAnchor }),
+        ),
+      ),
+    )(projectSession.getItem(`comment-anchor:${page.id}`) ?? "null");
+    return decoded._tag === "Success" ? decoded.success : null;
+  });
+  const setDraft = useCallback(
+    (next: CommentDraft | null) => {
+      if (next === null && draft)
+        projectSession.removeItem(`comment-body:${draft.frame}`);
+      setDraftState(next);
+    },
+    [draft],
+  );
+  useEffect(() => {
+    projectSession.setItem(`comment-anchor:${page.id}`, JSON.stringify(draft));
+  }, [draft, page.id]);
   const pageComments = useMemo(
     () => comments.filter((c) => c.frame.startsWith(`${page.id}/`)),
     [comments, page.id],
@@ -152,7 +180,7 @@ function CanvasInner({
       setActiveComment(id || null);
       setDraft(null);
     },
-    [onCommentsChange],
+    [onCommentsChange, setDraft],
   );
   const makeDraft = useCallback(
     (frame: string, x: number, y: number, element: ElementInfo | null) => {
@@ -178,7 +206,7 @@ function CanvasInner({
       setActiveComment(null);
       onCommentsChange(true);
     },
-    [page.frames, onCommentsChange],
+    [page.frames, onCommentsChange, setDraft],
   );
   const geometryKey = `${page.id}:${JSON.stringify(page.frames.map((frame) => [frame.id, frame.geometryVersion ?? [frame.version, cssVersion], frame.meta]))}`;
   const [reportedHeights, setHeights] = useAtom(heightsAtom(geometryKey));
@@ -596,6 +624,7 @@ function CanvasInner({
     selectFrames,
     zoomToFrames,
     endPan,
+    setDraft,
     setSelection,
     onCommentsChange,
   ]);

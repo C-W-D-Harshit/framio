@@ -1,5 +1,11 @@
+import * as Deferred from "effect/Deferred";
+import { makeUpdater, runningVersion } from "../services/update/updater";
+import { RestartJournal } from "../contracts/restart";
+import { UpdateFailure } from "../contracts/update";
+import { isAlive } from "../services/server-registry";
 import { makeLayersApi } from "./layers/api";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { frameViewports, viewports, viewportId } from "../domain/viewports";
 import { makeScreenshotHandler } from "../services/screenshot-request";
 import { makeComments } from "../services/comments";
@@ -113,15 +119,40 @@ function frameHtml(
 export const runServer = Effect.fn("Server.start")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const p = projectPaths(root);
+  const projectId = createHash("sha256")
+    .update(yield* fs.realPath(root))
+    .digest("hex");
+  const html = Buffer.from(
+    Buffer.from(uiFiles["index.html"]!)
+      .toString("utf8")
+      .replace(
+        "<head>",
+        `<head><meta name="framio-project" content="${projectId}">`,
+      ),
+  );
+  const htmlGzip = gzipSync(html);
   yield* fs.makeDirectory(p.state, { recursive: true });
   const project = Context.get(
     yield* Layer.build(ProjectState.layer(p)),
     ProjectState,
   );
+  const requestedPort = process.env.FRAMIO_SERVER_PORT
+    ? Number(process.env.FRAMIO_SERVER_PORT)
+    : undefined;
+  if (
+    requestedPort !== undefined &&
+    (!Number.isInteger(requestedPort) ||
+      requestedPort < 1 ||
+      requestedPort > 65535)
+  )
+    return yield* new ServerStartupFailed({ message: "Invalid restart port" });
   let server: HttpServer.HttpServer["Service"] | undefined;
   for (
-    let port = Policies.firstPort;
-    port < Policies.firstPort + Policies.portCount;
+    let port = requestedPort ?? Policies.firstPort;
+    port <
+    (requestedPort === undefined
+      ? Policies.firstPort + Policies.portCount
+      : requestedPort + 1);
     port++
   ) {
     const attempt = yield* BunHttpServer.make({
@@ -145,11 +176,17 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
   }
   if (!server || server.address._tag === "UnixPathAddress")
     return yield* new ServerStartupFailed({ message: "No free port found" });
+  const updater = yield* makeUpdater({ background: true });
   const info: ServerInfo = {
     pid: process.pid,
     port: server.address.port,
     url: `http://localhost:${server.address.port}`,
     startedAt: DateTime.formatIso(yield* DateTime.now),
+    version: runningVersion,
+    installationId: updater.key,
+    supervisorPid: process.env.FRAMIO_SUPERVISOR_PID
+      ? Number(process.env.FRAMIO_SUPERVISOR_PID)
+      : undefined,
   };
   const shots = Context.get(
     yield* Layer.build(Screenshots.layer(info.url)),
@@ -188,8 +225,113 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
         }),
       ),
   });
+  const serverScope = yield* Scope.Scope;
+  const restart = yield* Deferred.make<void>();
+  const writes = yield* Semaphore.make(1);
+  const restarting = yield* Ref.make(false);
+  const connections = yield* Ref.make<ReadonlySet<Socket.Socket>>(new Set());
+  const journalFile = `${p.state}/restart.json`;
+  const restartState = fs.readFileString(journalFile).pipe(
+    Effect.flatMap((text) =>
+      Schema.decodeUnknownEffect(Schema.fromJsonString(RestartJournal))(text),
+    ),
+    Effect.catch(() => Effect.succeed(null)),
+  );
+  const performUpdate = Effect.fn("Server.update")(function* (
+    action: "check" | "download" | "install" | "rollback" | "restart",
+  ) {
+    if (action === "check") {
+      yield* updater.check(true);
+      return;
+    }
+    if (action === "download") {
+      yield* updater.download();
+      return;
+    }
+    if (action === "rollback") {
+      yield* updater.install(true);
+      return;
+    }
+    if ((yield* Ref.get(connections)).size > 1)
+      return yield* new UpdateFailure({
+        message:
+          "Close the other canvas tabs for this project before restarting. Their pending work must be saved first.",
+      });
+    if (!info.supervisorPid || !isAlive(info.supervisorPid))
+      return yield* new UpdateFailure({
+        message:
+          "This server has no live session supervisor. Save your work, then run framio stop and framio start in your terminal.",
+      });
+    yield* Effect.gen(function* () {
+      if (yield* Ref.get(restarting))
+        return yield* new UpdateFailure({
+          message: "This project is already restarting.",
+        });
+      if ((yield* Ref.get(connections)).size > 1)
+        return yield* new UpdateFailure({
+          message:
+            "Close the other canvas tabs after saving before restarting.",
+        });
+      yield* Ref.set(restarting, true);
+      yield* Effect.gen(function* () {
+        if (action === "install") yield* updater.install();
+        const status = yield* updater.status();
+        if (
+          !status.installedVersion ||
+          status.installedVersion === runningVersion
+        )
+          return yield* new UpdateFailure({
+            message: "There is no installed update to restart into.",
+          });
+        const temporary = `${journalFile}.${process.pid}.tmp`;
+        yield* fs.writeFileString(
+          temporary,
+          JSON.stringify({
+            phase: "requested",
+            port: info.port,
+            version: status.installedVersion,
+            error: null,
+          }),
+        );
+        yield* fs.rename(temporary, journalFile);
+        yield* Deferred.succeed(restart, undefined);
+      }).pipe(Effect.onError(() => Ref.set(restarting, false)));
+    }).pipe(Semaphore.withPermits(writes, 1));
+  });
   const Handlers = HttpApiBuilder.group(Api, "project", (handlers) =>
     handlers.handleAll({
+      updateStatus: () =>
+        Effect.gen(function* () {
+          const status = yield* updater.status();
+          const journal = yield* restartState;
+          return {
+            ...status,
+            restartPhase:
+              journal?.phase === "failed"
+                ? ("failed" as const)
+                : journal?.phase === "recovered"
+                  ? ("recovered" as const)
+                  : (yield* Ref.get(restarting))
+                    ? ("restarting" as const)
+                    : ("idle" as const),
+            restartError: journal?.error ?? null,
+          };
+        }).pipe(Effect.orDie),
+      updateAction: ({ payload }) =>
+        payload.action === "download"
+          ? Effect.gen(function* () {
+              yield* performUpdate("download").pipe(
+                Effect.catch((error) => Effect.logWarning(error.message)),
+                Effect.forkIn(serverScope),
+              );
+              return { ok: true, error: null };
+            })
+          : performUpdate(payload.action).pipe(
+              Effect.as({ ok: true, error: null }),
+              Effect.catch((error) =>
+                Effect.succeed({ ok: false, error: error.message }),
+              ),
+            ),
       renameLayer: ({ payload }) => layers.renameLayer(payload),
       inspect: ({ payload }) => layers.inspect(payload),
       health: () =>
@@ -198,6 +340,7 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           root,
           pid: process.pid,
           protocol: "framio-v4-1",
+          version: runningVersion,
         }),
       snapshot: () =>
         project.get.pipe(Effect.map((state) => projectSnapshot(root, state))),
@@ -312,7 +455,6 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
     }),
   );
   const ApiRoutes = HttpApiBuilder.layer(Api).pipe(Layer.provide(Handlers));
-  const connections = yield* Ref.make<ReadonlySet<Socket.Socket>>(new Set());
   const closeSocket = (socket: Socket.Socket) =>
     Effect.scoped(
       Effect.flatMap(socket.writer, (writer) =>
@@ -327,15 +469,43 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
     (effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        if (request.url.split("?")[0] !== "/ws") return yield* effect;
+        const path = request.url.split("?")[0];
+        if (request.method === "POST" && path === "/api/update") {
+          const origin = request.headers["origin"];
+          if (
+            origin &&
+            origin !== info.url &&
+            origin !== `http://127.0.0.1:${info.port}`
+          )
+            return HttpServerResponse.text("Update origin refused", {
+              status: 403,
+            });
+        }
+        if (request.method === "POST" && path !== "/api/update")
+          return yield* Effect.gen(function* () {
+            if (yield* Ref.get(restarting))
+              return HttpServerResponse.text(
+                "Project restarting. Saves are paused.",
+                { status: 409 },
+              );
+            return yield* effect;
+          }).pipe(Semaphore.withPermits(writes, 1));
+        if (path !== "/ws") return yield* effect;
+        if (yield* Ref.get(restarting))
+          return HttpServerResponse.text("Project restarting", { status: 409 });
         const upgrade = Effect.acquireRelease(
-          request.upgrade.pipe(
+          Effect.gen(function* () {
+            if (yield* Ref.get(restarting))
+              return yield* Effect.die(new Error("Project restarting"));
+            return yield* request.upgrade;
+          }).pipe(
             Effect.tap((socket) =>
               Ref.update(
                 connections,
                 (sockets) => new Set([...sockets, socket]),
               ),
             ),
+            Semaphore.withPermits(writes, 1),
           ),
           (socket) =>
             closeSocket(socket).pipe(
@@ -657,7 +827,14 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           : response;
       }
       const assetKey = uiFiles[path.slice(1)] ? path.slice(1) : "index.html";
-      const asset = gzip ? uiGzipFiles[assetKey] : uiFiles[assetKey];
+      const asset =
+        assetKey === "index.html"
+          ? gzip
+            ? htmlGzip
+            : html
+          : gzip
+            ? uiGzipFiles[assetKey]
+            : uiFiles[assetKey];
       return HttpServerResponse.uint8Array(asset!, {
         contentType:
           MIME[assetKey.slice(assetKey.lastIndexOf("."))] ??
@@ -701,5 +878,5 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
     }),
   );
   yield* Effect.logInfo(`framio running at ${info.url} for ${root}`);
-  return { info };
+  return { info, restart: Deferred.await(restart) };
 });

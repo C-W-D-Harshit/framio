@@ -25,6 +25,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Verify release tag matches package version
+        run: node -e 'const p=require("./apps/framio/package.json"); if(process.env.GITHUB_REF_NAME !== "v"+p.version) throw new Error("Release tag must match package version")'
       - run: bun install --frozen-lockfile
       - run: bun run build:ui
       - run: bun run format:check
@@ -39,6 +41,7 @@ jobs:
         run: |
           bin=$(ls apps/framio/dist/bin/framio-* | grep -v '\.tar\.gz$')
           python3 apps/framio/scripts/smoke-binary.py "$bin"
+          python3 apps/framio/scripts/smoke-updater.py "$bin"
       - uses: actions/upload-artifact@v4
         with:
           name: framio-${{ matrix.runner }}
@@ -48,10 +51,25 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
-      - run: gh release create "$GITHUB_REF_NAME" artifacts/*.tar.gz --repo "$GITHUB_REPOSITORY" --generate-notes
+      - name: Publish checksums and authored release notes
+        run: |
+          notes="releases/$GITHUB_REF_NAME.md"
+          test -s "$notes"
+          python3 - "$notes" <<'PY'
+          import pathlib, sys
+          description, _, details = pathlib.Path(sys.argv[1]).read_text().strip().partition("\n\n")
+          if not description or description.startswith("#") or len(description) > 280:
+              raise SystemExit("Start release notes with a short authored paragraph of at most 280 characters")
+          heading, _, changes = details.strip().partition("\n")
+          if not heading.startswith("#") or not changes.strip():
+              raise SystemExit("Follow the description with a heading and detailed changes")
+          PY
+          (cd artifacts && sha256sum *.tar.gz > SHA256SUMS)
+          gh release create "$GITHUB_REF_NAME" artifacts/*.tar.gz artifacts/SHA256SUMS --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file "$notes"
         env:
           GH_TOKEN: ${{ github.token }}

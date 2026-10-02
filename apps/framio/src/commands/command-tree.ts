@@ -1,3 +1,4 @@
+import { upgrade } from "./upgrade";
 import { inspect } from "./inspect";
 import * as Effect from "effect/Effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -32,6 +33,16 @@ const makeRoot = () =>
     Command.withSubcommands([
       Command.make("start", startFlags, start).pipe(
         Command.withDescription("Open the canvas and watch your designs"),
+      ),
+      Command.make(
+        "upgrade",
+        {
+          check: Flag.Boolean("check").pipe(Flag.withDefault(false)),
+          download: Flag.Boolean("download").pipe(Flag.withDefault(false)),
+          install: Flag.Boolean("install").pipe(Flag.withDefault(false)),
+          rollback: Flag.Boolean("rollback").pipe(Flag.withDefault(false)),
+        },
+        upgrade,
       ),
       Command.make(
         "init",

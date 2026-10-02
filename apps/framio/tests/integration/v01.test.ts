@@ -529,6 +529,22 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
                 'textarea[aria-label="New comment"]',
                 "Shorten this heading",
               );
+              await page.reload({ waitUntil: "networkidle0" });
+              await page.waitForSelector('textarea[aria-label="New comment"]');
+              expect(
+                await page.$eval(
+                  'textarea[aria-label="New comment"]',
+                  (element) => (element as HTMLTextAreaElement).value,
+                ),
+              ).toBe("Shorten this heading");
+              expect(
+                existsSync(join(root, ".framio/comments.json")) &&
+                  json(root).comments.some(
+                    (comment: { body: string }) =>
+                      comment.body === "Shorten this heading",
+                  ),
+              ).toBe(false);
+              await page.focus('textarea[aria-label="New comment"]');
               await page.keyboard.press("Enter");
               await waitUntil(
                 () =>
@@ -545,6 +561,16 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
               );
               await page.waitForSelector('textarea[aria-label="Reply"]');
               await page.type('textarea[aria-label="Reply"]', "Keep it clear");
+              await page.reload({ waitUntil: "networkidle0" });
+              await page.waitForSelector('textarea[aria-label="Reply"]');
+              expect(
+                await page.$eval(
+                  'textarea[aria-label="Reply"]',
+                  (element) => (element as HTMLTextAreaElement).value,
+                ),
+              ).toBe("Keep it clear");
+              expect(json(root).comments[0].replies).toHaveLength(0);
+              await page.focus('textarea[aria-label="Reply"]');
               await page.keyboard.press("Enter");
               await waitUntil(
                 () => json(root).comments[0].replies.length === 1,
@@ -782,9 +808,23 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
                 Object.keys(json(root, "pages/01-test/canvas.json").positions),
               ).toEqual(["invoices"]);
               // Delete is explicit and removes only the selected thread.
-              await page.click(
-                `[data-id="__viewport__/01-test/invoices/390"] [data-comment-pin="${comment.id}"]`,
+              await page.click('button[aria-label="Fit all frames"]');
+              const pinSelector = `[data-id="__viewport__/01-test/invoices/390"] [data-comment-pin="${comment.id}"]`;
+              await page.waitForFunction(
+                (selector) => {
+                  const pin = document.querySelector(selector);
+                  if (!pin) return false;
+                  const box = pin.getBoundingClientRect();
+                  const hit = document.elementFromPoint(
+                    box.x + box.width / 2,
+                    box.y + box.height / 2,
+                  );
+                  return hit !== null && pin.contains(hit);
+                },
+                {},
+                pinSelector,
               );
+              await page.locator(pinSelector).click();
               await page.waitForSelector(
                 'button[aria-label="Comment actions"]',
                 {

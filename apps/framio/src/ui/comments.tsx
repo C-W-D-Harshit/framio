@@ -1,3 +1,4 @@
+import { projectSession } from "./project-session";
 import { Kbd } from "./components/ui/kbd";
 import { Avatar, AvatarFallback } from "./components/ui/avatar";
 import { Badge } from "./components/ui/badge";
@@ -117,19 +118,24 @@ export function CommentsPanel({
   onSaved(): void;
 }) {
   const save = useAtomSet(saveCommentAtom, { mode: "promise" });
-  const [body, setBody] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  useEffect(() => {
-    setBody("");
-    setSaveError(null);
-  }, [active, draft]);
   const visible = comments.filter((comment) =>
     showResolved ? comment.status === "resolved" : comment.status === "open",
   );
   const current = draft
     ? undefined
     : (visible.find((comment) => comment.id === active) ?? visible[0]);
+  const draftKey = draft
+    ? `comment-body:${draft.frame}`
+    : `reply-body:${current?.id ?? ""}`;
+  const [body, setBody] = useState(
+    () => projectSession.getItem(draftKey) ?? "",
+  );
+  const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  useEffect(() => {
+    setBody(projectSession.getItem(draftKey) ?? "");
+    setSaveError(null);
+  }, [draftKey]);
   const send = async (
     operation: import("../contracts/comments").CommentOperation,
   ) => {
@@ -137,6 +143,7 @@ export function CommentsPanel({
     try {
       const result = await save(operation);
       if (result.ok) {
+        projectSession.removeItem(draftKey);
         setBody("");
         onSaved();
         if (operation.type === "status" && operation.status === "open")
@@ -182,10 +189,15 @@ export function CommentsPanel({
         aria-label={draft ? "New comment" : "Reply"}
         placeholder={draft ? "Leave feedback…" : "Reply to this thread..."}
         value={body}
-        onChange={(event) => setBody(event.target.value)}
+        onChange={(event) => {
+          projectSession.setItem(draftKey, event.target.value);
+          setBody(event.target.value);
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
+            projectSession.removeItem(draftKey);
+            setBody("");
             onSaved();
           } else if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();

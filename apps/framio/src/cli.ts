@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import { FetchHttpClient } from "effect/http";
 import { ServerRegistry } from "./services/server-registry";
 import { ServerLauncher } from "./services/server-launcher";
+import { supervise } from "./services/session-supervisor";
 import { serve } from "./services/server-application";
 import { InvalidInput } from "./domain/errors";
 import { TerminalUI } from "./services/terminal-ui";
@@ -36,7 +37,17 @@ Effect.gen(function* () {
         process.off("SIGHUP", onHup);
       }),
   );
-  if (args[0] === "__serve") {
+  if (args[0] === "__supervise") {
+    const parsed = yield* Schema.decodeUnknownEffect(
+      Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
+        Schema.Literals(["--open", "--terminal", "--verbose"]),
+      ]),
+    )(args.slice(1));
+    process.exitCode = yield* supervise(parsed[0], parsed.includes("--open"), {
+      terminal: parsed.includes("--terminal"),
+      verbose: parsed.includes("--verbose"),
+    });
+  } else if (args[0] === "__serve" || args[0] === "__supervise") {
     const parsed = yield* Schema.decodeUnknownEffect(
       Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
         Schema.Literals(["--open", "--terminal", "--verbose"]),
@@ -80,7 +91,8 @@ Effect.gen(function* () {
             (!args[0] ||
               args[0].startsWith("-") ||
               args[0] === "start" ||
-              args[0] === "__serve")
+              args[0] === "__serve" ||
+              args[0] === "__supervise")
             ? 0
             : code,
         ),

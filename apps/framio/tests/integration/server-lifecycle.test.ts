@@ -100,6 +100,27 @@ for (const args of [
     expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(false);
   }, 20_000);
 
+for (const phase of ["failed", "recovered"])
+  test(`a fresh start clears a previous ${phase} restart journal`, async () => {
+    const root = project();
+    const state = join(root, ".framio/.state");
+    mkdirSync(state, { recursive: true });
+    writeFileSync(
+      join(state, "restart.json"),
+      JSON.stringify({
+        phase,
+        port: 4567,
+        version: "1.0.0",
+        error: "Previous restart failed",
+      }),
+    );
+    launch(root, ["start", "--no-open"]);
+    const info = await ready(root);
+    const status = await (await fetch(info.url + "/api/update")).json();
+    expect(status.restartPhase).toBe("idle");
+    expect(status.restartError).toBeNull();
+  }, 20_000);
+
 test("an older healthy server cannot be borrowed but can still be stopped", async () => {
   const root = project();
   const state = join(root, ".framio/.state");

@@ -4,7 +4,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Equal from "effect/Equal";
 import * as PlatformError from "effect/PlatformError";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -14,14 +13,8 @@ import { GLOBAL_DIR, projectPaths, type ProjectPaths } from "../lib/paths";
 import { Health, RegisteredServer, ServerInfo } from "../contracts/server-info";
 import { ServerIdentityMismatch, ServerStartupFailed } from "../domain/errors";
 
-export const isAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (cause) {
-    return Predicate.hasProperty(cause, "code") && cause.code === "EPERM";
-  }
-};
+import { isAlive } from "../platform/process-liveness";
+export { isAlive } from "../platform/process-liveness";
 
 const directory = join(GLOBAL_DIR, "servers");
 const registryFile = (root: string) =>
@@ -73,7 +66,11 @@ export class ServerRegistry extends Context.Service<
           client.get(`${info.url}/api/health`).pipe(
             Effect.flatMap(HttpClientResponse.schemaBodyJson(Health)),
             Effect.map((body) => ({
-              healthy: body.ok && body.root === root && body.pid === info.pid,
+              healthy:
+                body.ok &&
+                body.root === root &&
+                body.pid === info.pid &&
+                (!info.version || body.version === info.version),
               compatible: body.protocol === "framio-v4-1",
             })),
             Effect.timeout("1 second"),

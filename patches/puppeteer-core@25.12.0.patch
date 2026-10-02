@@ -1,0 +1,13 @@
+diff --git a/lib/puppeteer/common/util.js b/lib/puppeteer/common/util.js
+index f092b2afa6870646d987b63d53ae08c176ee0d67..144e74e8e6e4d20ac16cdaffe180c52cb15c6fcc 100644
+--- a/lib/puppeteer/common/util.js
++++ b/lib/puppeteer/common/util.js
+@@ -27,7 +27,7 @@ export class PuppeteerURL {
+     static fromCallSite(functionName, site) {
+         const url = new PuppeteerURL();
+         url.#functionName = functionName;
+-        url.#siteString = site.toString();
++        url.#siteString = site?.toString() ?? "unknown";
+         return url;
+     }
+     static parse = (url) => {

@@ -49,7 +49,7 @@ export class ServerLauncher extends Context.Service<
             yield* Effect.sleep("100 millis");
             const info = yield* registry.running(p);
             if (info) {
-              if (info.pid !== child.pid) {
+              if ((info.supervisorPid ?? info.pid) !== child.pid) {
                 yield* child.stop;
                 return { info, started: false };
               }
@@ -83,7 +83,7 @@ export class ServerLauncher extends Context.Service<
         verbose = false,
       ) {
         const [command, ...args] = selfCommand([
-          "__serve",
+          "__supervise",
           p.root,
           "--terminal",
           ...(verbose ? ["--verbose"] : []),
