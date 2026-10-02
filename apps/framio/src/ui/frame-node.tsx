@@ -307,6 +307,7 @@ export const FrameNode = memo(function FrameNode({
               src={thumbUrl(frame, cssVersion, scale)}
               alt={frame.meta.name}
               onHeight={onHeight}
+              fallbackSrc={isImage ? imageUrl(frame) : undefined}
             />
           ))}
         {live &&

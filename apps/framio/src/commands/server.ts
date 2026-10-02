@@ -8,6 +8,9 @@ import { requireProject } from "./shared";
 import { ServerStartupFailed } from "../domain/errors";
 import { basename } from "node:path";
 import { TerminalUI } from "../services/terminal-ui";
+import { canOpenBrowser } from "../platform/network-addresses";
+import { defaultHost } from "../domain/server-addresses";
+import { printServerUrls } from "../services/server-display";
 
 export const openBrowser = Effect.fn("openBrowser")(function* (url: string) {
   const command =
@@ -19,10 +22,27 @@ export const openBrowser = Effect.fn("openBrowser")(function* (url: string) {
   yield* launchBrowser(command);
 });
 
+export const tryOpenBrowser = Effect.fn("tryOpenBrowser")(function* (
+  url: string,
+) {
+  if (!canOpenBrowser()) return;
+  yield* openBrowser(url).pipe(
+    Effect.catch(() =>
+      Effect.flatMap(TerminalUI, (ui) =>
+        ui.message(
+          "warning",
+          `Could not open a browser. Open ${url} on your computer.`,
+        ),
+      ),
+    ),
+  );
+});
+
 export const start = Effect.fn("start")(function* (options: {
   background: boolean;
   noOpen: boolean;
   verbose?: boolean;
+  host?: string;
 }) {
   const p = projectPaths(yield* requireProject);
   const registry = yield* ServerRegistry;
@@ -31,27 +51,40 @@ export const start = Effect.fn("start")(function* (options: {
   if (options.background) {
     yield* ui.banner(basename(p.root));
     const { info, started } = yield* ui.tasks((tasks) =>
-      tasks.run("Canvas", launcher.ensure(p), { done: "Ready" }),
+      tasks.run(
+        "Canvas",
+        launcher.ensure(p, false, options.host ?? defaultHost),
+        { done: "Ready" },
+      ),
     );
-    if (started && !options.noOpen) yield* openBrowser(info.url);
+    if (started && !options.noOpen) yield* tryOpenBrowser(info.url);
     yield* ui.message(
       "success",
       started
         ? `Framio is running in the background at ${info.url}`
         : `Framio is already running at ${info.url}`,
     );
+    yield* printServerUrls(info);
     yield* ui.row("Files", displayPath(p.framio));
     yield* ui.row("Logs", displayPath(p.serverLog));
     yield* ui.next("Stop this canvas", ["framio stop"]);
     return;
   }
   const running = yield* registry.running(p);
-  if (running)
-    return yield* ui.message(
+  if (running) {
+    yield* ui.message(
       "info",
       `Framio is already running at ${running.url}. Stop it with \`framio stop\` before starting in the foreground.`,
     );
-  const code = yield* launcher.foreground(p, !options.noOpen, options.verbose);
+    yield* printServerUrls(running);
+    return;
+  }
+  const code = yield* launcher.foreground(
+    p,
+    !options.noOpen && canOpenBrowser(),
+    options.verbose,
+    options.host,
+  );
   yield* Effect.sync(() => {
     process.exitCode = code;
   });
@@ -88,7 +121,7 @@ export const list = Effect.gen(function* () {
   if (ui.interactive) {
     for (const info of servers) {
       yield* ui.row("Project", info.root);
-      yield* ui.row("Canvas", info.url);
+      yield* printServerUrls(info);
       yield* ui.row("PID", String(info.pid));
     }
     return;
@@ -105,7 +138,7 @@ export const status = Effect.gen(function* () {
       "info",
       "Framio is not running. Start it with `framio start`.",
     );
-  yield* ui.row("Canvas", info.url);
+  yield* printServerUrls(info);
   yield* ui.row("Status", "Running");
   yield* ui.row("Files", displayPath(p.framio));
   yield* ui.row("PID", String(info.pid));

@@ -14,7 +14,7 @@ import * as Effect from "effect/Effect";
 import { runServer } from "../../src/server/server";
 import { ensureBrowser } from "../../src/lib/browser";
 import { emptyUpdate, type UpdateStatus } from "../../src/contracts/update";
-test("update actions reject foreign browser origins before touching the updater", async () => {
+test("update actions accept advertised origins and reject foreign browser origins", async () => {
   const root = mkdtempSync(join(tmpdir(), "framio-update-origins-"));
   mkdirSync(join(root, ".framio/pages"), { recursive: true });
   writeFileSync(join(root, ".framio/theme.css"), "");
@@ -36,7 +36,14 @@ test("update actions reject foreign browser origins before touching the updater"
               });
               expect(response.status).toBe(403);
             }
-            for (const origin of [info.url, `http://127.0.0.1:${info.port}`]) {
+            expect(info.urls?.some((entry) => entry.kind === "network")).toBe(
+              true,
+            );
+            for (const origin of new Set([
+              info.url,
+              `http://127.0.0.1:${info.port}`,
+              ...(info.urls?.map((entry) => entry.url) ?? []),
+            ])) {
               const response = await fetch(info.url + "/api/update", {
                 method: "POST",
                 headers: { origin, "content-type": "application/json" },

@@ -11,6 +11,7 @@ import { selfCommand } from "../lib/bun";
 import type { ProjectPaths } from "../lib/paths";
 import type { ServerInfo } from "../contracts/server-info";
 import { ServerStartupFailed } from "../domain/errors";
+import { defaultHost } from "../domain/server-addresses";
 
 export class ServerLauncher extends Context.Service<
   ServerLauncher,
@@ -18,6 +19,7 @@ export class ServerLauncher extends Context.Service<
     ensure: (
       p: ProjectPaths,
       temporary?: boolean,
+      host?: string,
     ) => Effect.Effect<
       { info: ServerInfo; started: boolean },
       PlatformError.PlatformError | ServerStartupFailed,
@@ -27,6 +29,7 @@ export class ServerLauncher extends Context.Service<
       p: ProjectPaths,
       open: boolean,
       verbose?: boolean,
+      host?: string,
     ) => Effect.Effect<number, PlatformError.PlatformError, Scope.Scope>;
   }
 >()("framio/services/ServerLauncher") {
@@ -39,16 +42,27 @@ export class ServerLauncher extends Context.Service<
       const ensure = Effect.fn("ServerLauncher.ensure")(function* (
         p: ProjectPaths,
         temporary = false,
+        host?: string,
       ) {
         const running = yield* registry.running(p);
-        if (running) return { info: running, started: false };
+        if (running) {
+          if (host && (running.host ?? "127.0.0.1") !== host)
+            return yield* new ServerStartupFailed({
+              message: `Framio is already running on ${running.host ?? "127.0.0.1"}. Run \`framio stop\` before starting with --host ${host}.`,
+            });
+          return { info: running, started: false };
+        }
         yield* fs.makeDirectory(p.state, { recursive: true });
-        const child = yield* acquireLoggedServer(p, temporary);
+        const child = yield* acquireLoggedServer(p, temporary, host);
         const result = yield* Effect.gen(function* () {
           while (true) {
             yield* Effect.sleep("100 millis");
             const info = yield* registry.running(p);
             if (info) {
+              if (host && (info.host ?? "127.0.0.1") !== host)
+                return yield* new ServerStartupFailed({
+                  message: `Framio is already running on ${info.host ?? "127.0.0.1"}. Run \`framio stop\` before starting with --host ${host}.`,
+                });
               if ((info.supervisorPid ?? info.pid) !== child.pid) {
                 yield* child.stop;
                 return { info, started: false };
@@ -81,11 +95,14 @@ export class ServerLauncher extends Context.Service<
         p: ProjectPaths,
         open: boolean,
         verbose = false,
+        host = defaultHost,
       ) {
         const [command, ...args] = selfCommand([
           "__supervise",
           p.root,
           "--terminal",
+          "--host",
+          host,
           ...(verbose ? ["--verbose"] : []),
           ...(open ? ["--open"] : []),
         ]);

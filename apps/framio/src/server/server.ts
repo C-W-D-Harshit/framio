@@ -59,6 +59,14 @@ import {
   type ProjectGeneration,
 } from "../services/project-state";
 import { Screenshots } from "../services/screenshots";
+import {
+  defaultHost,
+  serverBaseUrl,
+  serverUrls,
+} from "../domain/server-addresses";
+import { discoverServerUrls } from "../services/server-addresses";
+import { networkAddresses } from "../platform/network-addresses";
+import { probeServerPort } from "../platform/server-port";
 export type { Snapshot, SnapshotFrame } from "../contracts/snapshot";
 
 const runtimeVersion = Bun.hash(runtimeFile).toString(16);
@@ -116,7 +124,10 @@ function frameHtml(
 </head><body><div id="root"></div>${boot.error ? "" : `<script type="module" src="${src}"></script>`}</body></html>`;
 }
 
-export const runServer = Effect.fn("Server.start")(function* (root: string) {
+export const runServer = Effect.fn("Server.start")(function* (
+  root: string,
+  host = defaultHost,
+) {
   const fs = yield* FileSystem.FileSystem;
   const p = projectPaths(root);
   const projectId = createHash("sha256")
@@ -147,6 +158,19 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
   )
     return yield* new ServerStartupFailed({ message: "Invalid restart port" });
   let server: HttpServer.HttpServer["Service"] | undefined;
+  const wildcard = host === "0.0.0.0" || host === "::";
+  const addresses = [
+    host.includes(":") ? "::" : "0.0.0.0",
+    ...(wildcard
+      ? serverUrls(host, 0, yield* networkAddresses, null).map((entry) =>
+          entry.kind === "local"
+            ? host === "::"
+              ? "::1"
+              : "127.0.0.1"
+            : new URL(entry.url).hostname.replace(/^\[|\]$/g, ""),
+        )
+      : []),
+  ];
   for (
     let port = requestedPort ?? Policies.firstPort;
     port <
@@ -155,16 +179,24 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
       : requestedPort + 1);
     port++
   ) {
-    const attempt = yield* BunHttpServer.make({
-      port,
-      hostname: "127.0.0.1",
-      idleTimeout: 120,
-      disablePreemptiveShutdown: true,
+    const attempt = yield* Effect.gen(function* () {
+      for (const address of addresses) yield* probeServerPort(address, port);
+      return yield* BunHttpServer.make({
+        port,
+        hostname: host,
+        idleTimeout: 120,
+        disablePreemptiveShutdown: true,
+      });
     }).pipe(
-      Effect.catchDefect((cause) =>
-        Predicate.hasProperty(cause, "code") && cause.code === "EADDRINUSE"
-          ? Effect.fail(new PortOccupied({ port }))
-          : Effect.die(cause),
+      Effect.catchDefect(
+        (cause): Effect.Effect<never, PortOccupied | ServerStartupFailed> =>
+          Predicate.hasProperty(cause, "code") && cause.code === "EADDRINUSE"
+            ? Effect.fail(new PortOccupied({ port }))
+            : Effect.fail(
+                new ServerStartupFailed({
+                  message: `Could not listen on ${host}:${port}: ${String(cause)}`,
+                }),
+              ),
       ),
       Effect.result,
     );
@@ -180,13 +212,15 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
   const info: ServerInfo = {
     pid: process.pid,
     port: server.address.port,
-    url: `http://localhost:${server.address.port}`,
+    url: serverBaseUrl(host, server.address.port),
     startedAt: DateTime.formatIso(yield* DateTime.now),
     version: runningVersion,
     installationId: updater.key,
     supervisorPid: process.env.FRAMIO_SUPERVISOR_PID
       ? Number(process.env.FRAMIO_SUPERVISOR_PID)
       : undefined,
+    host,
+    urls: yield* discoverServerUrls(host, server.address.port),
   };
   const shots = Context.get(
     yield* Layer.build(Screenshots.layer(info.url)),
@@ -475,7 +509,8 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           if (
             origin &&
             origin !== info.url &&
-            origin !== `http://127.0.0.1:${info.port}`
+            origin !== `http://127.0.0.1:${info.port}` &&
+            !info.urls?.some((entry) => entry.url === origin)
           )
             return HttpServerResponse.text("Update origin refused", {
               status: 403,
@@ -786,7 +821,9 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           Effect.catch((error) =>
             Cache.invalidate(thumbnails, key).pipe(
               Effect.as(
-                HttpServerResponse.text(error.message, { status: 500 }),
+                HttpServerResponse.text(error.message, {
+                  status: error._tag === "BrowserUnavailable" ? 503 : 500,
+                }),
               ),
             ),
           ),

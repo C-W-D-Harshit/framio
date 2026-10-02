@@ -7,19 +7,26 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { networkInterfaces, tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
 import { Effect, Layer } from "effect";
 import { BunFileSystem } from "@effect/platform-bun";
 import { FetchHttpClient } from "effect/http";
 import { ServerRegistry, isAlive } from "../../src/services/server-registry";
 import { projectPaths } from "../../src/lib/paths";
+import { BROWSERS_DIR } from "../../src/lib/paths";
+import { browserExecutablePath } from "../../src/lib/browser";
 
 const cli = resolve(import.meta.dir, "../../src/cli.ts");
 const projects: string[] = [];
 const children: ReturnType<typeof Bun.spawn>[] = [];
+const rootChildren = new Map<
+  string,
+  { exitCode: number | null; stdout: ReadableStream; stderr: ReadableStream }
+>();
 function project() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "framio-lifecycle-")));
   mkdirSync(join(root, ".framio/pages"), { recursive: true });
@@ -27,14 +34,19 @@ function project() {
   projects.push(root);
   return root;
 }
-function launch(root: string, args: string[]) {
+function launch(
+  root: string,
+  args: string[],
+  env: Record<string, string> = {},
+) {
   const child = Bun.spawn([process.execPath, cli, ...args], {
     cwd: root,
-    env: { ...process.env, HOME: join(root, "home") },
+    env: { ...process.env, HOME: join(root, "home"), ...env },
     stdout: "pipe",
     stderr: "pipe",
   });
   children.push(child);
+  rootChildren.set(root, child);
   return child;
 }
 async function run(root: string, args: string[]) {
@@ -51,9 +63,19 @@ async function ready(root: string) {
   while (Date.now() < deadline) {
     const info = await getRunningServer(projectPaths(root));
     if (info) return info;
+    const child = rootChildren.get(root);
+    if (child && child.exitCode !== null) {
+      const output =
+        (await new Response(child.stdout).text()) +
+        (await new Response(child.stderr).text());
+      throw new Error(`Server exited with ${child.exitCode}: ${output}`);
+    }
     await Bun.sleep(50);
   }
-  throw new Error(`Server never became ready for ${root}`);
+  const file = projectPaths(root).serverFile;
+  throw new Error(
+    `Server never became ready for ${root}: ${existsSync(file) ? readFileSync(file, "utf8") : "no server registration"}`,
+  );
 }
 async function gone(pid: number) {
   const deadline = Date.now() + 10_000;
@@ -74,7 +96,229 @@ afterEach(async () => {
   }
   for (const root of projects.splice(0))
     rmSync(root, { recursive: true, force: true });
+  rootChildren.clear();
 });
+
+test("default startup accepts network connections and prints the local URL", async () => {
+  const root = project();
+  const child = launch(root, ["start", "--no-open"]);
+  const info = await ready(root);
+  const address = Object.values(networkInterfaces())
+    .flat()
+    .find(
+      (address) => address && !address.internal && address.family === "IPv4",
+    )?.address;
+  expect(address).toBeDefined();
+  const response = await fetch(`http://${address}:${info.port}/api/health`, {
+    signal: AbortSignal.timeout(2000),
+  });
+  expect(response.status).toBe(200);
+  expect((await response.json()).pid).toBe(info.pid);
+  child.kill("SIGINT");
+  expect(await child.exited).toBe(0);
+  expect(await new Response(child.stdout).text()).toContain("Local");
+}, 20_000);
+
+test("SSH startup does not launch a browser or require headless Chromium", async () => {
+  const root = project();
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  const marker = join(root, "opened");
+  for (const name of ["open", "xdg-open"]) {
+    const executable = join(bin, name);
+    writeFileSync(
+      executable,
+      `#!${process.execPath}\nawait Bun.write(${JSON.stringify(marker)}, "opened");`,
+    );
+    chmodSync(executable, 0o755);
+  }
+  const child = launch(root, ["__serve", root, "--open", "--terminal"], {
+    SSH_CONNECTION: "100.64.0.1 1234 100.64.0.2 22",
+    PATH: `${bin}:${process.env.PATH}`,
+  });
+  const info = await ready(root);
+  await Bun.sleep(1000);
+  expect(child.exitCode).toBeNull();
+  expect(existsSync(marker)).toBe(false);
+  expect(existsSync(join(root, "home/.framio/browsers"))).toBe(false);
+  expect((await fetch(`${info.url}/api/project`)).status).toBe(200);
+  child.kill("SIGINT");
+  expect(await child.exited).toBe(0);
+}, 20_000);
+
+test("a missing browser launcher leaves the foreground server running", async () => {
+  const root = project();
+  const bin = join(root, "empty-bin");
+  mkdirSync(bin);
+  const child = launch(root, ["__serve", root, "--terminal", "--open"], {
+    PATH: bin,
+    SSH_CONNECTION: "",
+    SSH_CLIENT: "",
+    SSH_TTY: "",
+    CI: "",
+    DISPLAY: ":0",
+  });
+  const info = await ready(root);
+  await Bun.sleep(100);
+  expect(child.exitCode).toBeNull();
+  expect((await fetch(`${info.url}/api/health`)).status).toBe(200);
+  child.kill("SIGINT");
+  expect(await child.exited).toBe(0);
+  expect(await new Response(child.stderr).text()).toContain(
+    "Could not open a browser",
+  );
+}, 20_000);
+
+for (const background of [false, true])
+  test(`local-only host is preserved in ${background ? "background" : "foreground"} startup and status`, async () => {
+    const root = project();
+    const args = [
+      "start",
+      "--host",
+      "127.0.0.1",
+      "--no-open",
+      ...(background ? ["--background"] : []),
+    ];
+    const child = launch(root, args);
+    const info = await ready(root);
+    expect(info.host).toBe("127.0.0.1");
+    expect(info.urls).toEqual([
+      { kind: "local", url: `http://127.0.0.1:${info.port}` },
+    ]);
+    const address = Object.values(networkInterfaces())
+      .flat()
+      .find(
+        (entry) => entry && !entry.internal && entry.family === "IPv4",
+      )?.address;
+    expect(address).toBeDefined();
+    await expect(
+      fetch(`http://${address}:${info.port}/api/health`, {
+        signal: AbortSignal.timeout(2000),
+      }),
+    ).rejects.toThrow();
+    const status = await run(root, ["status"]);
+    expect(status.code).toBe(0);
+    expect(status.output).toContain("Local");
+    expect(status.output).not.toContain("Network");
+    if (background) {
+      expect(await child.exited).toBe(0);
+      expect(await new Response(child.stdout).text()).toContain("Local");
+      const changedHost = await run(root, [
+        "start",
+        "--background",
+        "--no-open",
+      ]);
+      expect(changedHost.code).toBe(1);
+      expect(changedHost.output).toContain("framio stop");
+      expect((await run(root, ["stop"])).code).toBe(0);
+    } else {
+      child.kill("SIGINT");
+      expect(await child.exited).toBe(0);
+    }
+    await gone(info.pid);
+  }, 20_000);
+
+for (const mode of ["running", "stopped", "malformed", "nonzero", "timeout"])
+  test(`Tailscale discovery handles ${mode} without blocking the server`, async () => {
+    const root = project();
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    const pidFile = join(root, "tailscale-pid");
+    const argsFile = join(root, "tailscale-args");
+    const executable = join(bin, "tailscale");
+    const json = JSON.stringify({
+      BackendState: mode === "stopped" ? "Stopped" : "Running",
+      Self: { TailscaleIPs: ["100.64.0.2"], DNSName: "vm.example.ts.net." },
+      CurrentTailnet: { MagicDNSEnabled: true },
+    });
+    writeFileSync(
+      executable,
+      `#!${process.execPath}\nawait Bun.write(${JSON.stringify(pidFile)}, String(process.pid));await Bun.write(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));\n${mode === "timeout" ? "setInterval(() => {}, 1000);" : `console.log(${JSON.stringify(mode === "malformed" ? "not json" : json)});process.exit(${mode === "nonzero" ? 1 : 0});`}`,
+    );
+    chmodSync(executable, 0o755);
+    const child = launch(root, ["__serve", root, "--terminal"], {
+      PATH: `${bin}:${process.env.PATH}`,
+    });
+    const info = await ready(root);
+    expect(JSON.parse(readFileSync(argsFile, "utf8"))).toEqual([
+      "status",
+      "--json",
+    ]);
+    expect(info.urls?.filter((entry) => entry.kind === "tailscale")).toEqual(
+      mode === "running"
+        ? [
+            { kind: "tailscale", url: `http://vm.example.ts.net:${info.port}` },
+            { kind: "tailscale", url: `http://100.64.0.2:${info.port}` },
+          ]
+        : [],
+    );
+    await gone(Number(readFileSync(pidFile, "utf8")));
+    expect((await fetch(`${info.url}/api/project`)).status).toBe(200);
+    child.kill("SIGINT");
+    expect(await child.exited).toBe(0);
+    const output = await new Response(child.stdout).text();
+    expect(output.includes("Tailscale")).toBe(mode === "running");
+  }, 20_000);
+
+test("unavailable Chromium reports feature errors while the server keeps serving live frames", async () => {
+  const root = project();
+  const pages = join(root, ".framio/pages/01-test");
+  mkdirSync(pages);
+  symlinkSync(
+    resolve(import.meta.dir, "../../node_modules"),
+    join(root, ".framio/node_modules"),
+  );
+  writeFileSync(
+    join(pages, "frame.tsx"),
+    'export const meta={name:"Test",width:390,height:844};export default function Frame(){return <h1>Live frame</h1>}',
+  );
+  const executable = join(
+    root,
+    "home/.framio/browsers",
+    relative(BROWSERS_DIR, browserExecutablePath()),
+  );
+  mkdirSync(resolve(executable, ".."), { recursive: true });
+  writeFileSync(
+    executable,
+    `#!${process.execPath}\nconsole.error("fixture browser unavailable");process.exit(1);`,
+  );
+  chmodSync(executable, 0o755);
+  const child = launch(root, ["__serve", root, "--terminal"], {
+    SSH_CONNECTION: "connection",
+  });
+  const info = await ready(root);
+  const thumb = await fetch(`${info.url}/thumb/01-test/frame.png`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  expect(thumb.status).toBe(503);
+  expect(await thumb.text()).toContain("Live previews still work");
+  const inspect = await fetch(`${info.url}/api/inspect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ frame: "01-test/frame" }),
+  });
+  expect(inspect.status).toBe(200);
+  expect((await inspect.json()).error).toContain("screenshot browser");
+  let frame: { error: string | null; version: number } | undefined;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const snapshot = await (await fetch(`${info.url}/api/project`)).json();
+    frame = snapshot.pages[0]?.frames[0];
+    if (frame && (frame.version > 0 || frame.error)) break;
+    await Bun.sleep(50);
+  }
+  expect(frame).toBeDefined();
+  expect(frame!.error).toBeNull();
+  expect(frame!.version).toBeGreaterThan(0);
+  expect((await fetch(`${info.url}/f/01-test/frame?canvas=1`)).status).toBe(
+    200,
+  );
+  const bundle = await fetch(`${info.url}/js/01-test/frame.js`);
+  expect(bundle.status).toBe(200);
+  expect(await bundle.text()).toContain("Live frame");
+  expect((await fetch(`${info.url}/api/health`)).status).toBe(200);
+  child.kill("SIGINT");
+  expect(await child.exited).toBe(0);
+}, 20_000);
 
 for (const args of [
   ["start", "--no-open"],

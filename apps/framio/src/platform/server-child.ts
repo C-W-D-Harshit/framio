@@ -4,18 +4,28 @@ import * as Effect from "effect/Effect";
 import { selfCommand } from "../lib/bun";
 import type { ProjectPaths } from "../lib/paths";
 import { ServerStartupFailed } from "../domain/errors";
+import { defaultHost } from "../domain/server-addresses";
 
 /** Direct descriptors keep detached server logs independent of the parent scope.
  * Effect's process output sinks use parent-owned pipes, so this adapter handles
  * the detached/temporary logged-server case only. */
-export const acquireLoggedServer = (p: ProjectPaths, temporary: boolean) =>
+export const acquireLoggedServer = (
+  p: ProjectPaths,
+  temporary: boolean,
+  host = defaultHost,
+) =>
   Effect.acquireRelease(
     Effect.try({
       try: () => {
         const fd = openSync(p.serverLog, "a");
         let child;
         try {
-          const [command, ...args] = selfCommand(["__supervise", p.root]);
+          const [command, ...args] = selfCommand([
+            "__supervise",
+            p.root,
+            "--host",
+            host,
+          ]);
           child = spawn(command!, args, {
             cwd: p.root,
             detached: !temporary,

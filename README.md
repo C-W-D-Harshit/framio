@@ -32,6 +32,7 @@ Then ask your agent:
 
 Setup shows separate progress for canvas files, agent skills, packages, and the screenshot
 browser. `framio init --skip-install` creates files and prints the commands to finish setup.
+
 Use `--verbose` with `init`, `install`, or `add` to see full subprocess logs. Failed commands
 print their diagnostics and a retry instruction.
 `framio start --verbose` also shows runtime build diagnostics. Background canvases write
@@ -43,6 +44,27 @@ color. CI, dumb terminals, and redirected output use plain text without cursor a
 
 The agent asks a few questions, shows you a couple of visual directions, and builds the screens
 you pick. It screenshots each one and fixes what it sees before moving on.
+
+### Remote machines and VMs
+
+`framio start` listens on all IPv4 interfaces by default and prints local and network
+URLs. If Tailscale is running, it also prints the Tailscale IP and, when MagicDNS is
+enabled, its hostname. SSH into your VM, start Framio, and open its Tailscale URL in
+the browser on your main computer. Tailscale discovery is optional and never blocks
+startup for more than a brief timeout.
+
+SSH and headless Linux sessions skip opening a browser on the server. A missing
+browser launcher does not stop the canvas. No desktop browser or display is required
+on the VM. Framio downloads its own headless Chromium for screenshots, thumbnails,
+and geometry inspection. Those features need Chromium's system libraries and sandbox
+support. If Chromium is unavailable, live previews remain usable and failed thumbnails
+show a message. Clipboard actions also support remote HTTP sessions.
+
+Use `framio start --host 127.0.0.1` for local-only access, or `--host <address>` to
+bind a specific interface. Anyone who can reach the port can edit the canvas, so keep
+access limited to your trusted network with your firewall and Tailscale access rules.
+Tailscale encrypts HTTP traffic through its tunnel. HTTPS needs a separate setup,
+such as Tailscale Serve.
 
 ## What goes where
 

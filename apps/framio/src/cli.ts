@@ -4,13 +4,9 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Runtime from "effect/Runtime";
-import * as References from "effect/References";
-import * as Schema from "effect/Schema";
 import { FetchHttpClient } from "effect/http";
 import { ServerRegistry } from "./services/server-registry";
 import { ServerLauncher } from "./services/server-launcher";
-import { supervise } from "./services/session-supervisor";
-import { serve } from "./services/server-application";
 import { InvalidInput } from "./domain/errors";
 import { TerminalUI } from "./services/terminal-ui";
 declare const FRAMIO_VERSION: string | undefined;
@@ -37,30 +33,11 @@ Effect.gen(function* () {
         process.off("SIGHUP", onHup);
       }),
   );
-  if (args[0] === "__supervise") {
-    const parsed = yield* Schema.decodeUnknownEffect(
-      Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
-        Schema.Literals(["--open", "--terminal", "--verbose"]),
-      ]),
-    )(args.slice(1));
-    process.exitCode = yield* supervise(parsed[0], parsed.includes("--open"), {
-      terminal: parsed.includes("--terminal"),
-      verbose: parsed.includes("--verbose"),
-    });
-  } else if (args[0] === "__serve" || args[0] === "__supervise") {
-    const parsed = yield* Schema.decodeUnknownEffect(
-      Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
-        Schema.Literals(["--open", "--terminal", "--verbose"]),
-      ]),
-    )(args.slice(1));
-    const server = serve(
-      parsed[0],
-      parsed.includes("--open"),
-      parsed.includes("--terminal"),
+  if (args[0] === "__serve" || args[0] === "__supervise") {
+    const { runServerCommand } = yield* Effect.promise(
+      () => import("./commands/command-tree"),
     );
-    yield* parsed.includes("--terminal") && !parsed.includes("--verbose")
-      ? server.pipe(Effect.provideService(References.MinimumLogLevel, "Warn"))
-      : server;
+    yield* runServerCommand(args[0], args.slice(1), VERSION);
   } else {
     const { runCommands } = yield* Effect.promise(
       () => import("./commands/command-tree"),

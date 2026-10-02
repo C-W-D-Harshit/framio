@@ -1,6 +1,8 @@
 import { upgrade } from "./upgrade";
 import { inspect } from "./inspect";
 import * as Effect from "effect/Effect";
+import * as References from "effect/References";
+import * as Schema from "effect/Schema";
 import { Argument, Command, Flag } from "effect/cli";
 import { add } from "./add";
 import { init } from "./init";
@@ -8,8 +10,16 @@ import { install } from "./install";
 import { screenshot } from "./screenshot";
 import { list, open, start, status, stop } from "./server";
 import { serve } from "../services/server-application";
+import { supervise } from "../services/session-supervisor";
 import { PositiveNumber, ViewportDimension } from "../domain/project";
+import { defaultHost } from "../domain/server-addresses";
+const hostFlag = Flag.String("host").pipe(
+  Flag.withSchema(Schema.NonEmptyString),
+  Flag.withDefault(defaultHost),
+  Flag.withDescription("Listen address. Use 127.0.0.1 for local-only access"),
+);
 const startFlags = {
+  host: hostFlag,
   verbose: Flag.Boolean("verbose").pipe(
     Flag.withDefault(false),
     Flag.withDescription("Show runtime build diagnostics"),
@@ -130,16 +140,40 @@ const makeRoot = () =>
         },
         screenshot,
       ).pipe(Command.withDescription("Capture frames, layers or a website")),
-      Command.make(
-        "__serve",
-        {
-          root: Argument.String("root"),
-          open: Flag.Boolean("open").pipe(Flag.withDefault(false)),
-        },
-        ({ root, open }) => serve(root, open),
-      ),
+      makeServerCommand("__serve"),
     ]),
   );
 
 export const runCommands = (args: string[], version: string) =>
   Command.runWith(makeRoot(), { version })(args);
+
+const makeServerCommand = (name: "__serve" | "__supervise") =>
+  Command.make(
+    name,
+    {
+      root: Argument.String("root"),
+      host: hostFlag,
+      open: Flag.Boolean("open").pipe(Flag.withDefault(false)),
+      terminal: Flag.Boolean("terminal").pipe(Flag.withDefault(false)),
+      verbose: Flag.Boolean("verbose").pipe(Flag.withDefault(false)),
+    },
+    ({ root, host, open, terminal, verbose }) => {
+      if (name === "__supervise")
+        return supervise(root, open, { terminal, verbose, host }).pipe(
+          Effect.tap((code) =>
+            Effect.sync(() => {
+              process.exitCode = code;
+            }),
+          ),
+        );
+      const server = serve(root, open, terminal, host);
+      return terminal && !verbose
+        ? server.pipe(Effect.provideService(References.MinimumLogLevel, "Warn"))
+        : server;
+    },
+  );
+export const runServerCommand = (
+  name: "__serve" | "__supervise",
+  args: string[],
+  version: string,
+) => Command.runWith(makeServerCommand(name), { version })(args);
