@@ -1,3 +1,4 @@
+import { UpdateControl } from "./update-control";
 import { EmptyCanvas, DisconnectedNotice } from "./empty-canvas";
 import framioIcon from "./brand/framio-icon.png";
 import type { CSSProperties } from "react";
@@ -110,14 +111,23 @@ export function App() {
   const [pageId, setPageId] = useHashPage();
   const [tool, setTool] = useTool();
   const [selection, setSelection] = useAtom(selectionAtom);
+  useEffect(() => {
+    sessionStorage.setItem("framio:selection", JSON.stringify(selection));
+  }, [selection]);
   const [collapsedFrames, setCollapsedFrames] = useState<Set<string>>(
     () => new Set(),
   );
   const [finder, setFinder] = useState(false);
   const [finderValue, setFinderValue] = useState("");
   const [rightPanel, setRightPanel] = useState<"comments" | "inspect" | null>(
-    null,
+    () => {
+      const stored = sessionStorage.getItem("framio:panel");
+      return stored === "comments" || stored === "inspect" ? stored : null;
+    },
   );
+  useEffect(() => {
+    sessionStorage.setItem("framio:panel", rightPanel ?? "");
+  }, [rightPanel]);
   const [focusFrame, setFocusFrame] = useState<{
     id: string;
     serial: number;
@@ -302,6 +312,7 @@ export function App() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter className="gap-2 border-t p-4">
+            <UpdateControl />
             {[snapshot?.cssError, snapshot?.commentsError, saveError]
               .filter(Boolean)
               .map((error) => (

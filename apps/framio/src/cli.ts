@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import { FetchHttpClient } from "effect/http";
 import { ServerRegistry } from "./services/server-registry";
 import { ServerLauncher } from "./services/server-launcher";
+import { supervise } from "./services/session-supervisor";
 import { serve } from "./services/server-application";
 import { InvalidInput } from "./domain/errors";
 declare const FRAMIO_VERSION: string | undefined;
@@ -35,7 +36,12 @@ Effect.gen(function* () {
         process.off("SIGHUP", onHup);
       }),
   );
-  if (args[0] === "__serve") {
+  if (args[0] === "__supervise") {
+    const parsed = yield* Schema.decodeUnknownEffect(
+      Schema.Tuple([Schema.String, Schema.optional(Schema.Literal("--open"))]),
+    )(args.slice(1));
+    process.exitCode = yield* supervise(parsed[0], parsed[1] === "--open");
+  } else if (args[0] === "__serve") {
     const parsed = yield* Schema.decodeUnknownEffect(
       Schema.Tuple([Schema.String, Schema.optional(Schema.Literal("--open"))]),
     )(args.slice(1));

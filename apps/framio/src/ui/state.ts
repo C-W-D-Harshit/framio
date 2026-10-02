@@ -1,6 +1,8 @@
 import { hiddenPreview, type PreviewMode } from "./preview-policy";
 import type { LayerReport, RenameRequest } from "../contracts/layers";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { SelectionRequest as SelectionSchema } from "../contracts/requests";
 import * as Stream from "effect/Stream";
 import * as Layer from "effect/Layer";
 import { studioInputLayer } from "./services/studio-input";
@@ -29,10 +31,14 @@ export const saveSelectionAtom = runtime.fn(
 export const saveCanvasAtom = runtime.fn((payload: typeof CanvasRequest.Type) =>
   Effect.flatMap(ProjectClient, (client) => client.canvas(payload)),
 );
-export const selectionAtom = Atom.make<typeof SelectionRequest.Type>({
-  frames: [],
-  element: null,
-});
+const storedSelection = Schema.decodeUnknownResult(
+  Schema.fromJsonString(SelectionSchema),
+)(sessionStorage.getItem("framio:selection") ?? "{}");
+export const selectionAtom = Atom.make<typeof SelectionRequest.Type>(
+  storedSelection._tag === "Success"
+    ? storedSelection.success
+    : { frames: [], element: null },
+);
 export const heightsAtom = Atom.family((page: string) =>
   Atom.make<Record<string, number>>({}),
 );
@@ -141,4 +147,14 @@ export const previewAtom = Atom.family((_frame: string) =>
 
 export const readyVersionAtom = Atom.family((_frame: string) =>
   Atom.make<number | null>(null),
+);
+
+export const updateAtom = runtime.atom(
+  Stream.unwrap(Effect.map(ProjectClient, (client) => client.updateChanges)),
+  { initialValue: null },
+);
+export const updateActionAtom = runtime.fn(
+  (
+    action: (typeof import("../contracts/update").UpdateAction.Type)["action"],
+  ) => Effect.flatMap(ProjectClient, (client) => client.update(action)),
 );

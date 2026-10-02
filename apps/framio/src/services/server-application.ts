@@ -20,5 +20,6 @@ export const serve = Effect.fn("serve")(function* (
     );
     yield* openBrowser(server.info.url);
   }
-  yield* Effect.never;
+  yield* server.restart;
+  process.exitCode = 75;
 });

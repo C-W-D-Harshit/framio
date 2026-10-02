@@ -1,0 +1,144 @@
+import { expect, test } from "bun:test";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+const supervisor = resolve(
+    import.meta.dir,
+    "../../src/services/session-supervisor.ts",
+  ),
+  registry = resolve(import.meta.dir, "../../src/services/server-registry.ts");
+const updaterStorage = resolve(
+  import.meta.dir,
+  "../../src/platform/update-storage.ts",
+);
+const fixtureSource = `
+import {mkdirSync,writeFileSync,rmSync} from "node:fs";
+const root=process.argv[2],version=process.argv[3],state=root+"/.framio/.state"; mkdirSync(state,{recursive:true});
+const server=Bun.serve({hostname:"127.0.0.1",port:Number(process.env.FRAMIO_SERVER_PORT??0),fetch(req){
+ if(new URL(req.url).pathname==="/api/health") return Response.json({ok:true,root,pid:process.pid,protocol:"framio-v4-1",version});
+ if(new URL(req.url).pathname==="/restart") {writeFileSync(state+"/restart.json",JSON.stringify({phase:"requested",port:server.port,version:"2.0.0",error:null})); queueMicrotask(()=>finish(75)); return Response.json({ok:true});}
+ return Response.json({ok:true});
+}});
+writeFileSync(state+"/server.lock",String(process.pid)); writeFileSync(state+"/server.json",JSON.stringify({pid:process.pid,port:server.port,url:"http://127.0.0.1:"+server.port,version,supervisorPid:Number(process.env.FRAMIO_SUPERVISOR_PID),startedAt:new Date().toISOString()}));
+async function finish(code){ await server.stop(true); rmSync(state+"/server.json",{force:true}); rmSync(state+"/server.lock",{force:true}); process.exit(code); }
+process.on("SIGTERM",()=>void finish(0));
+`;
+async function waitFor<A>(read: () => A | null, ms = 10000): Promise<A> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const result = read();
+    if (result) return result;
+    await Bun.sleep(30);
+  }
+  throw new Error("Fixture readiness timed out");
+}
+for (const mode of ["foreground", "background", "recovery"])
+  test(`${mode} supervisor retains port and project identity while other projects run`, async () => {
+    const background = mode === "background",
+      recovery = mode === "recovery";
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "framio-restart-"))),
+      fixture = join(dir, "server.ts"),
+      target = join(dir, "installed"),
+      program = join(dir, "owner.ts");
+    writeFileSync(fixture, fixtureSource);
+    writeFileSync(
+      target,
+      `#!/bin/sh\nif [ "$1" = --version ]; then printf 'framio 2.0.0\\n'; else ${recovery ? "exit 42" : `exec '${process.execPath}' '${fixture}' "$2" 2.0.0`}; fi\n`,
+    );
+    chmodSync(target, 0o755);
+    if (recovery) {
+      const { openUpdateStorage, installationIdentity } =
+        await import("../../src/platform/update-storage");
+      const { emptyUpdate } = await import("../../src/contracts/update");
+      const id = installationIdentity(target).id,
+        data = join(dir, "updates");
+      mkdirSync(join(data, id), { recursive: true });
+      const backup = join(data, id, "previous");
+      writeFileSync(
+        backup,
+        `#!/bin/sh\nif [ "$1" = --version ]; then printf 'framio 1.0.0\\n'; else exec '${process.execPath}' '${fixture}' "$2" 1.0.0; fi\n`,
+      );
+      chmodSync(backup, 0o755);
+      const db = openUpdateStorage(data);
+      db.write(`installation:${id}`, {
+        ...emptyUpdate,
+        previousVersion: "1.0.0",
+      });
+      db.close();
+    }
+    const roots = [join(dir, "a"), join(dir, "b")];
+    for (const root of roots)
+      mkdirSync(join(root, ".framio/.state"), { recursive: true });
+    writeFileSync(
+      program,
+      `import {Effect,Layer} from "effect"; import {BunServices,BunRuntime} from "@effect/platform-bun"; import {FetchHttpClient} from "effect/http"; import {supervise} from ${JSON.stringify(supervisor)}; import {ServerRegistry} from ${JSON.stringify(registry)}; supervise(process.argv[2],false,{readinessTimeout:"2 seconds",command:[process.execPath,${JSON.stringify(fixture)},process.argv[2],"1.0.0"],updater:{target:${JSON.stringify(target)},directory:${JSON.stringify(join(dir, "updates"))},development:false,version:"1.0.0",platform:"darwin-arm64"}}).pipe(Effect.scoped,Effect.provide(ServerRegistry.layer.pipe(Layer.provideMerge(Layer.mergeAll(BunServices.layer,FetchHttpClient.layer)))),BunRuntime.runMain);`,
+    );
+    const children = roots.map((root) =>
+      Bun.spawn([process.execPath, program, root], {
+        cwd: resolve(import.meta.dir, "../.."),
+        env: {
+          ...process.env,
+          NODE_PATH: resolve(import.meta.dir, "../../node_modules"),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        detached: background,
+      }),
+    );
+    try {
+      const read = (root: string) => {
+        try {
+          return JSON.parse(
+            readFileSync(join(root, ".framio/.state/server.json"), "utf8"),
+          );
+        } catch {
+          return null;
+        }
+      };
+      const first = await waitFor(() => read(roots[0]!)),
+        other = await waitFor(() => read(roots[1]!));
+      await fetch(first.url + "/restart").catch(() => {});
+      const replacement = await waitFor(() => {
+        const info = read(roots[0]!);
+        return info &&
+          info.pid !== first.pid &&
+          info.version === (recovery ? "1.0.0" : "2.0.0")
+          ? info
+          : null;
+      });
+      expect(replacement.port).toBe(first.port);
+      expect(replacement.supervisorPid).toBe(children[0]!.pid);
+      const health = await (await fetch(first.url + "/api/health")).json();
+      expect(health.root).toBe(roots[0]!);
+      expect(health.version).toBe(recovery ? "1.0.0" : "2.0.0");
+      expect(read(roots[1]!).pid).toBe(other.pid);
+      expect(children[0]!.exitCode).toBeNull();
+      await waitFor(() =>
+        JSON.parse(
+          readFileSync(join(roots[0]!, ".framio/.state/restart.json"), "utf8"),
+        ).phase === (recovery ? "recovered" : "ready")
+          ? true
+          : null,
+      );
+      children[0]!.kill("SIGINT");
+      await children[0]!.exited;
+      expect(existsSync(join(roots[0]!, ".framio/.state/server.lock"))).toBe(
+        false,
+      );
+    } finally {
+      for (const child of children) {
+        if (child.exitCode === null) child.kill("SIGTERM");
+        await child.exited;
+      }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 25000);

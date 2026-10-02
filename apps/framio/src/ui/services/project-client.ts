@@ -1,3 +1,5 @@
+import * as Semaphore from "effect/Semaphore";
+import { UpdateFailure, type UpdateAction } from "../../contracts/update";
 import { reconcileSnapshot } from "../snapshot-reconciliation";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -97,42 +99,146 @@ const make = Effect.gen(function* () {
     Effect.retry(Schedule.spaced("1 second")),
     Effect.forkScoped,
   );
+  const updates = yield* SubscriptionRef.make<
+    import("../../contracts/update").UpdateStatus | null
+  >(null);
+  yield* api.project.updateStatus().pipe(
+    Effect.tap((value) => SubscriptionRef.set(updates, value)),
+    Effect.catch(() => Effect.void),
+    Effect.repeat(Schedule.spaced("1 second")),
+    Effect.forkScoped,
+  );
+  const mutations = yield* Semaphore.make(1);
+  let frozen = false;
   const comment = Effect.fn("ProjectClient.comment")(
     (payload: import("../../contracts/comments").CommentOperation) =>
-      (payload.type === "create"
-        ? api.project.comments({ payload })
-        : payload.type === "reply"
-          ? api.project.comments({ payload })
-          : payload.type === "status"
-            ? api.project.comments({ payload })
-            : api.project.comments({ payload })
-      ).pipe(
-        Effect.tap((response) =>
-          SubscriptionRef.update(state, (current) => ({
-            ...current,
-            saveError: response.error ?? null,
-          })),
-        ),
-        Effect.catch((error) =>
-          SubscriptionRef.update(state, (current) => ({
-            ...current,
-            saveError: "Could not save your comment. Try again.",
-          })).pipe(
-            Effect.as({
-              ok: false,
-              error: "Could not save your comment. Try again.",
-            }),
-          ),
-        ),
+      Effect.suspend(() =>
+        frozen
+          ? Effect.fail(
+              new UpdateFailure({
+                message: "Project restarting. Your draft remains local.",
+              }),
+            )
+          : (payload.type === "create"
+              ? api.project.comments({ payload })
+              : payload.type === "reply"
+                ? api.project.comments({ payload })
+                : payload.type === "status"
+                  ? api.project.comments({ payload })
+                  : api.project.comments({ payload })
+            ).pipe(
+              Semaphore.withPermits(mutations, 1),
+              Effect.tap((response) =>
+                SubscriptionRef.update(state, (current) => ({
+                  ...current,
+                  saveError: response.error ?? null,
+                })),
+              ),
+              Effect.catch((error) =>
+                SubscriptionRef.update(state, (current) => ({
+                  ...current,
+                  saveError: "Could not save your comment. Try again.",
+                })).pipe(
+                  Effect.as({
+                    ok: false,
+                    error: "Could not save your comment. Try again.",
+                  }),
+                ),
+              ),
+            ),
       ),
   );
   return {
     comment,
     changes: SubscriptionRef.changes(state),
     ...persistence,
+    updateChanges: SubscriptionRef.changes(updates),
+    update: Effect.fn("ProjectClient.update")(function* (
+      action: (typeof UpdateAction.Type)["action"],
+    ) {
+      if (action !== "install" && action !== "restart") {
+        const result = yield* api.project.updateAction({ payload: { action } });
+        if (!result.ok)
+          return yield* new UpdateFailure({
+            message: result.error ?? "Update action failed",
+          });
+        return;
+      }
+      frozen = true;
+      yield* Effect.gen(function* () {
+        yield* persistence.flush;
+        const before = yield* api.project.health();
+        const selected = yield* api.project.updateStatus();
+        const expected =
+          action === "install"
+            ? selected.release?.version
+            : selected.installedVersion;
+        const result = yield* api.project
+          .updateAction({ payload: { action } })
+          .pipe(Effect.catch(() => Effect.succeed({ ok: true, error: null })));
+        if (!result.ok)
+          return yield* new UpdateFailure({
+            message: result.error ?? "Restart failed",
+          });
+        yield* Effect.gen(function* () {
+          while (true) {
+            const ready = yield* Effect.gen(function* () {
+              const health = yield* api.project.health();
+              const update = yield* api.project.updateStatus();
+              return (
+                health.root === before.root &&
+                health.pid !== before.pid &&
+                (health.version === expected ||
+                  update.restartPhase === "recovered")
+              );
+            }).pipe(Effect.catch(() => Effect.succeed(false)));
+            if (ready) {
+              yield* Effect.sync(() => location.reload());
+              return;
+            }
+            yield* Effect.sleep("500 millis");
+          }
+        }).pipe(
+          Effect.timeout("75 seconds"),
+          Effect.mapError(
+            () =>
+              new UpdateFailure({
+                message:
+                  "Could not reconnect to the replacement server. Retry restart, or run framio start in this project.",
+              }),
+          ),
+        );
+      }).pipe(
+        Semaphore.withPermits(mutations, 1),
+        Effect.ensuring(
+          persistence.resume.pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                frozen = false;
+              }),
+            ),
+          ),
+        ),
+      );
+    }),
     renameLayer: (
       payload: typeof import("../../contracts/layers").RenameRequest.Type,
-    ) => api.project.renameLayer({ payload }),
+    ) =>
+      Effect.suspend(() =>
+        frozen
+          ? Effect.fail(
+              new UpdateFailure({
+                message: "Project restarting. Layer changes are paused.",
+              }),
+            )
+          : api.project
+              .renameLayer({ payload })
+              .pipe(
+                Effect.mapError(
+                  (error) => new UpdateFailure({ message: error.message }),
+                ),
+              ),
+      ).pipe(Semaphore.withPermits(mutations, 1)),
   };
 });
 export class ProjectClient extends Context.Service<

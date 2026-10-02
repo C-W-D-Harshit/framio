@@ -55,8 +55,19 @@ Effect.scoped(
     const tar = yield* spawner.spawn(
       ChildProcess.make(
         "tar",
-        ["-czf", `${outfile}.tar.gz`, "-C", outDir, `framio-${target}`],
-        { stdout: "inherit", stderr: "inherit" },
+        [
+          "--format=ustar",
+          "-czf",
+          `${outfile}.tar.gz`,
+          "-C",
+          outDir,
+          `framio-${target}`,
+        ],
+        {
+          stdout: "inherit",
+          stderr: "inherit",
+          env: { ...process.env, COPYFILE_DISABLE: "1" },
+        },
       ),
     );
     if ((yield* tar.exitCode) !== 0)

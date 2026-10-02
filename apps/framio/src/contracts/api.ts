@@ -12,6 +12,7 @@ import {
   HttpApiError,
   HttpApiGroup,
 } from "effect/http-api";
+import { UpdateAction, UpdateResponse, UpdateStatus } from "./update";
 import { Snapshot } from "./snapshot";
 import {
   CanvasRequest,
@@ -26,8 +27,14 @@ export const Health = Schema.Struct({
   root: Schema.String,
   pid: Schema.Int,
   protocol: Schema.Literal("framio-v4-1"),
+  version: Schema.String,
 });
 export class ProjectApi extends HttpApiGroup.make("project").add(
+  HttpApiEndpoint.get("updateStatus", "/api/update", { success: UpdateStatus }),
+  HttpApiEndpoint.post("updateAction", "/api/update", {
+    payload: UpdateAction,
+    success: UpdateResponse,
+  }),
   HttpApiEndpoint.post("inspect", "/api/inspect", {
     payload: InspectRequest,
     success: InspectResponse,

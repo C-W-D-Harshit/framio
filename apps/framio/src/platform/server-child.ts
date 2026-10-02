@@ -15,7 +15,7 @@ export const acquireLoggedServer = (p: ProjectPaths, temporary: boolean) =>
         const fd = openSync(p.serverLog, "a");
         let child;
         try {
-          const [command, ...args] = selfCommand(["__serve", p.root]);
+          const [command, ...args] = selfCommand(["__supervise", p.root]);
           child = spawn(command!, args, {
             cwd: p.root,
             detached: !temporary,
