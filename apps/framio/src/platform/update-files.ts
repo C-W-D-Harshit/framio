@@ -82,7 +82,7 @@ export const command = (file: string, args: string[]) =>
 export const executableVersion = (file: string) =>
   command(file, ["--version"]).pipe(
     Effect.flatMap((output) => {
-      const match = /(?:^|\s)(\d+\.\d+\.\d+(?:\+[A-Za-z0-9.-]+)?)$/.exec(
+      const match = /(?:^|\s)v?(\d+\.\d+\.\d+(?:\+[A-Za-z0-9.-]+)?)$/.exec(
         output,
       );
       return match

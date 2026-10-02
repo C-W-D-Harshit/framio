@@ -74,6 +74,21 @@ describe("release validation", () => {
           [release(), "darwin-x64"],
           [release({ tag_name: "v1.2.3-beta" }), "darwin-arm64"],
           [release({ assets: [] }), "darwin-arm64"],
+          [
+            release({
+              assets: release().assets.map((asset) => ({ ...asset, id: -1 })),
+            }),
+            "darwin-arm64",
+          ],
+          [
+            release({
+              assets: release().assets.map((asset) => ({
+                ...asset,
+                browser_download_url: "https://example.com/framio",
+              })),
+            }),
+            "darwin-arm64",
+          ],
         ] as const) {
           const result = yield* validateRelease(input, platform).pipe(
             Effect.result,

@@ -12,6 +12,8 @@ export const supervise = Effect.fn("SessionSupervisor.run")(function* (
   root: string,
   open: boolean,
   options: {
+    terminal?: boolean;
+    verbose?: boolean;
     updater?: Parameters<typeof makeUpdater>[0];
     command?: string[];
     readinessTimeout?: import("effect/Duration").Input;
@@ -36,9 +38,15 @@ export const supervise = Effect.fn("SessionSupervisor.run")(function* (
       yield* fs.writeFileString(temporary, JSON.stringify(value));
       yield* fs.rename(temporary, journal);
     });
+  const serverArgs = [
+    "__serve",
+    root,
+    ...(options.terminal ? ["--terminal"] : []),
+    ...(options.verbose ? ["--verbose"] : []),
+  ];
   let command =
     options.command ??
-    selfCommand(["__serve", root, ...(open ? ["--open"] : [])]);
+    selfCommand([...serverArgs, ...(open ? ["--open"] : [])]);
   let restarting: typeof RestartJournal.Type | null = null;
   let recovery = false;
   while (true) {
@@ -111,7 +119,7 @@ export const supervise = Effect.fn("SessionSupervisor.run")(function* (
             ...(restarting as typeof RestartJournal.Type),
             version: state.previousVersion,
           };
-          command = [updater.backup, "__serve", root];
+          command = [updater.backup, ...serverArgs];
           continue;
         }
       }
@@ -137,6 +145,6 @@ export const supervise = Effect.fn("SessionSupervisor.run")(function* (
     restarting = { ...request, phase: "starting" };
     recovery = false;
     yield* write(restarting);
-    command = [updater.target, "__serve", root];
+    command = [updater.target, ...serverArgs];
   }
 });

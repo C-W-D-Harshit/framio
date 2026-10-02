@@ -88,6 +88,10 @@ export const validateRelease = Effect.fn("ReleaseDiscovery.validate")(
     if (
       asset.browser_download_url !== base + assetName ||
       checksum.browser_download_url !== base + "SHA256SUMS" ||
+      asset.id <= 0 ||
+      checksum.id <= 0 ||
+      checksum.size <= 0 ||
+      checksum.size > 1024 * 1024 ||
       asset.size <= 0 ||
       asset.size > 256 * 1024 * 1024
     )
@@ -128,7 +132,12 @@ export const makeDiscovery = (
       "discovery",
       Effect.gen(function* () {
         const current = yield* store.read(`discovery:${platform}`, Cache);
-        if (current && current.nextCheck > now && !force) return current;
+        if (
+          current &&
+          current.nextCheck > now &&
+          (!force || current.rateLimited === true)
+        )
+          return current;
         const result = yield* Effect.gen(function* () {
           const response = yield* request(
             `https://api.github.com/repos/${REPOSITORY}/releases/latest`,

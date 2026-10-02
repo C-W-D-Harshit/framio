@@ -39,10 +39,15 @@ Effect.gen(function* () {
   );
   if (args[0] === "__supervise") {
     const parsed = yield* Schema.decodeUnknownEffect(
-      Schema.Tuple([Schema.String, Schema.optional(Schema.Literal("--open"))]),
+      Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
+        Schema.Literals(["--open", "--terminal", "--verbose"]),
+      ]),
     )(args.slice(1));
-    process.exitCode = yield* supervise(parsed[0], parsed[1] === "--open");
-  } else if (args[0] === "__serve") {
+    process.exitCode = yield* supervise(parsed[0], parsed.includes("--open"), {
+      terminal: parsed.includes("--terminal"),
+      verbose: parsed.includes("--verbose"),
+    });
+  } else if (args[0] === "__serve" || args[0] === "__supervise") {
     const parsed = yield* Schema.decodeUnknownEffect(
       Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
         Schema.Literals(["--open", "--terminal", "--verbose"]),
@@ -86,7 +91,8 @@ Effect.gen(function* () {
             (!args[0] ||
               args[0].startsWith("-") ||
               args[0] === "start" ||
-              args[0] === "__serve")
+              args[0] === "__serve" ||
+              args[0] === "__supervise")
             ? 0
             : code,
         ),

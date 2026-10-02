@@ -210,11 +210,7 @@ git tag v0.1.0 && git push origin v0.1.0
 See [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues privately, as described in
 [SECURITY.md](SECURITY.md).
 
-## License
-
-[MIT](LICENSE)
-
-### Update Framio
+## Update Framio
 
 The sidebar footer shows **Update available** when a newer stable release is found. Hover or focus the control for a short description, or open **About this update** on any device. **Complete release notes** opens the GitHub release.
 
@@ -239,3 +235,7 @@ Before a canvas restart, pending and active canvas saves must succeed. Close oth
 If the updated server fails to start, the supervisor attempts to start the retained previous executable on the same port. The canvas reports recovery and offers a retry. If neither executable starts, run `framio upgrade --rollback`, then `framio start` in your project. Installation recovery inspects the executable's actual version after an interrupted operation. A dead download owner leaves a retryable failure, never an installable partial archive.
 
 Project setup and skill migrations are separate. If a release requires one, the canvas links to the instructions in its release notes.
+
+## License
+
+[MIT](LICENSE)

@@ -1,4 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { processBirth } from "../../src/platform/process-liveness";
 import {
   chmodSync,
   mkdirSync,
@@ -101,6 +103,8 @@ test("custom canonical installations share staged state, install atomically and 
       expect(state.runningVersion).toBe("1.0.0");
       expect(state.restartNeeded).toBe(true);
       expect(yield* executableVersion(updater.backup)).toBe("1.0.0");
+      executable(target, "unreadable");
+      expect((yield* updater.status()).installedVersion).toBeNull();
       yield* updater.install(true);
       expect((yield* updater.status()).installedVersion).toBe("1.0.0");
     }),
@@ -168,6 +172,24 @@ test("cross-process claims are exclusive and dead owners are recoverable", async
   } finally {
     child.kill();
     db.close();
+  }
+});
+test("a reused PID does not keep an abandoned operation locked", () => {
+  const dir = temporary();
+  const store = openUpdateStorage(dir);
+  const database = new Database(join(dir, "updates.sqlite"));
+  try {
+    expect(processBirth(process.pid)).not.toBeNull();
+    database
+      .query("INSERT INTO owners VALUES (?,?,?,?)")
+      .run("installation", process.pid, "abandoned", "different-process-birth");
+    expect(store.owned("installation")).toBe(false);
+    expect(store.claim("installation")).not.toBeNull();
+    expect(store.owned("installation")).toBe(true);
+    expect(store.claim("installation")).toBeNull();
+  } finally {
+    database.close();
+    store.close();
   }
 });
 test("daily cache uses ETags, keeps offline metadata and respects rate limit backoff", async () => {
@@ -270,6 +292,12 @@ test("archive verification rejects unsafe paths, links, truncation and version f
   expect(
     (await run(executableVersion(join(dir, "bad")).pipe(Effect.result)))._tag,
   ).toBe("Failure");
+});
+test("executable verification accepts the compiled CLI version prefix", async () => {
+  const dir = temporary();
+  const target = join(dir, "framio");
+  executable(target, "v0.0.7");
+  expect(await run(executableVersion(target))).toBe("0.0.7");
 });
 test("source runs and install without staged data cannot mutate the executable", async () => {
   const dir = temporary(),
