@@ -6,7 +6,10 @@ import { Grain } from "@/components/landing/site/texture";
 import { Hero, SiteNav } from "@/components/landing/site/hero";
 import { Context } from "@/components/landing/site/context";
 import { HowItWorks } from "@/components/landing/site/how";
-import { Features } from "@/components/landing/site/features";
+import {
+  Features,
+  ReleaseHighlights,
+} from "@/components/landing/site/features";
 import { Speed } from "@/components/landing/site/speed";
 import { ClosingCTA, FAQ, Footer } from "@/components/landing/site/closing";
 
@@ -57,6 +60,7 @@ export default function Landing() {
               <SiteNav />
               <main id="main-content">
                 <Hero />
+                <ReleaseHighlights />
                 <Context />
                 <HowItWorks />
                 <Speed />

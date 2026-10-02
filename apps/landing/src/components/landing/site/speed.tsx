@@ -213,7 +213,6 @@ function Stat({
 }
 
 export function Speed() {
-  const fx = useFx();
   return (
     <section
       id="speed"
@@ -223,14 +222,14 @@ export function Speed() {
       <Container className="relative">
         <Reveal className="mx-auto max-w-[780px] text-center">
           <p className="font-mono text-[12px] text-signal">
-            measured on apple m4
+            measured on apple m4 · v0.0.7
           </p>
           <h2 className="mt-4 text-[34px] leading-[1.08] font-semibold tracking-[-0.03em] text-balance md:type-landing-h2">
             Fast enough to keep up with your agent.
           </h2>
           <p className="mx-auto mt-5 max-w-[540px] text-[16px] leading-[1.6] text-landing-muted md:text-[18px]">
-            One binary that serves your designs on localhost. Nothing to sign in
-            to, nothing to sync.
+            One binary on your computer or VM. Your designs stay in your repo.
+            Nothing to sign in to, nothing to sync.
           </p>
         </Reveal>
 

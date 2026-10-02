@@ -11,7 +11,7 @@ export const INSTALL_COMMAND =
 export const faqs = [
   {
     q: "What is Framio?",
-    a: "Framio is a free, open-source design canvas for coding agents. Your agent writes screens as React and Tailwind files in .framio/, and Framio renders them on a local canvas where you select elements and pin comments for the agent to fix.",
+    a: "Framio is a free, open-source design canvas for coding agents. Your agent writes screens as React and Tailwind files in .framio/, and Framio renders them on a canvas where you select elements and pin comments for the agent to fix.",
   },
   {
     q: "How do I design UI with Claude Code?",
@@ -31,7 +31,7 @@ export const faqs = [
   },
   {
     q: "How fast is Framio?",
-    a: "On an Apple M4, framio start serves the canvas in about 0.6 seconds, and a saved frame rebuilds in about 100 milliseconds. The first framio init takes about 6 seconds while it downloads packages, and under half a second after that. The macOS download is 33 MB.",
+    a: "Measured with v0.0.7 on an Apple M4, framio start serves the canvas in about 0.6 seconds, and a saved frame rebuilds in about 100 milliseconds. The first framio init takes about 6 seconds while it downloads packages, and under half a second after that. The macOS download is 33 MB.",
   },
   {
     q: "Is Framio a Figma alternative?",
@@ -54,8 +54,20 @@ export const faqs = [
     a: "Frames start with React, Tailwind, and shadcn/ui. framio add pulls components from shadcn registries, and framio install adds npm packages to the design project.",
   },
   {
+    q: "Can I run Framio on a VM over Tailscale?",
+    a: "Yes. SSH into the VM, run framio start in your project, and open a printed network or Tailscale URL on your main computer. Framio listens on all IPv4 interfaces by default. Use framio start --host 127.0.0.1 for local-only access. Anyone who can reach the port can edit the canvas, so use a trusted network and your firewall or Tailscale access rules.",
+  },
+  {
+    q: "Does the VM need a browser?",
+    a: "No desktop browser or display is required. SSH and headless Linux sessions skip automatic browser launch. Live previews work without Chromium. Screenshots, thumbnails, and geometry inspection use Framio's headless Chromium and need its system libraries and sandbox support. If Chromium is unavailable, Framio shows feature errors and keeps the canvas running.",
+  },
+  {
+    q: "How do I update Framio?",
+    a: "Use the update control in the canvas or run framio upgrade. The canvas and CLI share downloads and progress. Download first, then install when you are ready and restart the project to use the new binary. Rollback is available with framio upgrade --rollback. Binary updates do not change your project's skills, dependencies, themes, or designs.",
+  },
+  {
     q: "Is Framio free?",
-    a: "Yes. Framio is free and open source under the MIT license. It is one binary with no account or subscription, and the canvas runs on localhost.",
+    a: "Yes. Framio is free and open source under the MIT license. It is one binary with no account or subscription, and you run the canvas on your own computer or VM.",
   },
 ];
 
@@ -78,6 +90,8 @@ export const productSchema = {
   sameAs: [REPO_URL],
   featureList: [
     "Live React and Tailwind design canvas",
+    "Remote canvases over network and Tailscale URLs",
+    "Shared canvas and CLI updates with rollback",
     "Coding agent skills for Claude Code and Codex",
     "Pinned comments and agent replies",
     "Responsive desktop and mobile frames",

@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/Docs.astro
 title: "Framio quick start: design with Claude Code and Codex"
-description: "Install Framio, connect Claude Code or Codex, and review React and Tailwind designs on a local canvas. Learn commands, comments, and design comparison."
+description: "Install Framio, connect Claude Code or Codex, and review React and Tailwind designs on your computer or VM. Learn commands, comments, and design comparison."
 ---
 
 Framio is a free, open-source design canvas for coding agents. Claude Code, Codex, or another agent writes React and Tailwind screens into your repository. Framio renders those files on a live canvas, where you can select elements, review mobile and desktop layouts, and pin feedback before implementing a design in your app.
@@ -27,7 +27,7 @@ framio init
 framio start
 ```
 
-`framio init` creates `.framio/` with React, Tailwind, shadcn/ui, and the agent skill. `framio start` runs the local canvas and opens it in your browser. Keep that terminal running. Press Ctrl+C when you want to stop it.
+`framio init` creates `.framio/` with React, Tailwind, shadcn/ui, and the agent skill. `framio start` prints local, network, and available Tailscale URLs. It opens your browser when a desktop session is available. Keep that terminal running. Press Ctrl+C when you want to stop it.
 
 To run the canvas in the background instead:
 
@@ -36,6 +36,53 @@ framio start --background
 framio status
 framio stop
 ```
+
+## Remote machines and VMs
+
+In v0.0.8, `framio start` listens on all IPv4 interfaces by default. SSH into the machine where your repository lives and start the canvas there:
+
+```sh
+cd your-project
+framio start
+```
+
+Copy a printed network URL and open it in the browser on your main computer. If Tailscale is installed and running, Framio also prints its IP URL and its hostname when MagicDNS is enabled. Both computers must be able to reach that address. You do not need `--host` to enable network access.
+
+SSH, CI, and headless Linux sessions skip automatic browser launch. No desktop browser or display is required on the VM. Live previews work without Chromium. Screenshots, thumbnails, and geometry inspection use Framio's own headless Chromium and need its system libraries and sandbox support. If it is unavailable, the canvas stays running and reports the failed feature. Select a frame to view it live.
+
+Clipboard actions also work over remote HTTP. Keep the SSH terminal open, or use `framio start --background` and manage it with `framio status` and `framio stop`.
+
+For local-only access:
+
+```sh
+framio start --host 127.0.0.1
+```
+
+To bind a specific interface, use `framio start --host <address>`. Anyone who can reach the port can edit the canvas. Limit access with your firewall and Tailscale access rules. Tailscale encrypts HTTP traffic through its tunnel. HTTPS requires a separate setup, such as [Tailscale Serve](https://tailscale.com/kb/1312/serve).
+
+## Updates
+
+The canvas and CLI share update downloads, progress, and installation state. In the canvas, use the update control to download a release while you keep designing. Install when you are ready, then use **Restart to update** to switch the project to the installed version. A supervised restart retains the project's listen address and port.
+
+From the terminal:
+
+```sh
+framio upgrade --check
+framio upgrade --download
+framio upgrade --install
+```
+
+Downloads are checksum-verified before installation. CLI installation leaves running projects on their current version and prints which ones need a restart. Save your work, then run `framio stop` and `framio start` in each project. If you used a custom `--host`, pass the same address when starting again.
+
+To restore the previous installed binary:
+
+```sh
+framio upgrade --rollback
+```
+
+Restart running projects to use the restored version. If a replacement server cannot start during a supervised restart, Framio attempts recovery with the previous executable and reports the result.
+
+Binary updates do not change your project's skills, dependencies, themes, or designs. If your older version does not have `framio upgrade`, rerun the install command above to get v0.0.8 or later.
 
 ## Use Framio with Claude Code or Codex
 
@@ -126,20 +173,26 @@ Replace the URL and frame path with your own. Framio captures the running page a
 
 ## Commands
 
-| Command                            | What it does                                           |
-| ---------------------------------- | ------------------------------------------------------ |
-| `framio init`                      | Initialize the design project and install agent skills |
-| `framio start`                     | Run the canvas in the foreground                       |
-| `framio start --background`        | Run the canvas in the background                       |
-| `framio start --no-open`           | Run the canvas without opening a browser               |
-| `framio status`                    | Show the current project's server status               |
-| `framio list`                      | List running Framio servers                            |
-| `framio stop`                      | Stop this project's canvas                             |
-| `framio stop --all`                | Stop every running Framio canvas                       |
-| `framio screenshot <page>/<frame>` | Capture a design frame                                 |
-| `framio inspect <page>/<frame>`    | Inspect named layers, geometry, and design checks      |
-| `framio add <component>`           | Add a component from a shadcn registry                 |
-| `framio install <package>`         | Add an npm package to the design project               |
+| Command                            | What it does                                                |
+| ---------------------------------- | ----------------------------------------------------------- |
+| `framio init`                      | Initialize the design project and install agent skills      |
+| `framio start`                     | Run the canvas and print local, network, and Tailscale URLs |
+| `framio start --background`        | Run the canvas in the background                            |
+| `framio start --host 127.0.0.1`    | Limit canvas access to this machine                         |
+| `framio start --no-open`           | Run the canvas without opening a browser                    |
+| `framio upgrade`                   | Show shared update state and offer the next action          |
+| `framio upgrade --check`           | Check for a release                                         |
+| `framio upgrade --download`        | Download and verify an update                               |
+| `framio upgrade --install`         | Install a verified update                                   |
+| `framio upgrade --rollback`        | Restore the previous installed binary                       |
+| `framio status`                    | Show the current project's server status                    |
+| `framio list`                      | List running Framio servers                                 |
+| `framio stop`                      | Stop this project's canvas                                  |
+| `framio stop --all`                | Stop every running Framio canvas                            |
+| `framio screenshot <page>/<frame>` | Capture a design frame                                      |
+| `framio inspect <page>/<frame>`    | Inspect named layers, geometry, and design checks           |
+| `framio add <component>`           | Add a component from a shadcn registry                      |
+| `framio install <package>`         | Add an npm package to the design project                    |
 
 ## Support and source
 

@@ -1,5 +1,7 @@
 /* Adapted from Tailark Dusk features-1 (MIT, Copyright (c) Tailark). */
 import type { ReactNode } from "react";
+import { RELEASE_VERSION } from "@/lib/site";
+import { TerminalVisual } from "./how";
 import {
   Blocks,
   GitBranch,
@@ -167,6 +169,68 @@ export function Features() {
             />
           </Reveal>
         </div>
+      </Container>
+    </section>
+  );
+}
+
+export function ReleaseHighlights() {
+  return (
+    <section
+      id="whats-new"
+      data-layer="Release highlights"
+      className="border-t border-landing-line py-24 md:py-40"
+    >
+      <Container>
+        <Reveal>
+          <p className="mb-5 font-mono text-[12px] text-signal">
+            New in {RELEASE_VERSION}
+          </p>
+        </Reveal>
+        <SectionTitle
+          title="Run on your VM."
+          muted="Review on your computer."
+        />
+        <Reveal className="mt-12 grid gap-3 md:mt-20 md:grid-cols-2">
+          <Card
+            lead="SSH in. Open the URL."
+            body="Start Framio where your repo lives. It prints local, network, and available Tailscale URLs. Open one in the browser on your main computer."
+            className="flex flex-col gap-6 pb-6 md:pb-8"
+          >
+            <TerminalVisual startOnly />
+            <a
+              href="/docs/#remote-machines-and-vms"
+              className="relative mx-6 w-fit text-[14px] text-landing-ink underline underline-offset-4 md:mx-8"
+            >
+              Set up a remote canvas
+            </a>
+          </Card>
+          <Card
+            lead="Download now. Install when ready."
+            body="The canvas and CLI share update downloads and progress. Keep designing while a release downloads, then choose when to install it."
+            className="flex flex-col gap-6 pb-6 md:pb-8"
+          >
+            <div className="relative mx-6 flex flex-1 flex-col gap-5 md:mx-8">
+              <pre className="overflow-x-auto font-mono text-[12px] leading-[2] text-signal">
+                <code>
+                  {
+                    "framio upgrade --check\nframio upgrade --download\nframio upgrade --install"
+                  }
+                </code>
+              </pre>
+              <p className="max-w-[440px] text-[15px] leading-[1.6] text-landing-muted">
+                Downloads are checksum-verified. Restart the canvas to use the
+                installed version, or roll back to the previous binary.
+              </p>
+              <a
+                href="/docs/#updates"
+                className="mt-auto w-fit text-[14px] text-landing-ink underline underline-offset-4"
+              >
+                How updates work
+              </a>
+            </div>
+          </Card>
+        </Reveal>
       </Container>
     </section>
   );

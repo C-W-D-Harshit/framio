@@ -76,8 +76,8 @@ export function Hero() {
       />
       <Container className="relative flex flex-col md:items-center md:text-center">
         <a
-          href={links.Releases}
-          {...external(links.Releases)}
+          href={`${REPO}/releases/tag/${RELEASE_VERSION}`}
+          {...external(`${REPO}/releases/tag/${RELEASE_VERSION}`)}
           data-layer="Release Pill"
           className="hero-in group press flex w-fit items-center gap-3 rounded-full border border-landing-line bg-landing-raised transition-[border-color,transform] duration-150 hover:border-[#3F3F46] py-1 pr-4 pl-1 text-[14px] md:gap-3.5 md:text-[15px]"
         >
@@ -105,6 +105,12 @@ export function Hero() {
           file.
         </p>
         <InstallCTA center className="hero-in mt-8 [--i:3]" />
+        <a
+          href="#whats-new"
+          className="hero-in mt-5 w-fit [--i:3] text-[14px] text-landing-muted underline underline-offset-4 hover:text-landing-ink"
+        >
+          New: remote canvases and shared updates
+        </a>
       </Container>
 
       <Container className="hero-in relative mt-20 [--i:4] md:mt-16">

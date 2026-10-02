@@ -136,7 +136,7 @@ function Prompt({ children }: { children: ReactNode }) {
   );
 }
 
-function TerminalVisual() {
+export function TerminalVisual({ startOnly = false }: { startOnly?: boolean }) {
   return (
     <div className="cursor-target relative m-auto w-[calc(100%-32px)] max-w-[520px] overflow-hidden rounded-[12px] border border-landing-line bg-landing-page shadow-[0_24px_48px_-16px_rgb(0_0_0/0.8)]">
       <div className="flex h-9 items-center gap-1.5 border-b border-landing-line px-4">
@@ -144,27 +144,34 @@ function TerminalVisual() {
         <span className="size-2.5 rounded-full bg-white/10" />
         <span className="size-2.5 rounded-full bg-white/10" />
         <span className="ml-3 font-mono text-[11px] text-landing-muted">
-          ~/ledgerly
+          {startOnly ? "~/ledgerly · SSH" : "~/ledgerly"}
         </span>
       </div>
       <div className="flex flex-col gap-1 p-4 font-mono text-[11.5px] leading-[1.7] md:p-5 md:text-[12.5px]">
-        <Prompt>framio init</Prompt>
-        <div className="text-landing-muted">
-          Installing packages… Done in 2.0s.
+        {!startOnly && (
+          <>
+            <Prompt>framio init</Prompt>
+            <div className="text-landing-muted">
+              Canvas files and agent skills ready.
+            </div>
+            <div className="text-landing-muted">
+              Packages and screenshot browser installed.
+            </div>
+            <div className="h-3" />
+          </>
+        )}
+        <Prompt>framio start</Prompt>
+        <div className="grid grid-cols-[auto_1fr] gap-x-3 text-landing-muted">
+          <span>Local</span>
+          <span className="break-all text-signal">http://localhost:4747</span>
+          <span>Network</span>
+          <span className="break-all text-signal">
+            http://192.168.1.42:4747
+          </span>
+          <span>Tailscale</span>
+          <span className="break-all text-signal">http://100.64.0.2:4747</span>
         </div>
-        <div className="text-landing-muted">
-          Next: run <span className="text-landing-ink">`framio start`</span>,
-          then ask your agent to design something, e.g.
-        </div>
-        <div className="pl-4 text-landing-muted">
-          "Use framio to design the onboarding for my invoicing app"
-        </div>
-        <div className="h-3" />
-        <Prompt>framio start --background</Prompt>
-        <div className="text-landing-muted">
-          Framio is running in the background at{" "}
-          <span className="text-signal">http://localhost:4747</span>
-        </div>
+        <div className="mt-2 text-landing-muted">Ctrl+C to stop</div>
       </div>
     </div>
   );
