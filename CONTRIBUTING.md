@@ -5,7 +5,7 @@ bigger, open an issue first so we can agree on the approach before you write the
 
 ## Setup
 
-You need [Bun](https://bun.sh) 1.2 or newer.
+You need [Bun](https://bun.sh) 1.4.2 and Node.js 24 or newer.
 
 ```sh
 git clone https://github.com/C-W-D-Harshit/framio.git
@@ -17,8 +17,8 @@ bun run build:ui
 Run the CLI from source in any test folder:
 
 ```sh
-bun /path/to/framio/src/cli.ts init
-bun /path/to/framio/src/cli.ts start
+bun /path/to/framio/apps/framio/src/cli.ts init
+bun /path/to/framio/apps/framio/src/cli.ts start
 ```
 
 `bun run dev:ui` rebuilds the canvas UI as you edit. Restart `framio start` to load the new build.
@@ -34,14 +34,17 @@ CI runs both on every pull request.
 
 ## Where things are
 
-| Path | What it is |
-| --- | --- |
-| `src/cli.ts`, `src/commands/` | The CLI |
-| `src/server/` | Canvas server: bundling, Tailwind, file watching, screenshots |
-| `src/runtime/` | Script injected into every frame |
-| `src/ui/` | The canvas app (React + React Flow) |
-| `src/scaffold/` | What `framio init` writes, including the agent skill |
-| `tests/` | Bun tests |
+| Path                                                  | What it is                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------- |
+| `apps/framio/src/cli.ts`, `apps/framio/src/commands/` | The CLI                                                       |
+| `apps/framio/src/server/`                             | Canvas server: bundling, Tailwind, file watching, screenshots |
+| `apps/framio/src/runtime/`                            | Script injected into every frame                              |
+| `apps/framio/src/ui/`                                 | The canvas app (React + React Flow)                           |
+| `apps/framio/src/scaffold/`                           | What `framio init` writes, including the agent skill          |
+| `apps/framio/tests/`                                  | Bun tests                                                     |
+
+The Astro landing app lives in `apps/landing`. Run `bun run dev:landing` from the
+workspace root to start it.
 
 ## Pull requests
 

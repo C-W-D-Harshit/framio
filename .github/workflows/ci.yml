@@ -17,7 +17,7 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
-      - run: bun run build:ui
+      - run: bun run build
       - run: bun run typecheck
       # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox needs.
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

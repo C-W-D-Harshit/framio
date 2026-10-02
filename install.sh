@@ -1,5 +1,5 @@
 #!/bin/sh
-# Framio installer: curl -fsSL https://raw.githubusercontent.com/C-W-D-Harshit/framio/main/install.sh | sh
+# Framio installer: curl -fsSL https://framio.design/install.sh | sh
 # Env overrides: FRAMIO_VERSION (tag, default latest), FRAMIO_INSTALL (default ~/.framio), FRAMIO_REPO,
 # FRAMIO_DOWNLOAD_URL (directory holding the release tarballs, for mirrors and testing).
 set -eu
@@ -29,7 +29,7 @@ if [ "$os" = darwin ] && [ "$arch" = x64 ] && [ "$(sysctl -n sysctl.proc_transla
 fi
 
 if [ "$os" = darwin ] && [ "$arch" != arm64 ]; then
-  fail "framio requires Apple Silicon on macOS. Intel Macs are not supported."
+  fail "No Framio release is available for this platform."
 fi
 
 asset="framio-$os-$arch.tar.gz"

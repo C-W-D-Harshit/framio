@@ -37,12 +37,12 @@ jobs:
       - run: bun run build:binary
       - name: Smoke test
         run: |
-          bin=$(ls dist/bin/framio-* | grep -v '\.tar\.gz$')
-          python3 scripts/smoke-binary.py "$bin"
+          bin=$(ls apps/framio/dist/bin/framio-* | grep -v '\.tar\.gz$')
+          python3 apps/framio/scripts/smoke-binary.py "$bin"
       - uses: actions/upload-artifact@v4
         with:
           name: framio-${{ matrix.runner }}
-          path: dist/bin/*.tar.gz
+          path: apps/framio/dist/bin/*.tar.gz
 
   release:
     needs: build

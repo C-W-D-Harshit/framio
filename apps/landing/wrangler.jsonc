@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "framio-landing",
+  "account_id": "72d2696f04ebb7cce691b7d29ca2590f",
+  "compatibility_date": "2026-10-02",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+  },
+  "routes": [
+    {
+      "pattern": "framio.design",
+      "custom_domain": true,
+    },
+  ],
+}

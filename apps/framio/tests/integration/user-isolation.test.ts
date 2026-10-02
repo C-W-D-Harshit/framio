@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import baseline from "../../docs/effect-v4-baseline.json";
+import baseline from "../fixtures/effect-v4-baseline.json";
 
 test("scaffold changes are limited to registry configuration, layer examples and agent guidance, with no Effect imports", () => {
   const layerUpdates = new Set([

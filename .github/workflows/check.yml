@@ -17,13 +17,13 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
-      - run: bun run build:ui
+      - run: bun run build
       - run: bun run format:check
       - name: Allow Chromium sandbox user namespaces
         # Ubuntu's AppArmor restriction blocks the downloaded Chrome for Testing.
         # Keep Chromium's sandbox enabled on this ephemeral runner.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - run: python3 -m unittest discover -s tests/python -v
+      - run: python3 -m unittest discover -s apps/framio/tests/python -v
       - run: bun run check
       - run: bun run build:binary
-      - run: python3 scripts/smoke-binary.py dist/bin/framio-linux-x64
+      - run: python3 apps/framio/scripts/smoke-binary.py apps/framio/dist/bin/framio-linux-x64

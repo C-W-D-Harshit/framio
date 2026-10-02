@@ -1,5 +1,8 @@
 node_modules/
 dist/
-src/generated/
-src/scaffold/
+apps/framio/src/generated/
+apps/framio/src/scaffold/
 bun.lock
+.turbo/
+.astro/
+.wrangler/

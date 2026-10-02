@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 
 repo = Path(__file__).resolve().parent.parent
 binary = Path(sys.argv[1]).resolve()
-baseline = json.loads((repo / "docs/effect-v4-baseline.json").read_text())
+baseline = json.loads((repo / "tests/fixtures/effect-v4-baseline.json").read_text())
 with TemporaryDirectory(prefix="framio-binary-init-") as directory:
     root = Path(directory)
     environment = {**os.environ, "PATH": "/usr/bin:/bin"}

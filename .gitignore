@@ -1,5 +1,11 @@
 node_modules/
 dist/
-src/generated/
+apps/framio/src/generated/
 .framio/
 __pycache__/
+.turbo/
+.astro/
+.wrangler/
+.dev.vars*
+.env*
+apps/framio/benchmarks/effect-v4-performance.json

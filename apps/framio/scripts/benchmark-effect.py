@@ -212,7 +212,9 @@ def main():
                 "No browser heap or per-iframe memory distribution",
             ],
         }
-        (repo / "docs/effect-v4-performance.json").write_text(
+        report_path = repo / "benchmarks/effect-v4-performance.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
             json.dumps(report, indent=2) + "\n"
         )
         print(

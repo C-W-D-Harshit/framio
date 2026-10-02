@@ -90,7 +90,6 @@ class BenchmarkStartupTests(unittest.TestCase):
     def test_report_identifies_the_supplied_revision_and_both_measured_binaries(self):
         with tempfile.TemporaryDirectory() as temp:
             repo = pathlib.Path(temp)
-            (repo / "docs").mkdir()
             baseline = repo / "baseline"
             candidate = repo / "candidate"
             baseline.write_bytes(b"older binary")
@@ -136,7 +135,7 @@ class BenchmarkStartupTests(unittest.TestCase):
                 io.StringIO()
             ):
                 benchmark.main()
-            report = json.loads((repo / "docs/effect-v4-performance.json").read_text())
+            report = json.loads((repo / "benchmarks/effect-v4-performance.json").read_text())
             self.assertEqual(report["baseline_revision"], "older-source-sha")
             self.assertEqual(
                 report["binary_sha256"],

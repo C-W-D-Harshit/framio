@@ -1,11 +1,10 @@
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/framio-wordmark-on-dark.png" />
-    <img src=".github/assets/framio-wordmark-on-light.png" alt="Framio" height="64" />
-  </picture>
-</h1>
+<a href="https://framio.design">
+  <img src=".github/assets/framio-brand.png" alt="Framio" width="556" />
+</a>
 
 A design canvas for coding agents.
+
+[Website](https://framio.design) · [Releases](https://github.com/C-W-D-Harshit/framio/releases)
 
 Your agent writes designs as React + Tailwind files. Framio shows them live on an infinite
 canvas, so you can watch the work and point at what to change.
@@ -13,11 +12,10 @@ canvas, so you can watch the work and point at what to change.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/C-W-D-Harshit/framio/main/install.sh | sh
+curl -fsSL https://framio.design/install.sh | sh
 ```
 
-Works on macOS with Apple Silicon and Linux with x64 or arm64 CPUs. Intel Macs are
-not supported. `framio add` also needs Node.js.
+Works on macOS and Linux. `framio add` also needs Node.js.
 
 ## Quick start
 
@@ -39,13 +37,13 @@ you pick. It screenshots each one and fixes what it sees before moving on.
 
 Everything lives in `.framio/`:
 
-| Path | What it is |
-| --- | --- |
-| `BRIEF.md` | The product, its users, and the scope |
-| `DESIGN.md` | Colors, fonts, and radii (see below) |
-| `pages/` | One folder per canvas page: moodboards, screens, flows |
-| `comments.json` | Pinned feedback, replies, and open/resolved status |
-| `assets/` | Images used in designs, served at `/assets/<file>` |
+| Path            | What it is                                             |
+| --------------- | ------------------------------------------------------ |
+| `BRIEF.md`      | The product, its users, and the scope                  |
+| `DESIGN.md`     | Colors, fonts, and radii (see below)                   |
+| `pages/`        | One folder per canvas page: moodboards, screens, flows |
+| `comments.json` | Pinned feedback, replies, and open/resolved status     |
+| `assets/`       | Images used in designs, served at `/assets/<file>`     |
 
 Drop images into a page folder to use them as a moodboard.
 
@@ -57,7 +55,7 @@ Edit the front matter in `DESIGN.md` and the canvas updates on save:
 ---
 colors:
   primary: "#B8422E"
-  primary-dark: "#E0694F"   # used in dark mode
+  primary-dark: "#E0694F" # used in dark mode
 typography:
   body-md:
     fontFamily: Public Sans
@@ -73,21 +71,21 @@ them up. Fonts load from Google Fonts. The file follows
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `framio init` | Set up `.framio/` in the current folder |
-| `framio start` | Run the canvas (`--background` to detach, `--no-open` to skip the browser) |
-| `framio stop` | Stop the canvas (`--all` for every project) |
-| `framio status` / `list` | Show this server / all servers |
-| `framio open` | Open a running canvas in the browser |
-| `framio screenshot <frame>` | Save frames and top-level layer crops (`--page`, `--all`, `--scale=2`) |
-| `framio screenshot <frame> --layer "<path>"` | Capture a named layer with context; repeat for several layers |
-| `framio inspect <frame> [--width <n>] [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON |
-| `framio screenshot --url <url>` | Capture an app or website (`--width=1440`, `--height=900`, `--scale=1`) |
-| `framio screenshot --url <url> --compare <page>/<frame>` | Design left, implementation right, plus both single PNGs |
-| `framio screenshot --url <url> --into <page>` | Add the current app to a moodboard with a URL sidecar |
-| `framio add <component>` | Add a shadcn registry component |
-| `framio install <package>` | Add an npm package for designs to use |
+| Command                                                   | What it does                                                               |
+| --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `framio init`                                             | Set up `.framio/` in the current folder                                    |
+| `framio start`                                            | Run the canvas (`--background` to detach, `--no-open` to skip the browser) |
+| `framio stop`                                             | Stop the canvas (`--all` for every project)                                |
+| `framio status` / `list`                                  | Show this server / all servers                                             |
+| `framio open`                                             | Open a running canvas in the browser                                       |
+| `framio screenshot <frame>`                               | Save frames and top-level layer crops (`--page`, `--all`, `--scale=2`)     |
+| `framio screenshot <frame> --layer "<path>"`              | Capture a named layer with context; repeat for several layers              |
+| `framio inspect <frame> [--width <n>] [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON           |
+| `framio screenshot --url <url>`                           | Capture an app or website (`--width=1440`, `--height=900`, `--scale=1`)    |
+| `framio screenshot --url <url> --compare <page>/<frame>`  | Design left, implementation right, plus both single PNGs                   |
+| `framio screenshot --url <url> --into <page>`             | Add the current app to a moodboard with a URL sidecar                      |
+| `framio add <component>`                                  | Add a shadcn registry component                                            |
+| `framio install <package>`                                | Add an npm package for designs to use                                      |
 
 ## Layers
 
@@ -175,13 +173,20 @@ URL captures use managed Chromium, capture the full page, and save to
 
 ## Development
 
+This Bun and Turborepo workspace contains the CLI in `apps/framio` and the Astro
+landing app in `apps/landing`. Use Bun 1.4.2 and Node.js 24 or newer.
+
 ```sh
 bun install
 bun run build:ui          # build the canvas UI
-bun src/cli.ts <command>  # run from source
+bun apps/framio/src/cli.ts <command>  # run from source
 bun run test
 bun run build:binary      # build a binary for this platform
 ```
+
+Run `bun run dev:landing` to start Astro, `bun run build:landing` to build it, and
+`bun run deploy:landing` to deploy it with Wrangler. See [apps/landing/README.md](apps/landing/README.md)
+for the Cloudflare account and domain configuration.
 
 To release, push a tag. GitHub Actions builds the binaries that `install.sh` downloads.
 
