@@ -464,7 +464,8 @@ test(
               ),
             );
             await page.keyboard.down("Control");
-            await page.mouse.wheel({ deltaY: -80 });
+            // Cross the 28% admission threshold with normalized Linux wheel deltas.
+          await page.mouse.wheel({ deltaY: -160 });
             await page.keyboard.up("Control");
             await page.waitForFunction(
               (before) =>
@@ -530,7 +531,8 @@ test(
           const box = (await node!.boundingBox())!;
           await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
           await page.keyboard.down("Control");
-          await page.mouse.wheel({ deltaY: -80 });
+          // Cross the 28% admission threshold with normalized Linux wheel deltas.
+          await page.mouse.wheel({ deltaY: -160 });
           await page.waitForSelector("iframe[data-frame]");
           const during = await page.evaluate(() => ({
             pointerEvents: [
