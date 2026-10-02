@@ -1,5 +1,5 @@
 export const SITE_URL = "https://framio.design";
-export const RELEASE_VERSION = "v0.0.6";
+export const RELEASE_VERSION = "v0.0.7";
 export const REPO_URL = "https://github.com/C-W-D-Harshit/framio";
 export const SITE_TITLE = "Design canvas for Claude Code and Codex · Framio";
 export const SITE_DESCRIPTION =
@@ -28,6 +28,10 @@ export const faqs = [
   {
     q: "Which agents does Framio work with?",
     a: "framio init installs the skill in .claude/skills for Claude Code and .agents/skills for Codex. Other agents that read either folder, such as OpenCode, Cursor, Grok CLI, and Antigravity, can use it too.",
+  },
+  {
+    q: "How fast is Framio?",
+    a: "On an Apple M4, framio start serves the canvas in about 0.6 seconds, and a saved frame rebuilds in about 100 milliseconds. The first framio init takes about 6 seconds while it downloads packages, and under half a second after that. The macOS download is 33 MB.",
   },
   {
     q: "Is Framio a Figma alternative?",
