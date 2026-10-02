@@ -31,5 +31,8 @@
     "bun": ">=1.4.2",
     "node": ">=24"
   },
-  "homepage": "https://framio.design"
+  "homepage": "https://framio.design",
+  "patchedDependencies": {
+    "puppeteer-core@25.12.0": "patches/puppeteer-core@25.12.0.patch"
+  }
 }
