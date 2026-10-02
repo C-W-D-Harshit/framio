@@ -88,6 +88,9 @@ with tempfile.TemporaryDirectory(prefix="framio windows smoke ") as temporary:
         cli("start", "--background", "--no-open")
         cli("stop", "--all")
         assert not (project / ".framio" / ".state" / "server.lock").exists()
+        cli("screenshot", "01-windows/home", timeout=180)
+        assert not (project / ".framio" / ".state" / "server.lock").exists()
+        assert not (project / ".framio" / ".state" / "server.json").exists()
         print("Verified PowerShell install/reinstall, checksum refusal, standalone package install, registry dependency install, detached server reuse, browser layers, watched edits and graceful shutdown")
     finally:
         if target.exists():

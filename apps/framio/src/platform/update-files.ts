@@ -153,7 +153,7 @@ export const replaceExecutable = (
     try {
       await copyFile(source, temporary, constants.COPYFILE_EXCL);
       await chmod(temporary, mode);
-      const fd = await open(temporary, "r");
+      const fd = await open(temporary, "r+");
       try {
         await fd.sync();
       } finally {
@@ -190,7 +190,7 @@ export const backupExecutable = (target: string, backup: string) =>
     const temporary = `${backup}.${randomUUID()}.tmp`;
     try {
       await copyFile(target, temporary, constants.COPYFILE_EXCL);
-      const fd = await open(temporary, "r");
+      const fd = await open(temporary, "r+");
       try {
         await fd.sync();
       } finally {
