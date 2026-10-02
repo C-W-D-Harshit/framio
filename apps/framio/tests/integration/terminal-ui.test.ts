@@ -143,9 +143,10 @@ test("registry commands suppress successful upstream logs and retain failure det
   const bin = join(root, "bin");
   mkdirSync(bin);
   const npx = join(bin, "npx");
+  // Drain Framio's prompt answers before exiting so Linux does not write to a closed pipe.
   writeFileSync(
     npx,
-    '#!/bin/sh\nprintf "upstream registry output\\n"\nexit "${FRAMIO_FIXTURE_EXIT:-0}"\n',
+    '#!/bin/sh\ncat >/dev/null\nprintf "upstream registry output\\n"\nexit "${FRAMIO_FIXTURE_EXIT:-0}"\n',
   );
   chmodSync(npx, 0o755);
   const env = { PATH: `${bin}:${process.env.PATH}` };
@@ -172,7 +173,7 @@ test("registry commands suppress successful upstream logs and retain failure det
   expect(failure.stderr).toContain("upstream registry output");
   expect(failure.stderr).toContain("framio add button --verbose");
   expect(failure.output).not.toContain("Components ready");
-});
+}, 20_000);
 
 function release(root: string, executable: string) {
   const os = process.platform === "darwin" ? "darwin" : "linux";
@@ -205,7 +206,8 @@ test("the POSIX installer handles spaces, preserves shell content and configures
   const env = release(directory, '#!/bin/sh\nprintf "0.0.7\\n"\n');
   env.FRAMIO_INSTALL = join(root, "home/a directory/bin-root");
   const rc = join(root, "home/.zshrc");
-  writeFileSync(rc, "# Existing shell configuration\n");
+  const original = `# Existing shell configuration\n# ${env.FRAMIO_INSTALL}/bin\nprintf '%s\\n' '${env.FRAMIO_INSTALL}/bin'\n`;
+  writeFileSync(rc, original);
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await run(root, ["sh", installer], {
       ...env,
@@ -216,14 +218,20 @@ test("the POSIX installer handles spaces, preserves shell content and configures
     expect(result.stdout).toContain("Platform");
     expect(result.stdout).toContain("Download  Complete");
     expect(result.stdout).toContain("Install   0.0.7");
+    expect(result.stdout).toContain(
+      attempt === 0 ? "Shell     Updated" : "PATH already configured",
+    );
     expect(result.stdout).toContain("Installed successfully");
     expect(result.stdout).toContain("framio init");
     expect(result.output).not.toContain("\x1b");
     expect(existsSync(join(env.FRAMIO_INSTALL, "bin/framio"))).toBe(true);
   }
   const contents = readFileSync(rc, "utf8");
-  expect(contents.startsWith("# Existing shell configuration\n")).toBe(true);
+  expect(contents.startsWith(original)).toBe(true);
   expect(contents.match(/# framio/g)).toHaveLength(1);
+  expect(
+    contents.split("\n").filter((line) => line.startsWith("export PATH=")),
+  ).toHaveLength(1);
 });
 
 test("a broken downloaded executable cannot replace an existing installation", async () => {

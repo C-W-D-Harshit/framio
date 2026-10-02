@@ -102,7 +102,8 @@ if [ "$on_path" = 0 ]; then
   esac
   if [ -n "$rc" ]; then
     mkdir -p "$(dirname "$rc")"
-    if grep -qsF "$BIN_DIR" "$rc"; then
+    # Only the generated shell command counts, not comments or unrelated path mentions.
+    if grep -qsFx "$line" "$rc"; then
       done_step "Shell     PATH already configured in $(display_path "$rc")"
     else
       printf '\n# framio\n%s\n' "$line" >>"$rc" || fail "Could not update $rc. Add $BIN_DIR to PATH manually."
