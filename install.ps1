@@ -58,6 +58,9 @@ try {
     if ($LASTEXITCODE -ne 0 -or "$actual" -notmatch '(?:^|\s)(\d+\.\d+\.\d+)$') { throw 'The downloaded executable could not run.' }
     if ($Version -ne 'latest' -and $Version -ne "v$($Matches[1])") { throw 'Executable version does not match the requested tag.' }
     New-Item -ItemType Directory -Force -Path $binDirectory | Out-Null
+    Get-ChildItem -Path $binDirectory -Filter '.framio.exe.retired-*.exe' | ForEach-Object {
+        Remove-Item -Force $_.FullName -ErrorAction SilentlyContinue
+    }
     if (Test-Path $target) {
         $previous = Join-Path $binDirectory ('.framio.exe.retired-' + [Guid]::NewGuid() + '.exe')
         Move-Item $target $previous

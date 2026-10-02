@@ -43,6 +43,7 @@ jobs:
       - run: bun test apps/framio/tests/windows
         if: runner.os == 'Windows'
       - run: bun run build:binary
+        id: binary
       - name: Smoke test
         shell: bash
         run: |
@@ -50,7 +51,7 @@ jobs:
           python3 apps/framio/scripts/smoke-binary.py "$bin"
           python3 apps/framio/scripts/smoke-updater.py "$bin"
       - name: Windows installer, canvas and browser checks
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.binary.outcome == 'success' }}
         run: python apps/framio/scripts/smoke-windows.py apps/framio/dist/bin/framio-win32-x64.exe
       - uses: actions/upload-artifact@v4
         with:

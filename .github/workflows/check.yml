@@ -45,6 +45,10 @@ jobs:
       - run: bun run test:effect
       - run: bun test apps/framio/tests/windows
       - run: bun run build:binary
-      - run: python apps/framio/scripts/smoke-binary.py apps/framio/dist/bin/framio-win32-x64.exe
-      - run: python apps/framio/scripts/smoke-updater.py apps/framio/dist/bin/framio-win32-x64.exe
-      - run: python apps/framio/scripts/smoke-windows.py apps/framio/dist/bin/framio-win32-x64.exe
+        id: binary
+      - if: ${{ !cancelled() && steps.binary.outcome == 'success' }}
+        run: python apps/framio/scripts/smoke-binary.py apps/framio/dist/bin/framio-win32-x64.exe
+      - if: ${{ !cancelled() && steps.binary.outcome == 'success' }}
+        run: python apps/framio/scripts/smoke-updater.py apps/framio/dist/bin/framio-win32-x64.exe
+      - if: ${{ !cancelled() && steps.binary.outcome == 'success' }}
+        run: python apps/framio/scripts/smoke-windows.py apps/framio/dist/bin/framio-win32-x64.exe

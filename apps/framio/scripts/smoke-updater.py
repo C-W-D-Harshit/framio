@@ -48,6 +48,7 @@ with tempfile.TemporaryDirectory(prefix="framio-updater-smoke-") as temporary:
         database.execute("CREATE TABLE state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         database.execute("INSERT INTO state VALUES (?, ?)", ("installation:" + identity, json.dumps(record)))
         database.execute("INSERT INTO state VALUES (?, ?)", ("discovery:" + release_platform, json.dumps({"release": None, "etag": None, "nextCheck": time.time() * 1000 + 86400000, "failures": 0, "error": None})))
+    database.close()
     log = (root / "session.log").open("w")
     session = subprocess.Popen([str(target), "start", "--no-open"], cwd=project, env=environment, stdout=log, stderr=log)
     def request(url):

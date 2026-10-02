@@ -255,7 +255,13 @@ export class ServerRegistry extends Context.Service<
               new ServerStartupFailed({ message: String(cause) }),
           });
         const stopped = yield* Effect.gen(function* () {
-          while (isAlive(info.pid)) yield* Effect.sleep("50 millis");
+          while (
+            isAlive(info.pid) ||
+            (process.platform === "win32" &&
+              info.supervisorPid &&
+              isAlive(info.supervisorPid))
+          )
+            yield* Effect.sleep("50 millis");
         }).pipe(Effect.timeoutOption("10 seconds"));
         if (stopped._tag === "None")
           return yield* new ServerStartupFailed({
