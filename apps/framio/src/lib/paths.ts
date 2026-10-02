@@ -7,6 +7,15 @@ export const FRAMIO_DIR = ".framio";
 export const GLOBAL_DIR = join(homedir(), ".framio");
 export const BROWSERS_DIR = join(GLOBAL_DIR, "browsers");
 
+export function displayPath(path: string) {
+  const home = homedir();
+  return path === home
+    ? "~"
+    : path.startsWith(`${home}/`)
+      ? `~/${path.slice(home.length + 1)}`
+      : path;
+}
+
 export type ProjectPaths = ReturnType<typeof projectPaths>;
 
 export function projectPaths(root: string) {
