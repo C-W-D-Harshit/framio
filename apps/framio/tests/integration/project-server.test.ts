@@ -769,9 +769,21 @@ test(
             } else void request.continue();
           });
           await page.goto(url);
-          await page.waitForFunction(
-            () => document.querySelectorAll("iframe[data-frame]").length === 2,
-          );
+          await page.waitForFunction(() => {
+            const frames = [
+              ...document.querySelectorAll<HTMLIFrameElement>(
+                "iframe[data-frame]",
+              ),
+            ];
+            return (
+              frames.length === 2 &&
+              frames.every(
+                (frame) =>
+                  frame.contentDocument?.body?.textContent ===
+                  "Runtime unavailable",
+              )
+            );
+          });
           expect(stalled.size).toBe(2);
           await page.waitForFunction(
             () => {
