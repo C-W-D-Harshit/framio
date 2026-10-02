@@ -1,0 +1,19 @@
+# Framio
+
+> Framio is a free, MIT-licensed design canvas for coding agents. It renders React and Tailwind designs from files in a developer's repository, with element selection, responsive viewports, and pinned comments.
+
+Framio works with Claude Code, Codex, and other agents that read `.claude/skills` or `.agents/skills`. The canvas runs on localhost. It supports macOS on Apple Silicon and Linux x64 and arm64. It does not include a coding agent or model subscription.
+
+## Documentation
+
+- [Homepage](https://framio.design/): Product overview, workflow, capabilities, and frequently asked questions.
+- [Quick start and reference](https://framio.design/docs/): Installation, agent setup, commands, DESIGN.md, comments, and design comparison.
+- [Documentation in Markdown](https://framio.design/docs.md): The same documentation as plain Markdown.
+- [Full text](https://framio.design/llms-full.txt): Product facts and documentation in one plain-text file.
+
+## Source and support
+
+- [Source code](https://github.com/C-W-D-Harshit/framio): Official repository maintained by Harshit.
+- [Releases](https://github.com/C-W-D-Harshit/framio/releases): Downloadable CLI binaries.
+- [Issues](https://github.com/C-W-D-Harshit/framio/issues): Bug reports and feature requests.
+- [License](https://github.com/C-W-D-Harshit/framio/blob/main/LICENSE): MIT license.

@@ -15,10 +15,24 @@
     "deploy:dry-run": "wrangler deploy --dry-run",
     "preview:worker": "wrangler dev",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "assets:optimize": "bun scripts/optimize-assets.ts",
+    "check:seo": "bun scripts/check-seo.ts"
   },
   "dependencies": {
-    "astro": "^7.3.5"
+    "@astrojs/react": "^7.0.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.3.5",
+    "clsx": "^2.1.1",
+    "gsap": "^3.15.0",
+    "lucide-react": "^1.49.0",
+    "motion": "^13.5.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.3"
   },
   "allowScripts": {
     "esbuild": true
@@ -26,9 +40,12 @@
   "private": true,
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "typescript": "^5.9.0",
-    "wrangler": "4.146.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "prettier": "3.9.9",
-    "prettier-plugin-astro": "^1.1.0"
+    "prettier-plugin-astro": "^1.1.0",
+    "sharp": "^0.35.5",
+    "typescript": "^5.9.0",
+    "wrangler": "4.146.0"
   }
 }

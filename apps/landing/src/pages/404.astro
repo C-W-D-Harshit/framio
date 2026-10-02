@@ -1,0 +1,33 @@
+---
+import SEO from "../components/SEO.astro";
+import "../styles/global.css";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <SEO
+      title="Page not found · Framio"
+      description="This page does not exist. Visit Framio or read the quick-start documentation."
+      path="/404/"
+      noindex
+    />
+  </head>
+  <body class="bg-landing-page font-sans text-landing-ink">
+    <main class="mx-auto max-w-xl px-6 py-32">
+      <p class="font-mono text-landing-muted">404</p>
+      <h1 class="mt-6 text-4xl font-semibold">Page not found.</h1>
+      <p class="mt-5 text-landing-muted">
+        The page may have moved, or the address may be incorrect.
+      </p>
+      <div class="mt-8 flex gap-6">
+        <a class="underline underline-offset-4" href="/">
+          Visit Framio
+        </a>
+        <a class="underline underline-offset-4" href="/docs/">
+          Read the docs
+        </a>
+      </div>
+    </main>
+  </body>
+</html>

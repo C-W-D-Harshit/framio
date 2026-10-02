@@ -1,0 +1,210 @@
+@import "tailwindcss";
+@font-face {
+  font-family: "Geist Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2")
+    format("woff2");
+}
+
+@theme {
+  --font-sans: "Geist Variable", sans-serif;
+  --font-mono: "Geist Mono Variable", monospace;
+  --color-landing-page: #0a0a0b;
+  --color-landing-raised: #141416;
+  --color-landing-ink: #f4f4f5;
+  --color-landing-muted: #a1a1aa;
+  --color-landing-line: #27272a;
+  --color-corner-blue: #0c64ff;
+  --color-on-corner-blue: #ffffff;
+  --color-signal: #6e9bff;
+}
+
+@utility type-landing-display {
+  font-family: var(--font-sans);
+  font-size: 76px;
+  font-weight: 600;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+@utility type-landing-h2 {
+  font-family: var(--font-sans);
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+}
+@utility type-landing-lead {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+:root {
+  color-scheme: dark;
+  background: #0a0a0b;
+}
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 32px;
+}
+body {
+  margin: 0;
+}
+button,
+a,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 160ms ease;
+}
+button:active {
+  transform: scale(0.97);
+}
+a {
+  transition:
+    color 160ms ease,
+    opacity 160ms ease;
+}
+:focus-visible {
+  outline: 2px solid #6e9bff;
+  outline-offset: 5px;
+  border-radius: 4px;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+::selection {
+  background: #0c64ff;
+  color: white;
+}
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 12px;
+  left: 12px;
+  padding: 12px 16px;
+  background: #f4f4f5;
+  color: #0a0a0b;
+  border-radius: 8px;
+  transform: translateY(-150%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+@media (hover: hover) and (pointer: fine) {
+  a:hover,
+  summary:hover {
+    color: #f4f4f5;
+  }
+  button:hover {
+    opacity: 0.9;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .cursor-none {
+    cursor: auto;
+  }
+}
+
+.docs-content {
+  color: var(--color-landing-muted);
+  font-size: 16px;
+  line-height: 1.75;
+}
+.docs-content h2 {
+  margin-top: 64px;
+  margin-bottom: 20px;
+  color: var(--color-landing-ink);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  scroll-margin-top: 32px;
+}
+.docs-content p,
+.docs-content ul,
+.docs-content table,
+.docs-content pre,
+.docs-content blockquote {
+  margin-block: 20px;
+}
+.docs-content a {
+  color: var(--color-landing-ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.docs-content code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--color-landing-ink);
+  overflow-wrap: anywhere;
+}
+.docs-content pre {
+  overflow-x: auto;
+  border: 1px solid var(--color-landing-line);
+  border-radius: 12px;
+  padding: 20px;
+  font-size: 14px;
+}
+.docs-content pre code {
+  overflow-wrap: normal;
+}
+.docs-content table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+.docs-content th,
+.docs-content td {
+  border-bottom: 1px solid var(--color-landing-line);
+  padding: 14px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+.docs-content th {
+  color: var(--color-landing-ink);
+  font-weight: 500;
+}
+.docs-content th:first-child,
+.docs-content td:first-child {
+  padding-left: 0;
+}
+.docs-content blockquote {
+  padding-left: 20px;
+  border-left: 2px solid var(--color-corner-blue);
+  color: var(--color-landing-ink);
+}
+.docs-content strong {
+  color: var(--color-landing-ink);
+  font-weight: 500;
+}

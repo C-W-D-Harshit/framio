@@ -1,7 +1,8 @@
 # Framio landing app
 
-Minimal Astro app, built as static HTML and served by Cloudflare Workers Static Assets.
-The landing page design is still to come.
+Astro landing page and first-party documentation, built as static HTML and served
+by Cloudflare Workers Static Assets. The React landing page follows the design in
+`.framio/pages/22-landing/home--react-bits.tsx`.
 
 ## Development
 
@@ -47,7 +48,7 @@ bun run deploy:landing
 ```
 
 Turbo builds the app before deploying. Deployment creates or updates the Worker
-and attaches the configured custom domain. The landing starter is deployed at `https://framio.design`.
+and attaches the configured custom domain. The landing page is deployed at `https://framio.design`.
 `bun run preview:worker` in this app serves the built assets locally with Wrangler.
 
 ## Installer
@@ -61,3 +62,16 @@ curl -fsSL https://framio.design/install.sh | sh
 ```
 
 The installer downloads CLI binaries from the existing GitHub releases.
+
+## Search and assets
+
+Shared metadata, product facts, and FAQ answers live in `src/lib/site.ts`.
+`SEO.astro` renders canonical URLs, social metadata, and JSON-LD into static HTML.
+Documentation is maintained in `src/pages/docs/index.md`; the Markdown and full-text
+endpoints reuse that source. Update `RELEASE_VERSION` when publishing a new CLI release.
+
+Run `bun run assets:optimize` in this app after changing screenshot PNGs or the social
+image source. It generates lossless WebP screenshots and the social preview image.
+After building, run `bun run check:seo` to verify metadata, schema, FAQ parity,
+internal links, sitemap, robots, and supporting assets. See [the SEO audit](SEO-AUDIT.md)
+for production evidence and Search Console follow-up.
