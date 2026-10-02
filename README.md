@@ -9,6 +9,8 @@ A design canvas for coding agents.
 Your agent writes designs as React + Tailwind files. Framio shows them live on an infinite
 canvas, so you can watch the work and point at what to change.
 
+![Framio Studio showing an invoice design and its comment thread](.github/assets/framio-studio.png)
+
 ## Install
 
 ```sh
