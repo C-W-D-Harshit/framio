@@ -70,6 +70,16 @@ test(
           page.setDefaultTimeout(5000);
           await page.goto(remote.href);
           expect(await page.evaluate(() => window.isSecureContext)).toBe(false);
+          const update = await page.evaluate(async () => {
+            const response = await fetch("/api/update", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ action: "restart" }),
+            });
+            return { status: response.status, body: await response.json() };
+          });
+          expect(update.status).toBe(200);
+          expect(update.body.error).toContain("session supervisor");
           expect(
             await page.evaluate(() => navigator.clipboard === undefined),
           ).toBe(true);

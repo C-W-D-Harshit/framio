@@ -509,7 +509,8 @@ export const runServer = Effect.fn("Server.start")(function* (
           if (
             origin &&
             origin !== info.url &&
-            origin !== `http://127.0.0.1:${info.port}`
+            origin !== `http://127.0.0.1:${info.port}` &&
+            !info.urls?.some((entry) => entry.url === origin)
           )
             return HttpServerResponse.text("Update origin refused", {
               status: 403,
