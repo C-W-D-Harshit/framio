@@ -2,13 +2,13 @@
 import type { ReactNode } from "react";
 import {
   Blocks,
-  Columns2,
   GitBranch,
   Palette,
+  ScanSearch,
   type LucideIcon,
 } from "lucide-react";
 import SpotlightCard from "@/components/SpotlightCard";
-import { Container, SectionTitle, useFx } from "./primitives";
+import { Container, Reveal, SectionTitle, useFx } from "./primitives";
 import { PanelDots } from "./texture";
 
 function Card({
@@ -91,11 +91,11 @@ export function Features() {
     >
       <Container>
         <SectionTitle
-          title="Built for review."
-          muted="Everything you need to point, check, and hand off."
+          title="No handoff."
+          muted="The design is React and Tailwind code in your repo."
         />
 
-        <div className="mt-12 grid gap-3 md:mt-20 md:grid-cols-5">
+        <Reveal className="mt-12 grid gap-3 md:mt-20 md:grid-cols-5">
           <Card
             lead="Every width at once."
             body="One file renders at desktop and mobile side by side, and a click tells your agent which width you meant."
@@ -114,8 +114,8 @@ export function Features() {
             </div>
           </Card>
           <Card
-            lead="Named layers."
-            body="Click inside a frame and Framio selects the nearest named part, so feedback lands on the right element."
+            lead="Layer-accurate notes."
+            body="Click inside a frame and Framio selects the nearest named layer. Your agent gets that element, not your best description of it."
             className="flex flex-col md:col-span-2"
           >
             <div className="relative mt-auto flex justify-center px-6 md:px-8">
@@ -130,34 +130,42 @@ export function Features() {
               />
             </div>
           </Card>
-        </div>
+        </Reveal>
 
         <div className="mt-12 grid gap-8 md:mt-20 md:grid-cols-2 md:gap-y-10 lg:grid-cols-4 lg:gap-8">
-          <Fact
-            icon={Palette}
-            lead="One DESIGN.md."
-            body="Colors, fonts, and radii live in one file. Edit it and every frame restyles on save."
-          />
-          <Fact
-            icon={Columns2}
-            lead="Check the build."
-            body={
-              <>
-                <Mono>--compare</Mono> puts a frame next to your running app at
-                the same width.
-              </>
-            }
-          />
-          <Fact
-            icon={Blocks}
-            lead="Real components."
-            body="Frames start with shadcn/ui, and your agent can add blocks from shadcn registries."
-          />
-          <Fact
-            icon={GitBranch}
-            lead="Plain files."
-            body="Designs are .tsx files in your repo. Diff them, branch them, review them in a PR."
-          />
+          <Reveal delay={0}>
+            <Fact
+              icon={Palette}
+              lead="One DESIGN.md."
+              body="Colors, fonts, and radii live in one file. Edit it and every frame restyles on save."
+            />
+          </Reveal>
+          <Reveal delay={70}>
+            <Fact
+              icon={ScanSearch}
+              lead="Checks its own work."
+              body={
+                <>
+                  <Mono>framio inspect</Mono> flags overflow, misalignment,
+                  contrast, and tap targets before you see the frame.
+                </>
+              }
+            />
+          </Reveal>
+          <Reveal delay={140}>
+            <Fact
+              icon={Blocks}
+              lead="Real components."
+              body="Frames start with shadcn/ui, and your agent can add blocks from shadcn registries."
+            />
+          </Reveal>
+          <Reveal delay={210}>
+            <Fact
+              icon={GitBranch}
+              lead="Plain files."
+              body="Designs are .tsx files and comments are JSON, all in your repo. Diff them and review them in a PR."
+            />
+          </Reveal>
         </div>
       </Container>
     </section>

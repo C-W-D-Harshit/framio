@@ -11,9 +11,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import Magnet from "@/components/Magnet";
 import LogoLoop from "@/components/LogoLoop";
-import { Check, Copy } from "lucide-react";
+import { ArrowUpRight, Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Grain } from "./texture";
 import { ClaudeMark, GitHubMark, INSTALL } from "@/components/landing/kit";
@@ -22,6 +21,24 @@ import { AntigravityMark, CursorMark, GrokMark, OpenCodeMark } from "./agents";
 
 export { ClaudeMark, GitHubMark, INSTALL };
 export const REPO = "https://github.com/C-W-D-Harshit/framio";
+
+/** A small arrow for links that leave the site; it leans out on hover. */
+export function ExternalArrow() {
+  return (
+    <ArrowUpRight
+      aria-hidden
+      className="ext-arrow size-3.5 shrink-0 opacity-60"
+      strokeWidth={2}
+    />
+  );
+}
+
+/** External links open in a new tab; same-site links stay in place. */
+export function external(href: string) {
+  return /^https?:\/\//.test(href)
+    ? { target: "_blank", rel: "noopener noreferrer" }
+    : {};
+}
 export const links: Record<string, string> = {
   "How it works": "#how-it-works",
   Docs: "/docs/",
@@ -71,6 +88,62 @@ export function CursorZone({
   );
 }
 
+/**
+ * Scroll reveal that never hides content in the HTML. After mount, elements already on screen
+ * stay put; elements below the fold get data-reveal="hidden" and fade up when they scroll in.
+ * The attribute is removed once the transition ends, so it can't fight later transforms.
+ */
+export function useReveal<T extends HTMLElement>(delay = 0) {
+  const ref = useRef<T>(null);
+  const fx = useFx();
+  useEffect(() => {
+    const el = ref.current;
+    if (!fx || !el) return;
+    if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return;
+    el.dataset.reveal = "hidden";
+    el.style.setProperty("--reveal-delay", `${delay}ms`);
+    const done = (event: TransitionEvent) => {
+      if (event.target !== el || event.propertyName !== "opacity") return;
+      if (el.dataset.reveal !== "shown") return;
+      delete el.dataset.reveal;
+      el.style.removeProperty("--reveal-delay");
+      el.removeEventListener("transitionend", done);
+    };
+    el.addEventListener("transitionend", done);
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        el.dataset.reveal = "shown";
+        io.disconnect();
+      },
+      { rootMargin: "0px 0px -12% 0px" },
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      el.removeEventListener("transitionend", done);
+    };
+  }, [fx, delay]);
+  return ref;
+}
+
+export function Reveal({
+  children,
+  className,
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const ref = useReveal<HTMLDivElement>(delay);
+  return (
+    <div ref={ref} className={className}>
+      {children}
+    </div>
+  );
+}
+
 export function Container({
   children,
   className,
@@ -99,8 +172,10 @@ export function SectionTitle({
   className?: string;
   center?: boolean;
 }) {
+  const ref = useReveal<HTMLHeadingElement>();
   return (
     <h2
+      ref={ref}
       className={cn(
         "max-w-[820px] text-[34px] leading-[1.08] font-semibold tracking-[-0.03em] text-balance md:type-landing-h2",
         center && "mx-auto text-center",
@@ -116,20 +191,9 @@ export function SectionTitle({
  * The primary action: a short button, with the full command underneath so a reader can see
  * what runs before they paste it.
  */
-function MaybeMagnet({ children }: { children: ReactNode }) {
-  const fx = useFx();
-  if (!fx) return <>{children}</>;
-  return (
-    <Magnet
-      padding={60}
-      magnetStrength={4}
-      wrapperClassName="w-full md:w-auto"
-      innerClassName="w-full"
-    >
-      {children}
-    </Magnet>
-  );
-}
+const isMac = () =>
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.userAgent);
 
 export function InstallCTA({
   className,
@@ -141,7 +205,9 @@ export function InstallCTA({
   onBlue?: boolean;
 }) {
   const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [swapped, setSwapped] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const code = useRef<HTMLElement>(null);
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
@@ -149,15 +215,38 @@ export function InstallCTA({
     [],
   );
   async function copyCommand() {
+    setSwapped(true);
     try {
       await navigator.clipboard.writeText(INSTALL);
       setStatus("copied");
+      const el = code.current;
+      if (el) {
+        // Restart the sweep even on a second click.
+        el.dataset.copied = "false";
+        void el.offsetWidth;
+        el.dataset.copied = "true";
+      }
     } catch {
       setStatus("error");
+      // The clipboard is blocked, so select the command; one keystroke copies it.
+      const el = code.current;
+      const selection = window.getSelection();
+      if (el && selection) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
     }
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setStatus("idle"), 3000);
   }
+  const label =
+    status === "copied"
+      ? "Copied!"
+      : status === "error"
+        ? `Press ${isMac() ? "⌘C" : "Ctrl+C"} to copy`
+        : "Copy install command";
   return (
     <div
       data-layer="Install"
@@ -173,35 +262,37 @@ export function InstallCTA({
           center && "md:justify-center",
         )}
       >
-        <MaybeMagnet>
-          <button
-            type="button"
-            onClick={copyCommand}
-            className={cn(
-              "flex h-12 w-full md:w-auto min-w-[221px] items-center justify-center gap-2 rounded-[10px] px-5 text-[15px] font-medium md:h-11",
-              onBlue
-                ? "bg-on-corner-blue text-corner-blue"
-                : "bg-landing-ink text-landing-page",
-            )}
+        <button
+          type="button"
+          aria-label={label}
+          onClick={copyCommand}
+          className={cn(
+            "press flex h-12 w-full md:w-auto min-w-[221px] items-center justify-center gap-2 rounded-[10px] px-5 text-[15px] font-medium md:h-11",
+            onBlue
+              ? "bg-on-corner-blue text-corner-blue"
+              : "bg-landing-ink text-landing-page",
+          )}
+        >
+          <span
+            key={status}
+            className={cn("flex items-center gap-2", swapped && "swap-in")}
           >
             {status === "copied" ? (
-              <Check className="size-4" />
+              <Check className="draw-check size-4" strokeWidth={2.25} />
             ) : (
               <Copy className="size-4" strokeWidth={2} />
             )}
-            <span aria-live="polite">
-              {status === "copied"
-                ? "Copied!"
-                : status === "error"
-                  ? "Select command below"
-                  : "Copy install command"}
-            </span>
-          </button>
-        </MaybeMagnet>
+            <span aria-hidden>{label}</span>
+          </span>
+          <span className="sr-only" aria-live="polite">
+            {status === "idle" ? "" : label}
+          </span>
+        </button>
         <a
           href={REPO}
+          {...external(REPO)}
           className={cn(
-            "flex h-12 items-center justify-center gap-2 px-3 text-[15px] md:h-11",
+            "press flex h-12 items-center justify-center gap-2 px-3 text-[15px] md:h-11",
             onBlue ? "text-on-corner-blue" : "text-landing-ink",
           )}
         >
@@ -210,8 +301,13 @@ export function InstallCTA({
         </a>
       </div>
       <code
+        ref={code}
+        onAnimationEnd={(event) => {
+          if (event.animationName === "copy-sweep")
+            event.currentTarget.dataset.copied = "false";
+        }}
         className={cn(
-          "select-all break-words font-mono text-[11px] leading-[1.6] md:text-[12px] md:break-normal md:whitespace-nowrap",
+          "install-code select-all break-words font-mono text-[11px] leading-[1.6] md:text-[12px] md:break-normal md:whitespace-nowrap",
           center && "md:text-center",
           onBlue ? "text-on-corner-blue" : "text-landing-muted",
         )}

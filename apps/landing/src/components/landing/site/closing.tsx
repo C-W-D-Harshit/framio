@@ -10,8 +10,11 @@ import {
   GitHubMark,
   InstallCTA,
   SectionTitle,
+  external,
+  ExternalArrow,
   links,
   REPO,
+  Reveal,
 } from "./primitives";
 import { Grain, PanelDots } from "./texture";
 
@@ -29,16 +32,16 @@ export function FAQ() {
     >
       <Container className="grid gap-10 md:grid-cols-2 md:gap-6">
         <SectionTitle
-          title="Questions."
-          muted="Short answers."
+          title="Fair questions."
+          muted="What people ask about Framio."
           className="md:max-w-[360px]"
         />
-        <div className="flex flex-col">
+        <Reveal className="flex flex-col">
           {faqs.map((f) => (
             <details
               key={f.q}
               open={openQuestions.has(f.q)}
-              className="group border-b border-dashed border-landing-line"
+              className="faq-item group border-b border-dashed border-landing-line"
             >
               <summary
                 onClick={(event) => {
@@ -50,17 +53,17 @@ export function FAQ() {
                     return next;
                   });
                 }}
-                className="flex cursor-pointer select-none list-none items-center justify-between gap-4 py-5 text-[16px] font-medium"
+                className="flex cursor-pointer select-none list-none items-center justify-between gap-4 py-5 text-[16px] font-medium text-landing-ink/85 transition-colors duration-150 group-open:text-landing-ink hover:text-landing-ink"
               >
                 {f.q}
-                <ChevronDown className="size-4 shrink-0 text-landing-muted transition-transform duration-200 group-open:rotate-180" />
+                <ChevronDown className="size-4 shrink-0 text-landing-muted transition-[transform,color] group-hover:text-landing-ink duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" />
               </summary>
               <p className="pb-6 text-[15px] leading-[1.6] text-landing-muted">
                 {f.a}
               </p>
             </details>
           ))}
-        </div>
+        </Reveal>
       </Container>
     </section>
   );
@@ -70,7 +73,7 @@ export function ClosingCTA() {
   return (
     <section data-layer="Closing" className="pb-24 md:pb-32">
       <Container>
-        <div className="relative">
+        <Reveal className="relative">
           <div className="relative flex flex-col overflow-hidden shadow-[inset_0_1px_0_rgb(255_255_255/0.25)] rounded-[18px] bg-corner-blue px-6 py-14 text-on-corner-blue md:items-center md:rounded-[28px] md:px-12 md:py-24 md:text-center">
             <PanelDots
               color="rgb(255 255 255 / 0.16)"
@@ -78,11 +81,10 @@ export function ClosingCTA() {
             />
             <Grain alpha={40} blend="overlay" />
             <h2 className="relative text-[38px] leading-[1.04] font-semibold tracking-[-0.04em] md:text-[64px]">
-              Let your agent show you
-              <br className="hidden md:block" /> before it ships.
+              Stop describing pixels.
             </h2>
             <p className="relative mt-5 max-w-[520px] text-[16px] leading-[1.55] text-on-corner-blue md:text-[18px]">
-              Install Framio, run{" "}
+              Let your agent show you before it ships. Install Framio, run{" "}
               <code className="font-mono text-[15px] md:text-[16px]">
                 framio init
               </code>{" "}
@@ -90,7 +92,7 @@ export function ClosingCTA() {
             </p>
             <InstallCTA center onBlue className="relative mt-10" />
           </div>
-        </div>
+        </Reveal>
       </Container>
     </section>
   );
@@ -121,14 +123,16 @@ export function Footer() {
             className="h-5 w-fit"
           />
           <p className="max-w-[260px] text-[14px] leading-[1.55] text-landing-muted">
-            A design canvas for coding agents.
+            A free, open-source design canvas for coding agents.
           </p>
           <a
             href={REPO}
-            className="flex items-center gap-2 text-[13px] text-landing-muted"
+            {...external(REPO)}
+            className="group flex w-fit items-center gap-2 text-[13px] text-landing-muted transition-colors duration-150 hover:text-landing-ink"
           >
             <GitHubMark />
             C-W-D-Harshit/framio
+            <ExternalArrow />
           </a>
         </div>
         <div className="grid grid-cols-3 gap-6 md:gap-20">
@@ -136,8 +140,14 @@ export function Footer() {
             <div key={c.title} className="flex flex-col gap-3 text-[14px]">
               <span className="text-landing-ink">{c.title}</span>
               {c.links.map((l) => (
-                <a href={links[l]} key={l} className="text-landing-muted">
+                <a
+                  href={links[l]}
+                  key={l}
+                  {...external(links[l])}
+                  className="group flex w-fit items-center gap-1 text-landing-muted transition-colors duration-150 hover:text-landing-ink"
+                >
                   {l}
+                  {links[l].startsWith("http") && <ExternalArrow />}
                 </a>
               ))}
             </div>

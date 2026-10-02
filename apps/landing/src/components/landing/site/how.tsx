@@ -1,11 +1,13 @@
 /* Adapted from Tailark Dusk features-5 (MIT, Copyright (c) Tailark).  */
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   BookOpen,
-  Camera,
   CheckCheck,
+  Columns2,
+  Database,
+  FileSearch,
   FolderPlus,
-  MessageCircleQuestion,
+  Images,
   MessageSquare,
   MousePointer2,
   Palette,
@@ -14,10 +16,21 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SpotlightCard from "@/components/SpotlightCard";
-import { Container, CursorZone, SectionTitle, useFx } from "./primitives";
+import {
+  Container,
+  CursorZone,
+  SectionTitle,
+  useFx,
+  useReveal,
+} from "./primitives";
 import { PanelDots } from "./texture";
 
-const steps = ["Install", "Ask your agent", "Point at what's wrong"];
+const steps = [
+  "Install Framio",
+  "Ask in one sentence",
+  "Point at what's wrong",
+  "Ship it",
+];
 
 function Highlights({
   items,
@@ -69,32 +82,45 @@ function Step({
   lead: string;
   body: ReactNode;
   items: { icon: LucideIcon; label: string }[];
-  visual: ReactNode;
+  visual?: ReactNode;
 }) {
+  const ref = useReveal<HTMLDivElement>();
   return (
     <div
+      ref={ref}
       id={`step-${n}`}
       data-layer="Step"
       className="grid gap-8 md:grid-cols-5 md:gap-12"
     >
-      <div className="flex flex-col justify-between md:col-span-2 md:pb-2">
+      <div
+        className={cn(
+          "flex flex-col justify-between md:col-span-2",
+          visual && "md:pb-2",
+        )}
+      >
         <div>
           <h3 className="mb-5 flex items-center gap-3 text-[14px] font-medium text-landing-muted">
             <span className="grid size-6 place-items-center rounded-full border border-landing-line font-mono text-[12px] text-landing-ink">
               {n}
-            </span>
+            </span>{" "}
             {label}
           </h3>
           <p className="text-[18px] leading-[1.5] font-medium text-balance text-landing-muted">
             <span className="text-landing-ink">{lead}</span> {body}
           </p>
         </div>
-        <Highlights items={items} />
+        {visual && <Highlights items={items} />}
       </div>
-      <Panel>
-        <PanelDots />
-        {visual}
-      </Panel>
+      {visual ? (
+        <Panel>
+          <PanelDots />
+          {visual}
+        </Panel>
+      ) : (
+        <div className="md:col-span-3 md:self-end">
+          <Highlights items={items} />
+        </div>
+      )}
     </div>
   );
 }
@@ -268,6 +294,71 @@ function AgentReplyVisual() {
 
 /* ------------------------------------------------------------ section */
 
+/** The step nearest the middle of the viewport is the one you're reading. */
+function useActiveStep(count: number) {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting)
+            setActive(Number(entry.target.id.replace("step-", "")) - 1);
+        }
+      },
+      { rootMargin: "-45% 0px -50% 0px" },
+    );
+    for (let i = 1; i <= count; i++) {
+      const el = document.getElementById(`step-${i}`);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [count]);
+  return active;
+}
+
+function StepNav() {
+  const active = useActiveStep(steps.length);
+  const links = useRef<(HTMLAnchorElement | null)[]>([]);
+  const [bar, setBar] = useState({ top: 0, height: 0 });
+  useEffect(() => {
+    const el = links.current[active];
+    if (el) setBar({ top: el.offsetTop, height: el.offsetHeight });
+  }, [active]);
+  return (
+    <div className="sticky top-24 hidden h-fit w-48 lg:block">
+      <div className="text-[13px] text-landing-muted">Steps</div>
+      <div className="relative mt-4 flex flex-col border-l border-landing-line">
+        <span
+          aria-hidden
+          className="absolute -left-px w-px bg-landing-ink transition-[transform,height] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+          style={{
+            height: bar.height,
+            transform: `translateY(${bar.top}px)`,
+          }}
+        />
+        {steps.map((s, i) => (
+          <a
+            href={`#step-${i + 1}`}
+            key={s}
+            ref={(el) => {
+              links.current[i] = el;
+            }}
+            aria-current={i === active ? "step" : undefined}
+            className={cn(
+              "py-2 pl-4 text-[14px] transition-colors duration-200 ease-out",
+              i === active
+                ? "text-landing-ink"
+                : "text-landing-muted hover:text-landing-ink",
+            )}
+          >
+            {s}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function HowItWorks() {
   return (
     <section
@@ -277,36 +368,23 @@ export function HowItWorks() {
     >
       <Container>
         <SectionTitle
-          title="How it works."
-          muted="Install once, then talk to your agent."
+          title="Ask. Point. Ship."
+          muted="How to design UI with Claude Code or Codex."
         />
         <div className="mt-14 grid gap-6 md:mt-24 lg:grid-cols-[auto_1fr] lg:gap-16">
-          <div className="sticky top-24 hidden h-fit w-48 lg:block">
-            <div className="text-[13px] text-landing-muted">Steps</div>
-            <div className="mt-4 flex flex-col">
-              {steps.map((s, i) => (
-                <a
-                  href={`#step-${i + 1}`}
-                  key={s}
-                  className={cn(
-                    "py-2 text-[14px]",
-                    i === 0 ? "text-landing-ink" : "text-landing-muted",
-                  )}
-                >
-                  {s}
-                </a>
-              ))}
-            </div>
-          </div>
+          <StepNav />
           <div className="flex flex-col gap-20 md:gap-32">
             <Step
               n={1}
-              label="Install"
+              label="Install Framio"
               lead="One command, then framio init."
-              body="It adds a .framio folder to your project and teaches your agent how to use the canvas."
+              body="It adds a .framio folder to your project and installs the skill your agent reads."
               items={[
                 { icon: Terminal, label: "A single binary, no account" },
-                { icon: FolderPlus, label: "Adds .framio/ with shadcn/ui" },
+                {
+                  icon: FolderPlus,
+                  label: "Adds .framio/ with React, Tailwind, and shadcn/ui",
+                },
                 {
                   icon: BookOpen,
                   label: "Installs the skill for Claude Code and Codex",
@@ -316,19 +394,18 @@ export function HowItWorks() {
             />
             <Step
               n={2}
-              label="Ask your agent"
-              lead="Describe what you need."
-              body="Your agent asks a few questions, writes each screen as a .tsx file, screenshots it, and fixes what it sees before moving on."
+              label="Ask in one sentence"
+              lead={
+                '"Use Framio to design the onboarding for my invoicing app."'
+              }
+              body="Your agent reads your repo first, asks only what it can't find there, and writes each screen as a .tsx file."
               items={[
-                {
-                  icon: MessageCircleQuestion,
-                  label: "Asks before it designs",
-                },
+                { icon: FileSearch, label: "Reads your repo before it asks" },
+                { icon: Images, label: "Collects references on a moodboard" },
                 {
                   icon: Palette,
                   label: "Shows two or three directions to pick from",
                 },
-                { icon: Camera, label: "Screenshots every frame it writes" },
               ]}
               visual={<FileAndFrameVisual />}
             />
@@ -336,7 +413,7 @@ export function HowItWorks() {
               n={3}
               label="Point at what's wrong"
               lead="Click it, or pin a comment."
-              body="Your agent reads what you selected and what you wrote, replies in the thread, and edits the file."
+              body="Your agent gets the exact layer you picked and what you wrote. It replies in the thread and edits the file."
               items={[
                 {
                   icon: MousePointer2,
@@ -352,6 +429,23 @@ export function HowItWorks() {
                 },
               ]}
               visual={<AgentReplyVisual />}
+            />
+            <Step
+              n={4}
+              label="Ship it"
+              lead={'"Build it in the app."'}
+              body="Your agent moves the design's theme and components into your codebase, swaps mock data for real data, and compares your app with the design at every width until they match."
+              items={[
+                {
+                  icon: Palette,
+                  label: "Moves DESIGN.md tokens into your theme",
+                },
+                { icon: Database, label: "Replaces mock data with real data" },
+                {
+                  icon: Columns2,
+                  label: "Screenshots app and design side by side",
+                },
+              ]}
             />
           </div>
         </div>

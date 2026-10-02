@@ -208,3 +208,198 @@ summary::-webkit-details-marker {
   color: var(--color-landing-ink);
   font-weight: 500;
 }
+
+/* Motion. One easing for the whole page: a strong ease-out, so things respond at once and settle. */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --reveal-dur: 700ms;
+  --reveal-distance: 16px;
+  --reveal-blur: 4px;
+  --press-dur: 160ms;
+  --press-scale: 0.97;
+  interpolate-size: allow-keywords;
+}
+
+/*
+ * Scroll reveal. Content renders visible in HTML; Reveal only adds data-reveal="hidden" after
+ * mount for elements below the fold, then flips it to "shown" when they scroll in.
+ */
+[data-reveal] {
+  transition:
+    opacity var(--reveal-dur) var(--ease-out),
+    transform var(--reveal-dur) var(--ease-out),
+    filter var(--reveal-dur) var(--ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal="hidden"] {
+  opacity: 0;
+  transform: translateY(var(--reveal-distance));
+  filter: blur(var(--reveal-blur));
+}
+
+/* Hero entrance on first paint: pill, headline, lead, actions, stage. */
+@keyframes hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(6px);
+  }
+}
+.hero-in {
+  animation: hero-in 800ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* Press feedback for every pressable surface. */
+.press {
+  transition: transform var(--press-dur) var(--ease-out);
+}
+.press:active {
+  transform: scale(var(--press-scale));
+}
+
+/* Copy button: the icon and label swap with a short blur instead of jumping. */
+.swap-in {
+  animation: swap-in 200ms var(--ease-out) both;
+}
+@keyframes swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.9);
+    filter: blur(2px);
+  }
+}
+
+/* FAQ answers open and close by height where the browser supports ::details-content. */
+.faq-item::details-content {
+  block-size: 0;
+  overflow: clip;
+  transition:
+    block-size 300ms var(--ease-out),
+    content-visibility 300ms allow-discrete;
+}
+.faq-item[open]::details-content {
+  block-size: auto;
+}
+.faq-item > p {
+  transition: opacity 300ms var(--ease-out);
+}
+.faq-item:not([open]) > p {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal="hidden"] {
+    transform: none;
+    filter: none;
+  }
+  .hero-in {
+    animation-name: fade-in;
+  }
+  .press:active {
+    transform: none;
+  }
+  .swap-in {
+    animation-name: fade-in;
+  }
+  .faq-item::details-content {
+    transition: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Tab panels cross-blur when the tab changes; no movement, so the panel stays anchored. */
+.panel-swap {
+  animation: panel-swap 260ms var(--ease-out) both;
+}
+@keyframes panel-swap {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+/* Keyboard focus: one ring everywhere, only for keyboard users. */
+:where(a, button, summary, [role="tab"]):focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* External links carry a small arrow that leans toward where the link goes. */
+.ext-arrow {
+  transition: transform var(--press-dur) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .group:hover .ext-arrow {
+    transform: translate(2px, -2px);
+  }
+  .group:hover .nudge-right {
+    transform: translateX(3px);
+  }
+}
+.nudge-right {
+  transition: transform var(--press-dur) var(--ease-out);
+}
+
+/*
+ * Copy confirmation: the check draws itself, and a selection sweeps across the command that
+ * was copied, so you see what went to the clipboard.
+ */
+.draw-check path {
+  stroke-dasharray: 24;
+  animation: draw-check 360ms var(--ease-out) 60ms both;
+}
+@keyframes draw-check {
+  from {
+    stroke-dashoffset: 24;
+  }
+}
+.install-code {
+  position: relative;
+}
+.install-code[data-copied="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -3px -6px;
+  border-radius: 4px;
+  background: rgb(110 155 255 / 0.22);
+  pointer-events: none;
+  animation: copy-sweep 1100ms var(--ease-out) both;
+}
+@keyframes copy-sweep {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 1;
+  }
+  35% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .draw-check path {
+    animation: none;
+  }
+  .install-code[data-copied="true"]::after {
+    animation-name: fade-out;
+  }
+  .ext-arrow,
+  .nudge-right {
+    transition: none;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}

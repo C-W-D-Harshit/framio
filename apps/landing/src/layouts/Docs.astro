@@ -57,6 +57,11 @@ const slug = (text: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9 -]/g, "")
     .replace(/ /g, "-");
+// Links to other sites in the Markdown body open in a new tab.
+const body = (await Astro.slots.render("default")).replace(
+  /<a href="(https?:\/\/(?!framio\.design)[^"]+)"/g,
+  '<a href="$1" target="_blank" rel="noopener noreferrer"',
+);
 ---
 
 <!doctype html>
@@ -89,7 +94,9 @@ const slug = (text: string) =>
         </a>
         <div class="flex items-center gap-6 text-sm text-landing-muted">
           <a href="/">Home</a>
-          <a href={REPO_URL}>GitHub</a>
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+            GitHub
+          </a>
         </div>
       </nav>
     </header>
@@ -153,14 +160,18 @@ const slug = (text: string) =>
           {title}
         </h1>
         <article class="docs-content mt-8">
-          <slot />
+          <Fragment set:html={body} />
         </article>
       </main>
     </div>
     <footer class="border-t border-landing-line px-5 py-10 text-sm text-landing-muted">
       <div class="mx-auto flex max-w-[1200px] flex-wrap justify-between gap-4">
         <a href="/">Framio, a design canvas for coding agents.</a>
-        <a href={`${REPO_URL}/blob/main/LICENSE`}>
+        <a
+          href={`${REPO_URL}/blob/main/LICENSE`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Free and open source · MIT license
         </a>
       </div>
