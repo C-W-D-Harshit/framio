@@ -785,6 +785,9 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
               await page.click(
                 `[data-id="__viewport__/01-test/invoices/390"] [data-comment-pin="${comment.id}"]`,
               );
+              await page.waitForSelector('button[aria-label="Comment actions"]', {
+                visible: true,
+              });
               await page.click('button[aria-label="Comment actions"]');
               await page.waitForSelector('[role="menuitem"]');
               await page.evaluate(() =>
