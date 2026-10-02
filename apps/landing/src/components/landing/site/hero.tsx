@@ -105,12 +105,6 @@ export function Hero() {
           file.
         </p>
         <InstallCTA center className="hero-in mt-8 [--i:3]" />
-        <a
-          href="#whats-new"
-          className="hero-in mt-5 w-fit [--i:3] text-[14px] text-landing-muted underline underline-offset-4 hover:text-landing-ink"
-        >
-          New: remote canvases and shared updates
-        </a>
       </Container>
 
       <Container className="hero-in relative mt-20 [--i:4] md:mt-16">

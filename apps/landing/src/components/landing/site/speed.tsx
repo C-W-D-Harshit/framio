@@ -228,8 +228,8 @@ export function Speed() {
             Fast enough to keep up with your agent.
           </h2>
           <p className="mx-auto mt-5 max-w-[540px] text-[16px] leading-[1.6] text-landing-muted md:text-[18px]">
-            One binary on your computer or VM. Your designs stay in your repo.
-            Nothing to sign in to, nothing to sync.
+            One binary. Your designs stay in your repo. Nothing to sign in to,
+            nothing to sync.
           </p>
         </Reveal>
 

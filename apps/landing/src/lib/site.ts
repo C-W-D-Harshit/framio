@@ -54,20 +54,12 @@ export const faqs = [
     a: "Frames start with React, Tailwind, and shadcn/ui. framio add pulls components from shadcn registries, and framio install adds npm packages to the design project.",
   },
   {
-    q: "Can I run Framio on a VM over Tailscale?",
-    a: "Yes. SSH into the VM, run framio start in your project, and open a printed network or Tailscale URL on your main computer. Framio listens on all IPv4 interfaces by default. Use framio start --host 127.0.0.1 for local-only access. Anyone who can reach the port can edit the canvas, so use a trusted network and your firewall or Tailscale access rules.",
-  },
-  {
-    q: "Does the VM need a browser?",
-    a: "No desktop browser or display is required. SSH and headless Linux sessions skip automatic browser launch. Live previews work without Chromium. Screenshots, thumbnails, and geometry inspection use Framio's headless Chromium and need its system libraries and sandbox support. If Chromium is unavailable, Framio shows feature errors and keeps the canvas running.",
-  },
-  {
     q: "How do I update Framio?",
     a: "Use the update control in the canvas or run framio upgrade. The canvas and CLI share downloads and progress. Download first, then install when you are ready and restart the project to use the new binary. Rollback is available with framio upgrade --rollback. Binary updates do not change your project's skills, dependencies, themes, or designs.",
   },
   {
     q: "Is Framio free?",
-    a: "Yes. Framio is free and open source under the MIT license. It is one binary with no account or subscription, and you run the canvas on your own computer or VM.",
+    a: "Yes. Framio is free and open source under the MIT license. It is one binary with no account or subscription, and you run the canvas on your own computer.",
   },
 ];
 
@@ -90,7 +82,6 @@ export const productSchema = {
   sameAs: [REPO_URL],
   featureList: [
     "Live React and Tailwind design canvas",
-    "Remote canvases over network and Tailscale URLs",
     "Shared canvas and CLI updates with rollback",
     "Coding agent skills for Claude Code and Codex",
     "Pinned comments and agent replies",
