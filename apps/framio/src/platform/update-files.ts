@@ -69,6 +69,7 @@ export const command = (file: string, args: string[]) =>
       new Promise<string>((resolve, reject) => {
         const child = spawn(file, args, {
           signal,
+          windowsHide: true,
           stdio: ["ignore", "pipe", "pipe"],
           env: { ...process.env, BUN_BE_BUN: "0" },
         });

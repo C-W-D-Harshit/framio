@@ -29,6 +29,7 @@ export const acquireLoggedServer = (
           child = spawn(command!, args, {
             cwd: p.root,
             detached: !temporary,
+            windowsHide: true,
             stdio: ["ignore", fd, fd],
           });
         } finally {

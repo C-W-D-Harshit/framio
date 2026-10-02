@@ -25,6 +25,7 @@ export const runBun = Effect.fn("runBun")(function* (
       cwd,
       env,
       detached: true,
+      windowsHide: true,
       forceKillAfter: "10 seconds",
       stdout: opts.quiet ? "pipe" : "inherit",
       stderr: opts.quiet ? "pipe" : "inherit",
