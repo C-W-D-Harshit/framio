@@ -48,15 +48,26 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
   });
   let failed = false;
   for (const r of response.results) {
+    if (r.path || r.crops?.length) {
+      const provenance =
+        r.generation !== undefined && r.revision
+          ? `generation ${r.generation}, revision ${r.revision}`
+          : "external capture";
+      yield* Console.log(
+        `Capture ${r.frame}${r.viewportWidth ? ` at ${r.viewportWidth}px` : ""}: ${provenance}`,
+      );
+    }
     if (r.path)
       yield* ui.interactive
         ? ui.message(
             "success",
-            `${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`,
+            `${relative(process.cwd(), r.archivePath ?? r.path)}  (${r.width}×${r.height}, ${r.frame}${r.captureId ? `, capture ${r.captureId}` : ""})`,
           )
         : Console.log(
-            `${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`,
+            `${relative(process.cwd(), r.archivePath ?? r.path)}  (${r.width}×${r.height}, ${r.frame}${r.captureId ? `, capture ${r.captureId}` : ""})`,
           );
+    if (r.archivePath && r.path)
+      yield* Console.log(`  Latest: ${relative(process.cwd(), r.path)}`);
     if (r.report) {
       for (const warning of r.report.warnings)
         yield* ui.message("warning", `in ${r.frame}: ${warning.message}`);
@@ -65,10 +76,13 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
           `  ${node.path}  (${Math.round(node.box.width)}×${Math.round(node.box.height)})`,
         );
     }
-    for (const crop of r.crops ?? [])
+    for (const crop of r.crops ?? []) {
       yield* Console.log(
-        `${relative(process.cwd(), crop.path)}  (${crop.width}×${crop.height}, ${crop.layer})`,
+        `${relative(process.cwd(), crop.archivePath ?? crop.path)}  (${crop.width}×${crop.height}, ${crop.layer}${crop.viewportWidth ? `, viewport ${crop.viewportWidth}px` : ""}${crop.captureId ? `, capture ${crop.captureId}` : ""})`,
       );
+      if (crop.archivePath)
+        yield* Console.log(`  Latest: ${relative(process.cwd(), crop.path)}`);
+    }
     if (r.error) {
       failed = true;
       yield* ui.message("error", `in ${r.frame}:\n${r.error}`);

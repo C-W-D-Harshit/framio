@@ -79,6 +79,10 @@ page composition and existing sections as a starting point, and incorporate sele
 blocks where they serve the product. Restyle both together so the page feels consistent.
 A complete Tailark page or a composition of Tailark blocks is also a valid starting point.
 
+Before installing a complete page, compare its rendered preview with the current brief.
+Read the reference shortlist workflow below. Registry metadata and source inspection tell
+you what will be imported, but do not establish whether the composition fits the buyer.
+
 | Template | Registry |
 | --- | --- |
 | Axis | `https://styleui.dev/r/axis.json` |
@@ -91,6 +95,46 @@ framio add https://styleui.dev/r/axis.json
 # Or, when Notio fits better:
 framio add https://styleui.dev/r/notio.json
 ```
+
+### Rendered reference shortlist
+
+Use Framio's small catalogue to compare actual Tailark and StyleUI previews before importing.
+Discovery works without a project; capture saves into the current project's moodboard.
+
+```sh
+framio references erp --json
+framio references axis --json
+framio references notio --json
+framio references --capture dusk-landing-1 --width 1440 --height 900 --json
+```
+
+Search returns `{ query, references }`. Each candidate has an `id`, `previewUrl`, `sourceUrl`,
+`registryItem`, description, initial borrowing and adaptation notes, `registryCheckedAt`,
+and `previewCheckedAt` dates.
+The catalogue is a starting shortlist, not a fit verdict or a promise that a preview never
+changes. The current IDs include `axis`, `notio`, `dusk-landing-1`, `dusk-landing-5`, and
+`mist-hero-section-1`. Capture only the candidates useful for the next decision. Use either
+a search query or `--capture`, not both. An unavailable preview is a capture failure, not
+evidence that you visually evaluated the template.
+
+Capture returns the candidate plus `frame`, image `path`, `sidecarPath`, dimensions, and a
+`captureId` when available. Each capture gets a unique filename in `01-moodboard`, preserving
+earlier references. Open the returned image and inspect the composition and relevant product
+detail. Edit its sidecar note to say what you will borrow for this product and why. Do not
+copy the catalogue's note without assessing the brief. Copy the returned `frame` verbatim
+into `previewFrame` in [evidence.md](evidence.md), alongside the exact registry item and URL.
+
+For example, a finance landing may borrow Axis's large working product view beside a short
+promise, while avoiding its CRM imagery and unconfirmed proof. A dark ERP may instead borrow
+Dusk's product scale and retain its centered headline if that makes the promise easier to
+read. Notio may help when a recognizable task is the strongest opening demonstration, but
+its phone imagery may not fit a desktop product. Decide from the rendered previews rather
+than those descriptions. Keep a few useful candidates and record the fit reasons.
+
+For a relevant source outside the catalogue, capture its public preview with
+`framio screenshot --url <preview-url> --into 01-moodboard`, then add its source URL and
+borrowing note. Discovery and capture do not install components. Use `framio add` with the
+selected `registryItem`, verify the import receipt, and adapt the source before building.
 
 ### Adapt imports into Framio frames
 

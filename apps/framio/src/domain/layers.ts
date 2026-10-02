@@ -1,4 +1,4 @@
-import type { LayerNode, LayerReport } from "../contracts/layers";
+import type { LayerNode, LayerReport, TextOverflow } from "../contracts/layers";
 export type LayerRecord = {
   name: string;
   parent: number | null;
@@ -6,6 +6,7 @@ export type LayerRecord = {
   styles: Record<string, string>;
   source?: string;
   textOverflow: boolean;
+  textOverflows?: readonly TextOverflow[];
   interactive: boolean;
   hasText: boolean;
   childBoxes: LayerNode["box"][];
@@ -111,7 +112,29 @@ export function inspectLayers(
       r = records[i]!;
     const add = (message: string, severity: "warning" | "error" = "warning") =>
       checks.push({ severity, path: node.path, message });
-    if (r.textOverflow) add("Text overflows or is clipped.", "error");
+    if (r.textOverflows !== undefined) {
+      for (const overflow of r.textOverflows) {
+        const intentional = ["ellipsis", "line-clamp", "scroll"].includes(
+          overflow.kind,
+        );
+        const description =
+          overflow.kind === "ellipsis"
+            ? "Text is intentionally truncated with ellipsis"
+            : overflow.kind === "line-clamp"
+              ? "Text is intentionally truncated with line clamp"
+              : overflow.kind === "scroll"
+                ? "Text extends beyond the visible scroll area"
+                : overflow.kind === "clipping"
+                  ? "Text is clipped"
+                  : "Text overflows";
+        checks.push({
+          severity: intentional ? "warning" : "error",
+          path: node.path,
+          message: `${description} ${overflow.axis === "horizontal" ? "horizontally" : "vertically"} by ${Math.round(overflow.excess * 10) / 10}px.`,
+          overflow,
+        });
+      }
+    } else if (r.textOverflow) add("Text overflows or is clipped.", "error");
     const b = node.box;
     if (
       r.childBoxes.some(

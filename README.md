@@ -42,8 +42,9 @@ Interactive terminals show an ASCII Framio mark and live task states. `NO_COLOR`
 color. CI, dumb terminals, and redirected output use plain text without cursor animation.
 `framio inspect` keeps its JSON output, and redirected `framio list` keeps tab-separated rows.
 
-The agent asks a few questions, shows you a couple of visual directions, and builds the screens
-you pick. It screenshots each one and fixes what it sees before moving on.
+The agent grounds the brief in confirmed product facts, compares rendered references, and
+builds the actual hero or key screen before expanding the design. Its chosen composition,
+screenshots, and review changes are visible in the canvas's Design evidence panel.
 
 ### Remote machines and VMs
 
@@ -104,21 +105,46 @@ them up. Fonts load from Google Fonts. The file follows
 
 ## Commands
 
-| Command                                                   | What it does                                                               |
-| --------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `framio init`                                             | Set up `.framio/` in the current folder                                    |
-| `framio start`                                            | Run the canvas (`--background` to detach, `--no-open` to skip the browser) |
-| `framio stop`                                             | Stop the canvas (`--all` for every project)                                |
-| `framio status` / `list`                                  | Show this server / all servers                                             |
-| `framio open`                                             | Open a running canvas in the browser                                       |
-| `framio screenshot <frame>`                               | Save frames and top-level layer crops (`--page`, `--all`, `--scale=2`)     |
-| `framio screenshot <frame> --layer "<path>"`              | Capture a named layer with context; repeat for several layers              |
-| `framio inspect <frame> [--width <n>] [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON           |
-| `framio screenshot --url <url>`                           | Capture an app or website (`--width=1440`, `--height=900`, `--scale=1`)    |
-| `framio screenshot --url <url> --compare <page>/<frame>`  | Design left, implementation right, plus both single PNGs                   |
-| `framio screenshot --url <url> --into <page>`             | Add the current app to a moodboard with a URL sidecar                      |
-| `framio add <component>`                                  | Add a shadcn registry component                                            |
-| `framio install <package>`                                | Add an npm package for designs to use                                      |
+| Command                                                   | What it does                                                                           |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `framio init`                                             | Set up `.framio/` in the current folder                                                |
+| `framio start`                                            | Run the canvas (`--background` to detach, `--no-open` to skip the browser)             |
+| `framio stop`                                             | Stop the canvas (`--all` for every project)                                            |
+| `framio status` / `list`                                  | Show this server / all servers                                                         |
+| `framio open`                                             | Open a running canvas in the browser                                                   |
+| `framio screenshot <frame>`                               | Save frames and top-level layer crops (`--page`, `--all`, `--scale=2`)                 |
+| `framio screenshot <frame> --layer "<path>"`              | Capture a named layer with context; repeat for several layers                          |
+| `framio inspect <frame> [--width <n>] [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON                       |
+| `framio screenshot --url <url>`                           | Capture an app or website (`--width=1440`, `--height=900`, `--scale=1`)                |
+| `framio screenshot --url <url> --compare <page>/<frame>`  | Design left, implementation right, plus both single PNGs                               |
+| `framio screenshot --url <url> --into <page>`             | Add the current app to a moodboard with a URL sidecar                                  |
+| `framio add <component>`                                  | Add a shadcn registry component                                                        |
+| `framio install <package>`                                | Add an npm package for designs to use                                                  |
+| `framio references [query]`                               | Find curated Tailark, Axis, and Notio references with preview URLs and borrowing notes |
+| `framio references --capture <id>`                        | Save a rendered reference and notes to the moodboard                                   |
+| `framio evidence`                                         | Read the brief, selected composition, captures, and review status                      |
+| `framio evidence --write <file> --expect <revision>`      | Validate and save an evidence document without replacing a newer edit                  |
+
+`framio add` preserves existing component files by default and reports installed, skipped,
+and failed destinations. Use `--overwrite` only when you intend to replace existing files.
+The installer verifies its completion receipt rather than treating a zero exit as proof.
+
+## Design evidence
+
+Open **Design evidence** in the canvas sidebar to see the product brief, confirmed facts,
+assumptions, rendered references, and selected composition. Reference and direction links
+jump to their actual canvas frames. Technical inspection and composition review remain
+separate, and each review links to the exact screenshot and viewport it examined.
+
+Screenshot receipts print the viewport, build generation, revision, capture ID, and actual
+image paths. Framio also archives each image so a later capture cannot change an earlier
+review's evidence. Reviews become outdated after frame, theme, asset, metadata, or design
+decision changes. A recorded pass covers its screenshot and scope, not every viewport.
+
+The agent maintains `.framio/evidence.json`. Run `framio evidence` before preparing an update,
+preserve existing entries, and pass its returned revision to `--expect`. For a missing file,
+use `--expect new`. Framio refuses malformed records and conflicting writes. It keeps recent
+captures and any capture referenced by a review across server restarts.
 
 ## Layers
 
@@ -155,7 +181,9 @@ grid, text contrast, and interactive target sizes. These geometry checks guide r
 contrast assumes the measured flat background and cannot judge images, gradients, or overlays.
 Use `--width` with screenshot or inspect to review one responsive viewport. Layer crops
 require frame arguments; they cannot be combined with URL, page, or all-frame captures.
-Build and review one layer at a time, then finish with a full-frame screenshot.
+Review the opening composition before extending a page, then use focused layer crops and
+full primary and mobile screenshots. Bound aesthetic revisions; fix functional defects and
+reconsider a weak composition instead of repeatedly polishing it.
 
 ## Responsive frames
 

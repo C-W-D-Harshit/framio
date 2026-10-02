@@ -41,6 +41,7 @@ export class Screenshots extends Context.Service<
       width: number,
       height: number,
       scale?: number,
+      viewportOnly?: boolean,
     ) => Effect.Effect<Shot, CaptureError>;
     compare: (
       design: Shot,
@@ -207,6 +208,7 @@ export class Screenshots extends Context.Service<
             width: number,
             height: number,
             scale = 1,
+            viewportOnly = false,
           ) =>
             resources
               .withPage((page) =>
@@ -226,19 +228,68 @@ export class Screenshots extends Context.Service<
                       message: `URL returned HTTP ${response.status()}: ${url}`,
                     });
                   yield* chromiumOperation(() =>
-                    page.evaluate(async () => {
-                      await document.fonts.ready;
-                      await Promise.allSettled(
-                        [...document.images]
-                          .filter((img) => img.complete && img.naturalWidth > 0)
-                          .map((img) => img.decode()),
+                    page.evaluate(async (viewportOnly) => {
+                      const pause = (milliseconds: number) =>
+                        new Promise<void>((resolve) =>
+                          setTimeout(resolve, milliseconds),
+                        );
+                      const root = document.documentElement;
+                      const scrollBehavior =
+                        root.style.getPropertyValue("scroll-behavior");
+                      const scrollPriority =
+                        root.style.getPropertyPriority("scroll-behavior");
+                      root.style.setProperty(
+                        "scroll-behavior",
+                        "auto",
+                        "important",
                       );
+                      try {
+                        // Visit below-fold content so lazy images and entrance effects can appear.
+                        const deadline = performance.now() + 8_000;
+                        await pause(250);
+                        let top = 0;
+                        for (
+                          let step = 0;
+                          step < (viewportOnly ? 0 : 24) &&
+                          performance.now() < deadline;
+                          step++
+                        ) {
+                          window.scrollTo(0, top);
+                          await pause(120);
+                          const bottom = Math.max(
+                            root.scrollHeight,
+                            document.body?.scrollHeight ?? 0,
+                          );
+                          if (top + innerHeight >= bottom) break;
+                          top = Math.min(
+                            top + Math.max(200, innerHeight * 0.8),
+                            bottom - innerHeight,
+                          );
+                        }
+                        window.scrollTo(0, 0);
+                        await pause(800);
+                      } finally {
+                        if (scrollBehavior)
+                          root.style.setProperty(
+                            "scroll-behavior",
+                            scrollBehavior,
+                            scrollPriority,
+                          );
+                        else root.style.removeProperty("scroll-behavior");
+                      }
+                      await document.fonts.ready;
+                      await Promise.race([
+                        Promise.allSettled(
+                          [...document.images].map((img) => img.decode()),
+                        ),
+                        pause(2_000),
+                      ]);
                       await new Promise<void>((resolve) =>
                         requestAnimationFrame(() =>
                           requestAnimationFrame(() => resolve()),
                         ),
                       );
-                    }),
+                    }, viewportOnly),
                   ).pipe(
                     Effect.timeout("20 seconds"),
                     Effect.mapError(
@@ -260,10 +311,15 @@ export class Screenshots extends Context.Service<
                   yield* write(
                     out,
                     yield* chromiumOperation(() =>
-                      page.screenshot({ type: "png", fullPage: true }),
+                      page.screenshot({ type: "png", fullPage: !viewportOnly }),
                     ),
                   );
-                  return { path: out, width, height: fullHeight, error: null };
+                  return {
+                    path: out,
+                    width,
+                    height: viewportOnly ? height : fullHeight,
+                    error: null,
+                  };
                 }),
               )
               .pipe(

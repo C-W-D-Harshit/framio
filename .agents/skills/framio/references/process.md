@@ -1,168 +1,119 @@
 # The Framio design process
 
-Designers don't start by drawing screens. They define the problem, study how others solved it,
-choose a direction, set up a system, and only then design screens, which they critique and
-refine. Structure comes before polish: never perfect colors and type on a flow that is wrong.
+Use the smallest process that answers the design question. Existing product facts and an
+accepted direction carry forward. A small edit does not need new directions or a fresh
+moodboard. The evidence record makes decisions, sources, and reviews visible to the user and
+the next agent. Read [evidence.md](evidence.md) for its fields and write command.
 
-Every phase leaves files behind, so the user (and the next agent session) can see the reasoning.
+## Brief and product truth
 
-External skills are loaded just before the work that needs them. Brief and research come first;
-do not fetch design, illustration, or polish skills at the start of the task. Follow the timing
-in `references/skills.md`.
+Read available product code, copy, assets, and existing BRIEF.md and DESIGN.md before asking.
+For a new product, ask missing questions together, at most five. Cover the audience, main job,
+what makes the product different, primary action, and visual constraints. If a landing page
+needs customer proof or an offer, find its source or ask for it. Brand examples belong in the
+brief only when supplied by the user or explicitly proposed by you.
 
-For every frame, complete this loop before starting another: create the frame, check errors,
-screenshot that frame, open and inspect the PNG, fix all visible issues including minor ones,
-then screenshot and inspect again. Repeat until it passes. This applies to directions,
-design-system frames, screens, and state variations. Imported reference frames also need a
-screenshot check for dimensions, legibility, and captions before adding the next reference.
-Page screenshots are additional checks after individual frames pass.
+Write `.framio/BRIEF.md` and record the same essential facts in `evidence.json`:
 
-## Phase 0: Brief
+- Confirmed product facts with their source, including relevant user answers.
+- Proposed assumptions, including positioning or capabilities that remain unconfirmed.
+- Audience, difference, conversion, scope, and constraints.
 
-**Goal:** know what you are designing and for whom.
+Keep demo data separate from claims. Names, dates, amounts, and statuses can make a static
+product demonstration believable. Keep that scenario consistent across its views. They do
+not establish customer adoption, measured results, certification, pricing, or implementation
+promises. Omit unavailable proof. Mark proposed capabilities as assumptions rather than
+quietly presenting them as confirmed behavior. Apply [copy.md](copy.md) before writing copy.
 
-1. Read what already exists before asking anything: the repo README, `package.json`, existing UI
-   code and copy, `.framio/BRIEF.md` if present. Never ask what you can find out yourself.
-2. For a new product, ask the user **at most 5 questions in a single message**. Pick the ones
-   you can't answer from the repo:
-   - What is it, in one sentence, and what problem does it solve?
-   - Who uses it (role, context, expertise)?
-   - What are the 2–3 most important things they do with it?
-   - Platform and form factor (web app, marketing site, mobile web; desktop-first?)
-   - Tone and taste: 2–3 products or brands they like the look of, and anything to avoid.
-3. Write `.framio/BRIEF.md`:
+## Rendered reference shortlist
 
-```md
-# Brief: <Product>
+For a new landing page, use [libraries.md](libraries.md) to shortlist relevant Tailark blocks
+and Axis or Notio where they fit. A few useful references are enough. Compare the actual
+rendered preview with the buyer, promise, product demonstration, and requested tone in mind.
+Do not select a family from its name or color alone.
 
-## Product
-One paragraph: what it is and the problem it solves.
+Save the references you rely on to `.framio/pages/01-moodboard/`. For each, record a source
+URL or registry ID, a rendered `previewFrame`, and a concrete borrowing note. Add an avoid
+note where a tempting part conflicts with the brief. For example, borrow a ledger beside
+the explanation because the buyer needs to inspect provenance, while avoiding invented
+customer badges. Registry search and code inspection help discovery, but do not replace
+viewing the rendered reference.
 
-## Users
-Who they are, their context, what they care about.
+Use relevant Mobbin tools when available, or capture a public reference with
+`framio screenshot --url <url> --into 01-moodboard`. Download expiring reference images
+instead of hotlinking them. Add a source and note sidecar for each image. Open a readable
+crop of the relevant section, then an overview for composition. Keep a small reference set
+and stop collecting once it supports the next decision. If a preview cannot be captured,
+record the limitation and use another rendered source instead of claiming visual review.
 
-## Jobs to be done
-1. When <situation>, I want to <action>, so I can <outcome>.
+## Directions and the early checkpoint
 
-## Platform
-Web app, desktop-first, 1440px frames (mobile 390px later).
+Make a meaningful fragment before a complete page. For a landing page, this means the actual
+hero copy, CTA, and product demonstration in their intended composition. Use reusable blocks
+and static product content. Palette swatches can support the fragment; they are not the
+design decision by themselves.
 
-## Tone and references
-Calm, precise, trustworthy. Likes: Linear, Stripe. Avoid: playful, neon.
+For a new direction, explore two or three materially different ways to explain the same
+product within the user's constraints. Change the composition, density, emphasis, or product
+story, as well as type or color where useful. Do not manufacture a choice by placing the
+requested dark direction beside a light alternative unless the user is exploring that change.
+Use `variationOf` for alternatives and review one fragment before creating the next.
 
-## Scope
-Screens and flows to design now.
-```
+Before expanding the landing page:
 
-## Phase 1: Research
+1. Run `framio inspect <page>/<frame>` for geometry and checks. Capture one or two relevant
+   hero/product crops with `framio screenshot <page>/<frame> --layer "Content/Hero"` and open
+   the returned `archivePath` PNGs.
+2. Compare those actual crops with the saved rendered references. Explain what a buyer learns,
+   which specific decision you borrowed, and what makes this composition fit the product.
+3. Check copy grounding and demo consistency, then record a composition review tied to the
+   screenshot's capture ID. Record defects and the resulting change, not a generic 'looks good'.
+4. Show the directions and wait for the user's pick when a direction is still undecided.
+   Record the selected frame, reference IDs, composition, why, and alternatives in evidence.
 
-**Goal:** learn from the best existing solutions before designing.
+A technical pass only establishes technical findings. A composition pass needs visual
+comparison and product reasoning. The user chooses a concrete fragment. If its structure
+changes materially after that choice, review the changed fragment before expanding it.
+Recording the chosen direction changes the review context. Capture the selected fragment
+again and record current reviews after saving that choice, even if its source did not change.
 
-- With Mobbin tools: run `search_flows` for each core job (e.g. "invoice creation flow",
-  "onboarding with workspace setup") and `search_screens` / `search_sections` for key screens and
-  landing sections. Search one flow or screen per query, with concrete UI words.
-- Without Mobbin: use web search or what you know of category leaders, and say so.
-- For landing pages, browse Tailark's free pages and blocks during research and shortlist
-  components for the brief. See `references/libraries.md`; install selected items on demand.
-- Pick 6–12 references that are genuinely good and relevant. Add each reference one at a time:
-  download the
-  high-resolution `image_url` (it expires; never hotlink) into `.framio/pages/01-moodboard/` and
-  write a sidecar `<file>.json`:
+## System and structure
 
-```json
-{ "name": "Stripe: invoice editor", "note": "Borrow: live preview next to the form; line items as an editable table.", "source": "https://mobbin.com/…" }
-```
+Write the selected direction to `.framio/DESIGN.md` using [design-md.md](design-md.md).
+Framio layers these tokens over `theme.css`; fonts and `type-*` styles load automatically.
+Run `npx @google/design.md lint .framio/DESIGN.md` and fix invalid tokens and contrast findings.
+`orphaned-tokens` warnings can be expected because shadcn controls consume those variables.
+Keep a concise system frame for the typography, controls, status colors, and data views
+actually used. Add other states when the design needs them, not a whole component inventory.
 
-- The note says **what to borrow and why**, not a description. Screenshot and inspect each
-  reference frame before adding the next. After all references pass,
-  `framio screenshot --page moodboard` and summarize the patterns you'll use for the user.
+For a landing page, write the job of each section and map it to the selected reusable source.
+Proof belongs beside the claim it supports. Include pricing or testimonials only when there
+is grounded content for them. Do not append a fixed SaaS section sequence by habit.
+For product flows, list the important screens and states first. Use simple wireframes when
+the structure needs agreement before detail. Shared chrome belongs in `.framio/components/`.
 
-## Phase 2: Directions
+## Screens and bounded review
 
-**Goal:** let the user choose a visual direction before you build a system around it.
+Work on one frame or meaningful section at a time. Use theme tokens, one icon set, readable
+type, clear state differences, and appropriate density. Keep the main action easy to identify.
+Centered content or repeated cards are fine when they serve the job. Look for hierarchy that
+has become flat, repeated containers that hide relationships, or visuals that fail to explain
+the product. A decorative illustration cannot substitute for product proof.
 
-- Make 2–3 genuinely different directions in `.framio/pages/02-directions/`, one frame each
-  (1440 wide), named after the idea ("Editorial warmth", "Precise and technical"). Different
-  means different type pairing, color strategy, density, and shape language, not three shades
-  of the same thing.
-- Finish and visually verify each direction frame before creating the next. Load the required
-  and job-specific design skills immediately before creating the first direction.
-- For landing pages, use Tailark's free components in each direction. Use Axis or Notio
-  when their structure fits the brief, pairing them with Tailark sections. Follow the import and
-  React adaptation workflow in `references/libraries.md`, then customize to the product.
-- For dashboards, load `better-ui` and `kpi-dashboard-design` through the `npx skills use`
-  commands in `references/skills.md` before designing the first dashboard frame.
-- Each direction frame is a style tile: palette swatches with hex values, a type specimen
-  (display, heading, body, small), key components (buttons, input, card, nav, a table row or list
-  item), and one real fragment of the product (a hero for a site, a key screen for an app).
-- Make the second and third directions variations of the first (`variationOf: "<first-slug>"`)
-  so they appear beside it on the canvas and in the page screenshot.
-- DESIGN.md does not exist yet, so set each direction's tokens on its root element:
-  `style={{ "--primary": "#B8422E", "--background": "#F7F5F2" } as React.CSSProperties}` and load
-  its fonts with `<style>{'@import url("https://fonts.googleapis.com/css2?family=…")'}</style>`.
-- Screenshot the page, show it, and **stop for the user to pick** (or mix) a direction.
+After the current edit, run `framio inspect <page>/<frame>` and fix errors. Use
+`framio screenshot <page>/<frame> --layer <path>` for one or two crops that answer the current
+design question. Open their returned `archivePath` PNGs. A full-page image checks composition,
+but small text may need a readable layer crop. Complete a frame with the full primary viewport
+and the smallest requested viewport. With responsive `widths`, use the returned suffixed paths.
 
-## Phase 3: Design system
+Use a focused review and a comparison revision for subjective polish. After changes, recheck
+the affected crop; repeat a full capture if the composition changed. Fix known readability,
+clipping, contrast, and content issues, but avoid recapturing unchanged sections or collecting
+more references for a decision that is already settled. Record separate technical and
+composition findings against real captures. Changes to the brief, references, direction,
+source, theme, or assets may make earlier reviews stale. Recheck the affected evidence.
 
-**Goal:** write the chosen direction down so every screen stays consistent.
-
-1. Write `.framio/DESIGN.md` following `references/design-md.md`. Framio turns its tokens into
-   the theme automatically: every frame restyles as soon as you save.
-2. Run `npx @google/design.md lint .framio/DESIGN.md` and fix errors and contrast warnings.
-   Ignore `orphaned-tokens` warnings: shadcn components use those colors.
-3. Build `.framio/pages/03-design-system/` frames: colors (light and dark), typography (every
-   `type-*` style), components (button variants and sizes, inputs with states, cards, badges,
-   navigation, table, empty state, toast), iconography, and illustration style if any.
-   For illustrations, load the required `illustration-style` skill from `references/skills.md`
-   and define the illustration guide in DESIGN.md's `## Imagery` section before creating assets.
-4. Put repeated product chrome (app shell, sidebar, header, footer) in `.framio/components/`.
-
-For a redesign, load the `create-design-md` skill and derive DESIGN.md from the existing product
-first, then change what the brief calls for.
-
-## Phase 4: Flows and structure
-
-**Goal:** get the screens and their order right before the details.
-
-- List each flow's screens and states in a page per flow: `10-onboarding/`, `11-invoices/`, …
-- New or complex product flows: start with grayscale wireframe frames (real copy, real
-  structure, no color or decoration) to agree on layout and hierarchy, then build hi-fi frames
-  as variations of them.
-- Landing pages: decide the section order and the job of each section (hook, proof, explain,
-  convert), then map sections to reusable Tailark blocks. Search other React + Tailwind libraries
-  for missing pieces before custom-building; restyle selected components for the product.
-
-## Phase 5: Screens
-
-**Goal:** finished, believable screens.
-
-- Before writing or changing any component text, read `references/copy.md` once per session
-  and apply its unslop process to every component, including copy from imported blocks and
-  templates. Self-audit the wording, then check clarity and fit in the rendered frame.
-- Real content: real-sounding names, numbers, dates, and copy written for this product. No lorem
-  ipsum, no "Item 1", no "John Doe".
-- Design every important state as a variation: empty, loading (skeleton), error, success, long
-  content, first-run. Empty states and onboarding get illustrations if you can generate images.
-- Complete the screenshot-and-fix loop for the current screen before creating the next screen
-  or state variation. Do not batch screens for a later review.
-- Mobile frames contain app content only. Omit phone hardware, system status bars, clocks,
-  battery/signal indicators, and OS home indicators unless explicitly requested. Keep the app's
-  own navigation, and check that fixed-height layouts fit without accidental overflow.
-- Before creating or revising illustrations, follow the required `illustration-style` skill
-  and the guide in DESIGN.md. Use that guide in image prompts, then check the results at the
-  sizes where they will appear in the UI.
-- Follow DESIGN.md and the loaded skills: type scale, spacing rhythm, one primary action per
-  view, aligned edges, consistent radii, restrained color.
-- Look at the relevant Mobbin references again before designing each screen type.
-
-## Phase 6: Critique and polish
-
-**Goal:** catch what a senior designer would catch.
-
-1. `framio screenshot --page <page>` and look at the whole flow together, then at single frames.
-2. Critique against the loaded skills (`impeccable`, `critique`, `better-ui`): hierarchy,
-   alignment, spacing, contrast, density, consistency with DESIGN.md, generic "AI-looking"
-   patterns (purple gradients, nested cards, emoji icons, centered-everything layouts).
-3. Fix issues one frame at a time. Screenshot and visually inspect every edited frame again,
-   repeating until even minor visible errors are resolved. Check the page again for consistency,
-   then report to the user what you designed and which frames to look at.
+For a final page, inspect its overall sequence and visual rhythm after individual fragments
+pass. Report the selected decisions, frames and widths reviewed, resolved findings, and any
+remaining assumptions. Screenshot success, lint, and a review record are evidence of work,
+not a guarantee that the user will prefer the design.

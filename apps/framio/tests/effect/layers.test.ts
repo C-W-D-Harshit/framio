@@ -11,6 +11,7 @@ import {
   injectLayerSources,
   editLayerSource,
 } from "../../src/server/layers/source";
+import type { TextOverflow } from "../../src/contracts/layers";
 const record = (
   name: string,
   parent: number | null,
@@ -114,6 +115,49 @@ describe("layers", () => {
         layerCrop({ x: 0, y: 0, width: 390, height: 3000 }, 390, 3000).scale,
       ).toBe(1);
     }),
+  );
+  it.effect(
+    "keeps measured overflow details and distinguishes intended truncation",
+    () =>
+      Effect.sync(() => {
+        const r = record("Labels", null);
+        const detail = (
+          selector: string,
+          kind: TextOverflow["kind"],
+        ): TextOverflow => ({
+          kind,
+          axis: "horizontal",
+          element: { selector, tag: "p", text: "Long label", box: r.box },
+          container: { selector, box: r.box },
+          textBounds: { x: 0, y: 0, width: 150, height: 20 },
+          actual: 150,
+          available: 100,
+          excess: 50,
+        });
+        r.textOverflow = true;
+        r.textOverflows = [
+          detail("#root #first", "ellipsis"),
+          detail("#root #second", "clipping"),
+          detail("#root #third", "scroll"),
+          { ...detail("#root #fourth", "line-clamp"), axis: "vertical" },
+        ];
+        const report = inspectLayers(buildLayerTree([r]), [r], 390);
+        expect(report.checks.map((check) => check.severity)).toEqual([
+          "warning",
+          "error",
+          "warning",
+          "warning",
+        ]);
+        expect(report.checks[0]?.message).toContain("horizontally by 50px");
+        expect(report.checks[1]?.overflow?.element.selector).toBe(
+          "#root #second",
+        );
+        expect(report.checks.every((check) => check.path === "Labels")).toBe(
+          true,
+        );
+        r.textOverflows = [];
+        expect(inspectLayers(buildLayerTree([r]), [r], 390).checks).toEqual([]);
+      }),
   );
   it.effect("edits only the exact literal among identical names", () =>
     Effect.gen(function* () {

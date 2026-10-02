@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Moon,
   Sun,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Switch } from "./components/ui/switch";
@@ -60,6 +61,7 @@ import {
 } from "./state";
 import { imageUrl, standaloneUrl } from "./frame-node";
 import { Canvas } from "./canvas";
+import { EvidencePanel } from "./evidence-panel";
 import type { Tool } from "./toolbar";
 
 function useHashPage() {
@@ -120,12 +122,16 @@ export function App() {
   );
   const [finder, setFinder] = useState(false);
   const [finderValue, setFinderValue] = useState("");
-  const [rightPanel, setRightPanel] = useState<"comments" | "inspect" | null>(
-    () => {
-      const stored = projectSession.getItem("panel");
-      return stored === "comments" || stored === "inspect" ? stored : null;
-    },
-  );
+  const [rightPanel, setRightPanel] = useState<
+    "comments" | "inspect" | "evidence" | null
+  >(() => {
+    const stored = projectSession.getItem("panel");
+    return stored === "comments" ||
+      stored === "inspect" ||
+      stored === "evidence"
+      ? stored
+      : null;
+  });
   useEffect(() => {
     projectSession.setItem("panel", rightPanel ?? "");
   }, [rightPanel]);
@@ -218,6 +224,21 @@ export function App() {
               <Search className="size-3.5" />
               <span className="flex-1 text-left">Find a frame</span>
               <Kbd>{MOD}K</Kbd>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2 w-full justify-start gap-2 text-xs font-normal"
+              aria-label="Design evidence"
+              aria-expanded={rightPanel === "evidence"}
+              onClick={() =>
+                setRightPanel((panel) =>
+                  panel === "evidence" ? null : "evidence",
+                )
+              }
+            >
+              <BookOpen className="size-3.5" />
+              <span>Design evidence</span>
             </Button>
           </div>
           <SidebarContent className="gap-0">
@@ -314,7 +335,12 @@ export function App() {
           </SidebarContent>
           <SidebarFooter className="gap-2 border-t p-4">
             <UpdateControl />
-            {[snapshot?.cssError, snapshot?.commentsError, saveError]
+            {[
+              snapshot?.cssError,
+              snapshot?.commentsError,
+              snapshot?.evidenceError,
+              saveError,
+            ]
               .filter(Boolean)
               .map((error) => (
                 <p
@@ -395,6 +421,13 @@ export function App() {
             selector={selection.element?.selector ?? inspectNode.path}
             frame={layerFrame}
             onClose={() => setRightPanel(null)}
+          />
+        )}
+        {rightPanel === "evidence" && snapshot && (
+          <EvidencePanel
+            snapshot={snapshot}
+            onClose={() => setRightPanel(null)}
+            onFrame={(frame) => jump(frame.page, frame.id)}
           />
         )}
         <CommandDialog

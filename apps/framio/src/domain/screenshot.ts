@@ -44,9 +44,14 @@ export const validateScreenshot = Effect.fn("validateScreenshot")(function* (
           "--url cannot be combined with frame arguments, --page, or --all",
       });
   } else {
-    if (request.compare || request.into || request.height)
+    if (
+      request.compare ||
+      request.into ||
+      request.height ||
+      request.viewportOnly !== undefined
+    )
       return yield* new InvalidInput({
-        message: "--compare, --into, and --height require --url",
+        message: "--compare, --into, --height, and viewportOnly require --url",
       });
     if (!request.frames?.length && !request.page && !all)
       return yield* new InvalidInput({

@@ -25,6 +25,20 @@ import { scanProject } from "../server/project";
 import { buildThemeCss, type ThemeSession } from "../server/tailwind";
 import { Diagnostics, measure } from "./diagnostics";
 import { makeBuildCoordinator } from "./build-coordinator";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  CapturesFile,
+  emptyEvidence,
+  type CaptureEvidence,
+  type EvidenceFile,
+} from "../contracts/evidence";
+import * as Schema from "effect/Schema";
+import {
+  evidenceContextRevision,
+  evidenceRevision,
+  readEvidence,
+} from "./evidence";
+import { frameRevision } from "./frame-revision";
 
 type Assets = {
   generation: number;
@@ -35,6 +49,12 @@ type Assets = {
   css: { text: string; error: string | null; version: number };
 };
 export type ProjectGeneration = {
+  evidence?: EvidenceFile;
+  evidenceRevision?: string | null;
+  evidenceContextRevision?: string;
+  evidenceError?: string | null;
+  captures?: readonly CaptureEvidence[];
+  assetRevision?: string;
   comments: readonly Comment[];
   commentsError: string | null;
   retained: readonly Assets[];
@@ -55,6 +75,12 @@ export function projectSnapshot(
   const cssHash = Bun.hash(value.css.text).toString(16);
   return {
     projectName: basename(root),
+    evidence: value.evidence ?? emptyEvidence,
+    evidenceRevision: value.evidenceRevision ?? null,
+    evidenceContextRevision:
+      value.evidenceContextRevision ?? evidenceContextRevision(emptyEvidence),
+    evidenceError: value.evidenceError ?? null,
+    captures: value.captures ?? [],
     comments: value.comments,
     commentsError: value.commentsError,
     cssVersion: value.css.version,
@@ -84,6 +110,7 @@ export function projectSnapshot(
             ? (value.imageVersions.get(frame.id) ?? 0)
             : (value.artifacts.frames.get(frame.id)?.version ?? 0),
         geometryVersion: `${frame.kind === "image" ? value.imageVersions.get(frame.id) : value.artifacts.frames.get(frame.id)?.hash}-${cssHash}`,
+        revision: frameRevision(value, frame),
         error:
           frame.metaError ??
           value.artifacts.frames.get(frame.id)?.error ??
@@ -109,8 +136,30 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         ),
   );
   const capturePermits = yield* Semaphore.make(8);
+  const evidenceWrites = yield* Semaphore.make(1);
   const leases = yield* makeGenerationLeases<ProjectGeneration>();
+  const storedCaptures = yield* fs
+    .readFileString(join(p.state, "captures.json"))
+    .pipe(
+      Effect.catchReason("PlatformError", "NotFound", () =>
+        Effect.succeed("[]"),
+      ),
+      Effect.flatMap(
+        Schema.decodeUnknownEffect(Schema.fromJsonString(CapturesFile)),
+      ),
+      Effect.catch((error) =>
+        Effect.logWarning("Capture history unavailable", error.message).pipe(
+          Effect.as([] as readonly CaptureEvidence[]),
+        ),
+      ),
+    );
   const initial: ProjectGeneration = {
+    evidence: emptyEvidence,
+    evidenceRevision: null,
+    evidenceContextRevision: evidenceContextRevision(emptyEvidence),
+    evidenceError: null,
+    captures: storedCaptures,
+    assetRevision: "",
     comments: [],
     commentsError: null,
     retained: [],
@@ -130,6 +179,40 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
       files: ReadonlySet<string>,
       full: boolean,
     ) {
+      const evidenceText = yield* fs
+        .readFileString(join(p.framio, "evidence.json"))
+        .pipe(
+          Effect.catchReason("PlatformError", "NotFound", () =>
+            Effect.succeed(null),
+          ),
+          Effect.result,
+        );
+      const evidenceResult =
+        evidenceText._tag === "Success"
+          ? yield* readEvidence(evidenceText.success).pipe(Effect.result)
+          : evidenceText;
+      const evidence =
+        evidenceResult._tag === "Success"
+          ? evidenceResult.success
+          : (previous.evidence ?? emptyEvidence);
+      let assetRevision = previous.assetRevision ?? "";
+      if (full || [...files].some((file) => /^(assets)([/\\]|$)/.test(file))) {
+        const hash = createHash("sha256");
+        const paths = yield* fs
+          .readDirectory(p.assets, { recursive: true })
+          .pipe(
+            Effect.catchReason("PlatformError", "NotFound", () =>
+              Effect.succeed([] as string[]),
+            ),
+          );
+        for (const name of paths.sort()) {
+          const file = join(p.assets, name);
+          const info = yield* fs.stat(file);
+          if (info.type !== "File") continue;
+          hash.update(name).update(yield* fs.readFile(file));
+        }
+        assetRevision = hash.digest("hex");
+      }
       const commentResult = yield* fs
         .readFileString(join(p.framio, "comments.json"))
         .pipe(
@@ -140,7 +223,11 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
           Effect.result,
         );
       const pages =
-        files.size === 1 && files.has("comments.json") && !full
+        !full &&
+        files.size > 0 &&
+        [...files].every(
+          (file) => file === "comments.json" || file === "evidence.json",
+        )
           ? previous.pages
           : yield* scanProject(p, previous.pages, full ? undefined : files);
       const frames = pages.flatMap((page) => page.frames);
@@ -265,6 +352,18 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         retainedBytes += bytes;
       }
       const next: ProjectGeneration = {
+        evidence,
+        evidenceRevision:
+          evidenceText._tag === "Success"
+            ? evidenceRevision(evidenceText.success)
+            : previous.evidenceRevision,
+        evidenceContextRevision: evidenceContextRevision(evidence),
+        evidenceError:
+          evidenceResult._tag === "Failure"
+            ? evidenceResult.failure.message
+            : null,
+        captures: previous.captures,
+        assetRevision,
         comments:
           commentResult._tag === "Success"
             ? commentResult.success.comments
@@ -297,6 +396,20 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
               : 0),
         },
       };
+      const framesById = new Map(frames.map((frame) => [frame.id, frame]));
+      next.evidenceContextRevision = evidenceContextRevision(
+        evidence,
+        evidence.references.flatMap((reference) => {
+          if (!reference.previewFrame) return [];
+          const preview = framesById.get(reference.previewFrame);
+          return [
+            {
+              frame: reference.previewFrame,
+              revision: preview ? frameRevision(next, preview) : "missing",
+            },
+          ];
+        }),
+      );
       const active = yield* leases.values;
       const referencedImages = new Set(
         [next, ...retained, ...active].flatMap((assets) => [
@@ -378,6 +491,13 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
             kind: "comments",
             message: value.commentsError,
           });
+        if (value.evidenceError)
+          errors.push({
+            frame: "",
+            file: ".framio/evidence.json",
+            kind: "evidence",
+            message: value.evidenceError,
+          });
         if (value.css.error)
           errors.unshift({
             frame: "",
@@ -432,11 +552,72 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         return yield* use(lease.state, lease.token);
       }),
     ).pipe(Semaphore.withPermits(capturePermits, 1));
+  const recordCaptures = Effect.fn("ProjectState.recordCaptures")(function* (
+    records: readonly CaptureEvidence[],
+  ) {
+    yield* coordinator
+      .withStableState((state) =>
+        Effect.gen(function* () {
+          const reviewed = new Set(
+            state.evidence?.reviews.map((review) => review.captureId) ?? [],
+          );
+          const incoming = new Set(records.map((record) => record.id));
+          const all = [...records, ...(state.captures ?? [])];
+          const captures = all.filter(
+            (capture, index) =>
+              index < 48 ||
+              incoming.has(capture.id) ||
+              reviewed.has(capture.id),
+          );
+          const file = join(p.state, "captures.json");
+          const temporary = `${file}.${randomUUID()}.tmp`;
+          yield* Effect.acquireUseRelease(
+            Effect.succeed(temporary),
+            () =>
+              fs
+                .writeFileString(
+                  temporary,
+                  JSON.stringify(captures, null, 2) + "\n",
+                )
+                .pipe(Effect.andThen(fs.rename(temporary, file))),
+            () =>
+              fs
+                .remove(temporary, { force: true })
+                .pipe(
+                  Effect.catch((error) => Effect.logWarning(error.message)),
+                ),
+          );
+          const kept = new Set(captures.map((capture) => capture.id));
+          for (const capture of all)
+            if (!kept.has(capture.id))
+              yield* fs
+                .remove(join(p.screenshots, capture.path), { force: true })
+                .pipe(
+                  Effect.catch((error) =>
+                    Effect.logWarning(
+                      "Old capture cleanup failed",
+                      error.message,
+                    ),
+                  ),
+                );
+          return captures;
+        }),
+      )
+      .pipe(
+        Effect.flatMap((captures) =>
+          coordinator.update((state) => ({ ...state, captures })),
+        ),
+      );
+  }, evidenceWrites.withPermit);
+  const withEvidenceWrite = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    evidenceWrites.withPermit(effect);
   return {
     ...coordinator,
     withGeneration,
     pinned: leases.get,
     pinnedValues: leases.values,
+    recordCaptures,
+    withEvidenceWrite,
   };
 });
 export class ProjectState extends Context.Service<

@@ -170,6 +170,46 @@ function FrameLayers({
           {warning.message}
         </p>
       ))}
+      {Boolean(report?.checks.length) && (
+        <div aria-label="Inspection findings" className="mb-3 space-y-1">
+          {report?.checks.map((check) => (
+            <Button
+              key={`${check.path}:${check.message}:${check.overflow?.element.selector ?? ""}:${check.overflow?.container.selector ?? ""}:${check.overflow?.axis ?? ""}`}
+              variant="ghost"
+              type="button"
+              className={`h-auto w-full flex-col items-start gap-1 whitespace-normal rounded p-2 text-left text-[11px] ${check.severity === "error" ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}
+              onClick={() => {
+                postLayer(frame.id, "layer-select", check.path);
+                onInspect?.();
+              }}
+              onMouseEnter={() =>
+                postLayer(frame.id, "layer-hover", check.path)
+              }
+              onMouseLeave={() => postLayer(frame.id, "layer-hover", null)}
+            >
+              <span className="font-medium">
+                {check.severity === "error" ? "Error" : "Warning"} ·{" "}
+                {check.path}
+              </span>
+              <span>{check.message}</span>
+              {check.overflow && (
+                <>
+                  <code className="break-all text-[10px]">
+                    {check.overflow.element.selector}
+                  </code>
+                  <span className="text-muted-foreground">
+                    {check.overflow.element.text}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {Math.round(check.overflow.actual)}px text,{" "}
+                    {Math.round(check.overflow.available)}px visible
+                  </span>
+                </>
+              )}
+            </Button>
+          ))}
+        </div>
+      )}
       {(message || failure) && (
         <p role="alert" className="p-2 text-xs text-destructive">
           {message || failure}

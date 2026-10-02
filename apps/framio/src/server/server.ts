@@ -9,6 +9,9 @@ import { gzipSync } from "node:zlib";
 import { frameViewports, viewports, viewportId } from "../domain/viewports";
 import { makeScreenshotHandler } from "../services/screenshot-request";
 import { makeComments } from "../services/comments";
+import { makeEvidence } from "../services/evidence";
+import { makeCaptureEvidence } from "../services/capture-evidence";
+import { emptyEvidence } from "../contracts/evidence";
 import { publishIfUnchanged } from "../platform/atomic-file";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Semaphore from "effect/Semaphore";
@@ -228,6 +231,7 @@ export const runServer = Effect.fn("Server.start")(function* (
   );
 
   const layers = yield* makeLayersApi(p.framio, project, shots);
+  const recordCaptures = yield* makeCaptureEvidence(p, project);
   const screenshot = yield* makeScreenshotHandler(
     root,
     p,
@@ -235,7 +239,37 @@ export const runServer = Effect.fn("Server.start")(function* (
     shots,
     fs,
     layers.warnings,
+    recordCaptures,
   );
+  const evidenceFile = join(p.framio, "evidence.json");
+  const evidence = yield* makeEvidence({
+    read: fs
+      .readFileString(evidenceFile)
+      .pipe(
+        Effect.catchReason("PlatformError", "NotFound", () =>
+          Effect.succeed(null),
+        ),
+      ),
+    captures: project.get.pipe(Effect.map((state) => state.captures ?? [])),
+    frames: project.get.pipe(
+      Effect.map((state) =>
+        state.pages.flatMap((page) => page.frames.map((frame) => frame.id)),
+      ),
+    ),
+    commit: (previous, next) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const temporary = `${evidenceFile}.${randomUUID()}.tmp`;
+          yield* Effect.addFinalizer(() =>
+            fs
+              .remove(temporary, { force: true })
+              .pipe(Effect.catch((error) => Effect.logWarning(error.message))),
+          );
+          yield* fs.writeFileString(temporary, next);
+          return yield* publishIfUnchanged(evidenceFile, temporary, previous);
+        }),
+      ),
+  });
   const commentsFile = join(p.framio, "comments.json");
   const comments = yield* makeComments({
     read: fs
@@ -378,6 +412,31 @@ export const runServer = Effect.fn("Server.start")(function* (
         }),
       snapshot: () =>
         project.get.pipe(Effect.map((state) => projectSnapshot(root, state))),
+      evidence: () =>
+        project
+          .withStableState((state) =>
+            Effect.succeed({
+              evidence: state.evidence ?? emptyEvidence,
+              revision: state.evidenceRevision ?? null,
+              contextRevision: state.evidenceContextRevision ?? "",
+              captures: state.captures ?? [],
+              error: state.evidenceError ?? null,
+            }),
+          )
+          .pipe(Effect.orDie),
+      writeEvidence: ({ payload }) =>
+        project
+          .withEvidenceWrite(
+            evidence
+              .write(payload)
+              .pipe(Effect.andThen(project.notify("evidence.json"))),
+          )
+          .pipe(
+            Effect.as({ ok: true }),
+            Effect.catch((error) =>
+              Effect.succeed({ ok: false, error: error.message }),
+            ),
+          ),
       comments: ({ payload }) =>
         comments.apply(payload).pipe(
           Effect.andThen(project.notify("comments.json")),

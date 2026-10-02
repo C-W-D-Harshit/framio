@@ -12,6 +12,14 @@ Personality belongs where it helps; do not force opinions or first-person phrasi
 and system messages. Do not invent product capabilities, testimonials, or claims to make copy
 sound specific. Review the copy again in the rendered frame for clarity and fit.
 
+Before writing claims, use the brief's facts and sources in `.framio/evidence.json`.
+Put unconfirmed positioning or proposed capabilities in `brief.assumptions`. Synthetic names,
+amounts, dates, and statuses are useful inside a static product demonstration, with a note
+that the scenario is demo data. Keep related records consistent across views. Demo data does
+not justify a customer count, measured improvement, named endorsement, price, certification,
+or offer in marketing copy. Omit unavailable proof rather than filling a template's proof slot.
+Recheck imported headings, badges, metrics, testimonials, pricing, and FAQs against the facts.
+
 Edit text to remove AI patterns and add human voice.
 
 ## Process

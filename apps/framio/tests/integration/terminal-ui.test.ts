@@ -143,10 +143,20 @@ test("registry commands suppress successful upstream logs and retain failure det
   const bin = join(root, "bin");
   mkdirSync(bin);
   const npx = join(bin, "npx");
-  // Drain Framio's prompt answers before exiting so Linux does not write to a closed pipe.
   writeFileSync(
     npx,
-    '#!/bin/sh\ncat >/dev/null\nprintf "upstream registry output\\n"\nexit "${FRAMIO_FIXTURE_EXIT:-0}"\n',
+    `#!/usr/bin/env node
+const { createHash } = require("node:crypto");
+const { existsSync, readFileSync, writeFileSync } = require("node:fs");
+const request = JSON.parse(process.argv.at(-1));
+console.log("upstream registry output");
+if (process.env.FRAMIO_FIXTURE_EXIT === "1") process.exit(1);
+const path = "button.tsx";
+const before = existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
+writeFileSync(path, "export const Button = () => null;\\n");
+const after = createHash("sha256").update(readFileSync(path)).digest("hex");
+writeFileSync(request.receipt, JSON.stringify({ completed: true, error: null, files: [{ path, before, after, issue: null, preserve: true }] }));
+`,
   );
   chmodSync(npx, 0o755);
   const env = { PATH: `${bin}:${process.env.PATH}` };
@@ -156,7 +166,9 @@ test("registry commands suppress successful upstream logs and retain failure det
     env,
   );
   expect(success.code).toBe(0);
-  expect(success.stdout).toContain("Components ready");
+  expect(success.stdout).toContain(
+    "Components: 1 installed, 0 skipped, 0 failed.",
+  );
   expect(success.output).not.toContain("upstream registry output");
   const verbose = await run(
     root,

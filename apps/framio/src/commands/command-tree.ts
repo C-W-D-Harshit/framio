@@ -5,6 +5,8 @@ import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import { Argument, Command, Flag } from "effect/cli";
 import { add } from "./add";
+import { evidence } from "./evidence";
+import { referencesCommand } from "./references";
 import { init } from "./init";
 import { install } from "./install";
 import { screenshot } from "./screenshot";
@@ -41,6 +43,7 @@ const makeRoot = () =>
   Command.make("framio", startFlags, start).pipe(
     Command.withDescription("A design canvas for coding agents"),
     Command.withSubcommands([
+      referencesCommand,
       Command.make("start", startFlags, start).pipe(
         Command.withDescription("Open the canvas and watch your designs"),
       ),
@@ -101,6 +104,26 @@ const makeRoot = () =>
         },
         ({ items, overwrite, verbose }) => add(items, overwrite, verbose),
       ).pipe(Command.withDescription("Add components from a shadcn registry")),
+      Command.make(
+        "evidence",
+        {
+          write: Flag.String("write").pipe(
+            Flag.optional,
+            Flag.withDescription("Save a validated evidence JSON document"),
+          ),
+          expect: Flag.String("expect").pipe(
+            Flag.optional,
+            Flag.withDescription(
+              "Revision from framio evidence, or new for a missing file",
+            ),
+          ),
+        },
+        evidence,
+      ).pipe(
+        Command.withDescription(
+          "Read or update the design brief, direction and screenshot reviews",
+        ),
+      ),
       Command.make(
         "inspect",
         {

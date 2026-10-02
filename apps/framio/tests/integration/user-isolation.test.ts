@@ -6,9 +6,6 @@ import baseline from "../fixtures/effect-v4-baseline.json";
 
 test("scaffold changes are limited to registry configuration, layer examples and agent guidance, with no Effect imports", () => {
   const layerUpdates = new Set([
-    "src/scaffold/skill/SKILL.md",
-    "src/scaffold/skill/references/process.md",
-    "src/scaffold/skill/references/skills.md",
     "src/scaffold/pages/00-example/sign-in.tsx",
     "src/scaffold/pages/00-example/sign-in--split.tsx",
   ]);
@@ -28,7 +25,7 @@ test("scaffold changes are limited to registry configuration, layer examples and
       ).toBe(hash);
       continue;
     }
-    if (file === "src/scaffold/skill/references/libraries.md") {
+    if (file.startsWith("src/scaffold/skill/")) {
       expect(
         readFileSync(resolve(import.meta.dir, "../..", file), "utf8"),
       ).not.toMatch(/from ["'](?:effect|@effect\/)/);
@@ -40,10 +37,7 @@ test("scaffold changes are limited to registry configuration, layer examples and
         "utf8",
       );
       expect(content).not.toMatch(/from ["'](?:effect|@effect\/)/);
-      if (!file.endsWith("skills.md"))
-        expect(content).toContain(
-          file.includes("process.md") ? "framio inspect" : "data-layer",
-        );
+      expect(content).toContain("data-layer");
       continue;
     }
     expect(

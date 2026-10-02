@@ -41,12 +41,24 @@ export function reconcileSnapshot(
   const comments = same(previous.comments, next.comments)
     ? previous.comments
     : next.comments;
+  const evidence = same(previous.evidence, next.evidence)
+    ? previous.evidence
+    : next.evidence;
+  const captures = same(previous.captures, next.captures)
+    ? previous.captures
+    : next.captures;
+  const metadata = (snapshot: Snapshot) => ({
+    ...snapshot,
+    pages: undefined,
+    comments: undefined,
+    evidence: undefined,
+    captures: undefined,
+  });
   return pages === previous.pages &&
     comments === previous.comments &&
-    previous.cssVersion === next.cssVersion &&
-    previous.cssError === next.cssError &&
-    previous.commentsError === next.commentsError &&
-    previous.projectName === next.projectName
+    evidence === previous.evidence &&
+    captures === previous.captures &&
+    same(metadata(previous), metadata(next))
     ? previous
-    : { ...next, pages, comments };
+    : { ...next, pages, comments, evidence, captures };
 }

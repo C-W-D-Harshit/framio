@@ -15,6 +15,7 @@ import { Effect } from "effect";
 import { BunFileSystem } from "@effect/platform-bun";
 import { ensureBrowser as ensureBrowserEffect } from "../../src/lib/browser";
 import { imageSize } from "../../src/server/image-size";
+import type { CaptureEvidence } from "../../src/contracts/evidence";
 
 test("actual React and image captures preserve dimensions and clean temporary servers", async () => {
   const root = mkdtempSync(join(tmpdir(), "framio-capture-"));
@@ -32,6 +33,10 @@ test("actual React and image captures preserve dimensions and clean temporary se
   writeFileSync(
     join(dir, "reference.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844"><rect width="390" height="844" fill="#669933"/></svg>',
+  );
+  writeFileSync(
+    join(dir, "responsive.tsx"),
+    'export const meta={name:"Responsive",widths:[390,780],height:200};export default function Frame(){return <section data-layer="Responsive" style={{height:200,background:"#336699"}}>Responsive capture</section>}',
   );
   await ensureBrowser();
   mkdirSync(join(root, "home/.framio"), { recursive: true });
@@ -63,6 +68,16 @@ test("actual React and image captures preserve dimensions and clean temporary se
       "--scale=2",
     ]);
     expect(result.code).toBe(0);
+    expect(result.output).toContain(
+      "Capture 01-test/overflow at 390px: generation",
+    );
+    expect(result.output).toMatch(/revision [a-f0-9]{24}/);
+    expect(result.output).toMatch(
+      /screenshots\/history\/[a-f0-9-]+\.png.*capture [a-f0-9-]+/,
+    );
+    expect(result.output).toContain(
+      "Latest: .framio/.state/screenshots/01-test/overflow.png",
+    );
     expect(
       imageSize(
         new Uint8Array(
@@ -85,6 +100,49 @@ test("actual React and image captures preserve dimensions and clean temporary se
     ).toEqual({ width: 780, height: 1688 });
     expect(existsSync(join(root, ".framio/.state/server.json"))).toBe(false);
     expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(false);
+
+    const responsive = await run([
+      "screenshot",
+      "01-test/responsive",
+      "--scale=2",
+    ]);
+    expect(responsive.code).toBe(0);
+    expect(responsive.output).toContain(
+      "Capture 01-test/responsive at 390px: generation",
+    );
+    expect(responsive.output).toContain(
+      "Capture 01-test/responsive at 780px: generation",
+    );
+    expect(responsive.output).toContain("responsive@390.png");
+    expect(responsive.output).toContain("responsive@780.png");
+    const captures = JSON.parse(
+      readFileSync(join(root, ".framio/.state/captures.json"), "utf8"),
+    ) as CaptureEvidence[];
+    const fullCaptures = captures.filter(
+      (capture) => capture.frame === "01-test/responsive" && !capture.layer,
+    );
+    expect(
+      fullCaptures
+        .map((capture) => capture.viewportWidth)
+        .sort((a, b) => a - b),
+    ).toEqual([390, 780]);
+    expect(new Set(fullCaptures.map((capture) => capture.revision)).size).toBe(
+      1,
+    );
+    expect(
+      fullCaptures.every(
+        (capture) =>
+          capture.generation !== undefined &&
+          capture.contextRevision.length > 0,
+      ),
+    ).toBe(true);
+    for (const capture of fullCaptures)
+      expect(
+        imageSize(
+          readFileSync(join(root, ".framio/.state/screenshots", capture.path)),
+          "png",
+        ),
+      ).toEqual({ width: capture.viewportWidth * 2, height: 400 });
 
     writeFileSync(
       join(dir, "broken.tsx"),

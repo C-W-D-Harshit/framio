@@ -10,6 +10,31 @@ export const Box = Schema.Struct({
   width: Schema.Finite,
   height: Schema.Finite,
 });
+export const TextOverflow = Schema.Struct({
+  kind: Schema.Literals([
+    "ellipsis",
+    "line-clamp",
+    "scroll",
+    "clipping",
+    "overflow",
+  ]),
+  axis: Schema.Literals(["horizontal", "vertical"]),
+  element: Schema.Struct({
+    selector: Schema.String,
+    tag: Schema.String,
+    text: Schema.String,
+    box: Box,
+  }),
+  container: Schema.Struct({
+    selector: Schema.String,
+    box: Box,
+  }),
+  textBounds: Box,
+  actual: Schema.Finite,
+  available: Schema.Finite,
+  excess: Schema.Finite,
+});
+export type TextOverflow = typeof TextOverflow.Type;
 export const LayerWarning = Schema.Struct({
   path: Schema.String,
   message: Schema.String,
@@ -36,6 +61,7 @@ export const LayerCheck = Schema.Struct({
   severity: Schema.Literals(["warning", "error"]),
   path: Schema.String,
   message: Schema.String,
+  overflow: Schema.optional(TextOverflow),
 });
 export const LayerReport = Schema.Struct({
   tree: Schema.Array(LayerNode),

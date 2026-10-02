@@ -40,11 +40,18 @@ export const ScreenshotRequest = Schema.Struct({
   width: Schema.optional(ViewportDimension),
   height: Schema.optional(ViewportDimension),
   url: Schema.optional(Schema.String),
+  viewportOnly: Schema.optional(Schema.Boolean),
   compare: Schema.optional(Schema.String),
   into: Schema.optional(Schema.String),
 });
 export const ScreenshotResult = Schema.Struct({
   frame: Schema.String,
+  generation: Schema.optional(Schema.Int),
+  revision: Schema.optional(Schema.String),
+  contextRevision: Schema.optional(Schema.String),
+  captureId: Schema.optional(Schema.String),
+  archivePath: Schema.optional(Schema.String),
+  viewportWidth: Schema.optional(ViewportDimension),
   report: Schema.optional(LayerReport),
   crops: Schema.optional(
     Schema.Array(
@@ -54,6 +61,9 @@ export const ScreenshotResult = Schema.Struct({
         width: Schema.Finite,
         height: Schema.Finite,
         scale: Schema.Finite,
+        captureId: Schema.optional(Schema.String),
+        archivePath: Schema.optional(Schema.String),
+        viewportWidth: Schema.optional(ViewportDimension),
       }),
     ),
   ),

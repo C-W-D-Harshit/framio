@@ -18,6 +18,7 @@ import { ProjectState, projectSnapshot } from "./project-state";
 import { Screenshots } from "./screenshots";
 import { layoutViewports } from "../ui/layout";
 import { findFrame } from "../server/project";
+import { frameRevision } from "./frame-revision";
 
 export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
   function* (
@@ -29,6 +30,9 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
     reportWarnings: (
       reports: readonly LayerObservation[],
     ) => Effect.Effect<unknown> = () => Effect.void,
+    recordCaptures: (
+      response: typeof ScreenshotResponse.Type,
+    ) => Effect.Effect<typeof ScreenshotResponse.Type> = Effect.succeed,
   ) {
     const serial = yield* Semaphore.make(1);
     return Effect.fn("Server.screenshot")(function* (
@@ -47,6 +51,11 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
       const reports: LayerObservation[] = [];
       const result = yield* project.withGeneration((state, generation) =>
         Effect.gen(function* () {
+          const canonicalFrames = new Map(
+            state.pages.flatMap((page) =>
+              page.frames.map((frame) => [frame.id, frame] as const),
+            ),
+          );
           const capture = (
             frame: Frame,
             scale = 1,
@@ -79,11 +88,29 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                   frame: frame.id,
                   file: frame.relFile,
                   ...shot,
+                  generation: state.generation,
+                  revision: frameRevision(
+                    state,
+                    canonicalFrames.get(frame.id) ?? frame,
+                  ),
+                  contextRevision: state.evidenceContextRevision,
+                  viewportWidth: frame.meta.width,
+                  crops: shot.crops?.map((crop) => ({
+                    ...crop,
+                    viewportWidth: frame.meta.width,
+                  })),
                 })),
                 Effect.catch((error) =>
                   Effect.succeed({
                     frame: frame.id,
                     file: frame.relFile,
+                    generation: state.generation,
+                    revision: frameRevision(
+                      state,
+                      canonicalFrames.get(frame.id) ?? frame,
+                    ),
+                    contextRevision: state.evidenceContextRevision,
+                    viewportWidth: frame.meta.width,
                     error: `Screenshot failed: ${error.message}`,
                   }),
                 ),
@@ -111,7 +138,14 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
             }
             const out = join(p.screenshots, "urls", `${slug}.png`);
             const implementation = yield* shots
-              .captureUrl(body.url, out, width, height, scale)
+              .captureUrl(
+                body.url,
+                out,
+                width,
+                height,
+                scale,
+                body.viewportOnly,
+              )
               .pipe(Effect.result);
             if (implementation._tag === "Failure")
               return {
@@ -120,7 +154,12 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                 ],
               };
             const results: (typeof ScreenshotResult.Type)[] = [
-              { frame: body.url, ...implementation.success },
+              {
+                frame: body.url,
+                ...implementation.success,
+                contextRevision: state.evidenceContextRevision,
+                viewportWidth: width,
+              },
             ];
             if (design) {
               const shot = yield* capture(design, scale);
@@ -144,6 +183,8 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                     ? {
                         frame: `${design.id} vs ${body.url}`,
                         ...compared.success,
+                        contextRevision: state.evidenceContextRevision,
+                        viewportWidth: width,
                       }
                     : { frame: "comparison", error: compared.failure.message },
                 );
@@ -178,6 +219,8 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                   frame: `${page?.id ?? body.into}/${file.slice(dir.length + 1)}`,
                   path: file,
                   width,
+                  viewportWidth: width,
+                  contextRevision: state.evidenceContextRevision,
                   height: implementation.success.height,
                 };
               }).pipe(Effect.result);
@@ -310,6 +353,21 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                     frame: page.id,
                     file: `.framio/pages/${page.id}`,
                     ...overview.success,
+                    generation: state.generation,
+                    contextRevision: state.evidenceContextRevision,
+                    revision: createHash("sha256")
+                      .update(
+                        JSON.stringify({
+                          captures: captures.map((shot) => ({
+                            frame: shot.frame,
+                            viewportWidth: shot.viewportWidth,
+                            revision: shot.revision,
+                          })),
+                          layout,
+                          scale: body.scale ?? 1,
+                        }),
+                      )
+                      .digest("hex"),
                   }
                 : { frame: page.id, error: overview.failure.message },
               ...captures.filter((shot) => shot.error),
@@ -318,7 +376,7 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
         }),
       );
       yield* reportWarnings(reports);
-      return result;
+      return yield* recordCaptures(result);
     }, serial.withPermit);
   },
 );

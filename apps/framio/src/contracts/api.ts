@@ -21,6 +21,11 @@ import {
   SelectionRequest,
 } from "./requests";
 import { FrameStatus } from "./frame-status";
+import {
+  EvidenceResponse,
+  EvidenceUpdate,
+  EvidenceWriteResponse,
+} from "./evidence";
 export const Ok = Schema.Struct({ ok: Schema.Literal(true) });
 export const Health = Schema.Struct({
   ok: Schema.Literal(true),
@@ -45,6 +50,13 @@ export class ProjectApi extends HttpApiGroup.make("project").add(
   }),
   HttpApiEndpoint.get("health", "/api/health", { success: Health }),
   HttpApiEndpoint.get("snapshot", "/api/project", { success: Snapshot }),
+  HttpApiEndpoint.get("evidence", "/api/evidence", {
+    success: EvidenceResponse,
+  }),
+  HttpApiEndpoint.post("writeEvidence", "/api/evidence", {
+    payload: EvidenceUpdate,
+    success: EvidenceWriteResponse,
+  }),
   HttpApiEndpoint.post("comments", "/api/comments", {
     payload: CommentOperation,
     success: CommentResponse,

@@ -1,4 +1,4 @@
-import type { LayerNode, LayerReport } from "../contracts/layers";
+import type { LayerNode, LayerReport, TextOverflow } from "../contracts/layers";
 import { buildLayerTree, inspectLayers, resolveLayer } from "../domain/layers";
 function rendered(el: Element) {
   const style = getComputedStyle(el);
@@ -27,6 +27,25 @@ export function measureLayers(width = window.innerWidth): LayerReport {
       width: r.width,
       height: r.height,
     };
+  };
+  const selector = (element: Element) => {
+    if (element === root) return "#root";
+    if (element.id) {
+      const id = `#${CSS.escape(element.id)}`;
+      if (document.querySelectorAll(id).length === 1) return `#root ${id}`;
+    }
+    const parts: string[] = [];
+    for (
+      let current: Element | null = element;
+      current && current !== root;
+      current = current.parentElement
+    ) {
+      const index = current.parentElement
+        ? [...current.parentElement.children].indexOf(current) + 1
+        : 1;
+      parts.unshift(`${current.tagName.toLowerCase()}:nth-child(${index})`);
+    }
+    return `#root > ${parts.join(" > ")}`;
   };
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1;
@@ -113,7 +132,7 @@ export function measureLayers(width = window.innerWidth): LayerReport {
       fontWeight: string;
     }[] = [];
     const targets: LayerNode["box"][] = [];
-    let textOverflow = false;
+    const textOverflows: TextOverflow[] = [];
     for (const descendant of owned.get(el) ?? []) {
       const css = getComputedStyle(descendant);
       if (
@@ -140,31 +159,116 @@ export function measureLayers(width = window.innerWidth): LayerReport {
         fontWeight: css.fontWeight,
       });
       const range = document.createRange();
+      const rects: DOMRect[] = [];
       for (const textNode of textNodes) {
         range.selectNodeContents(textNode);
-        for (const rect of range.getClientRects()) {
-          for (
-            let ancestor: Element | null = descendant;
-            ancestor && root.contains(ancestor);
-            ancestor = ancestor.parentElement
-          ) {
-            const a = ancestor.getBoundingClientRect(),
-              overflow = getComputedStyle(ancestor);
-            if (
-              (/hidden|clip/.test(overflow.overflowX) &&
-                (rect.left < a.left - 1 || rect.right > a.right + 1)) ||
-              (/hidden|clip/.test(overflow.overflowY) &&
-                (rect.top < a.top - 1 || rect.bottom > a.bottom + 1))
-            )
-              textOverflow = true;
+        rects.push(...range.getClientRects());
+      }
+      if (!rects.length) continue;
+      const left = Math.min(...rects.map((rect) => rect.left)),
+        top = Math.min(...rects.map((rect) => rect.top)),
+        right = Math.max(...rects.map((rect) => rect.right)),
+        bottom = Math.max(...rects.map((rect) => rect.bottom));
+      const rawBounds = { left, top, right, bottom };
+      const visibleBounds = { ...rawBounds };
+      const element = {
+        selector: selector(descendant),
+        tag: descendant.tagName.toLowerCase(),
+        text: textNodes
+          .map((node) => node.textContent)
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 160),
+        box: box(descendant),
+      };
+      const clippedAxes = new Set<string>();
+      const measure = (
+        ancestor: Element,
+        axis: TextOverflow["axis"],
+        kind: TextOverflow["kind"],
+        text = visibleBounds,
+      ) => {
+        const bounds = ancestor.getBoundingClientRect();
+        if (text.right <= text.left || text.bottom <= text.top) return;
+        const start = axis === "horizontal" ? text.left : text.top,
+          end = axis === "horizontal" ? text.right : text.bottom,
+          clipStart = axis === "horizontal" ? bounds.left : bounds.top,
+          clipEnd = axis === "horizontal" ? bounds.right : bounds.bottom;
+        if (start >= clipStart - 1 && end <= clipEnd + 1) return;
+        const actual = end - start;
+        const available = Math.max(
+          0,
+          Math.min(end, clipEnd) - Math.max(start, clipStart),
+        );
+        textOverflows.push({
+          kind,
+          axis,
+          element,
+          container: { selector: selector(ancestor), box: box(ancestor) },
+          textBounds: {
+            x: text.left - origin.left,
+            y: text.top - origin.top,
+            width: text.right - text.left,
+            height: text.bottom - text.top,
+          },
+          actual,
+          available,
+          excess: actual - available,
+        });
+        if (ancestor === descendant) clippedAxes.add(axis);
+      };
+      let inlineContent = true;
+      for (
+        let ancestor: Element | null = descendant;
+        ancestor && root.contains(ancestor);
+        ancestor = ancestor.parentElement
+      ) {
+        const overflow = getComputedStyle(ancestor);
+        for (const axis of ["horizontal", "vertical"] as const) {
+          const value =
+            axis === "horizontal" ? overflow.overflowX : overflow.overflowY;
+          if (!/^(hidden|clip|auto|scroll)$/.test(value)) continue;
+          const ellipsis =
+            axis === "horizontal" &&
+            inlineContent &&
+            overflow.textOverflow === "ellipsis" &&
+            /^(nowrap|pre)$/.test(overflow.whiteSpace);
+          const lineClamp =
+            axis === "vertical" &&
+            Number.parseInt(overflow.webkitLineClamp, 10) > 0;
+          measure(
+            ancestor,
+            axis,
+            /^(auto|scroll)$/.test(value)
+              ? "scroll"
+              : ellipsis
+                ? "ellipsis"
+                : lineClamp
+                  ? "line-clamp"
+                  : "clipping",
+          );
+          const bounds = ancestor.getBoundingClientRect();
+          if (axis === "horizontal") {
+            visibleBounds.left = Math.max(visibleBounds.left, bounds.left);
+            visibleBounds.right = Math.min(visibleBounds.right, bounds.right);
+          } else {
+            visibleBounds.top = Math.max(visibleBounds.top, bounds.top);
+            visibleBounds.bottom = Math.min(
+              visibleBounds.bottom,
+              bounds.bottom,
+            );
           }
         }
+        inlineContent &&=
+          overflow.display === "inline" || overflow.display === "contents";
       }
       if (
+        css.display !== "inline" &&
         descendant.scrollWidth > descendant.clientWidth + 1 &&
-        css.display !== "inline"
+        !clippedAxes.has("horizontal")
       )
-        textOverflow = true;
+        measure(descendant, "horizontal", "overflow", rawBounds);
     }
     return {
       name: el.dataset.layer ?? "",
@@ -172,7 +276,8 @@ export function measureLayers(width = window.innerWidth): LayerReport {
       box: box(el),
       styles,
       source: el.dataset.framioLayerSource,
-      textOverflow,
+      textOverflow: textOverflows.length > 0,
+      textOverflows,
       textSamples,
       targets,
       interactive: el.matches(
