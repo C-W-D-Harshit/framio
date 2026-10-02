@@ -6,6 +6,7 @@ param(
     [switch]$NoPath
 )
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 if ($env:OS -ne 'Windows_NT') { throw 'Use install.sh on macOS or Linux.' }
 if ([Environment]::OSVersion.Version -lt [Version]'10.0.17763') {
     throw 'Framio requires Windows 10 version 1809 or later.'
@@ -42,7 +43,13 @@ try {
     $checksumLines = @($checksums -split "`n" | Where-Object { $_.TrimEnd("`r") -match ('^[a-fA-F0-9]{64}  ' + [regex]::Escape($asset) + '$') })
     if ($checksumLines.Count -ne 1) { throw 'Release checksum is missing or malformed.' }
     $expected = $checksumLines[0].Substring(0, 64)
-    if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) { throw 'Archive checksum does not match the release.' }
+    $stream = [IO.File]::OpenRead($archive)
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try { $digest = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '') } finally {
+        $stream.Dispose()
+        $sha256.Dispose()
+    }
+    if ($digest -ne $expected) { throw 'Archive checksum does not match the release.' }
     $entries = @(& tar.exe -tzf $archive)
     if ($LASTEXITCODE -ne 0 -or $entries.Count -ne 1 -or $entries[0] -cne $executable) {
         throw 'Archive must contain only the expected executable.'
