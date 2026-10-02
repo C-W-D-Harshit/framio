@@ -36,7 +36,9 @@ try {
     Write-Output "Framio installer: Windows x64, $Version"
     $archive = Join-Path $temporary $asset
     Invoke-WebRequest -UseBasicParsing "$baseUrl/$asset" -OutFile $archive
-    $checksums = (Invoke-WebRequest -UseBasicParsing "$baseUrl/SHA256SUMS").Content
+    $checksumFile = Join-Path $temporary 'SHA256SUMS'
+    Invoke-WebRequest -UseBasicParsing "$baseUrl/SHA256SUMS" -OutFile $checksumFile
+    $checksums = Get-Content -Raw $checksumFile
     $checksumLines = @($checksums -split "`n" | Where-Object { $_.TrimEnd("`r") -match ('^[a-fA-F0-9]{64}  ' + [regex]::Escape($asset) + '$') })
     if ($checksumLines.Count -ne 1) { throw 'Release checksum is missing or malformed.' }
     $expected = $checksumLines[0].Substring(0, 64)
