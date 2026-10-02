@@ -368,6 +368,16 @@ test("comments round trip UI and agent edits, pins follow layout, viewport group
                 .frames()
                 .find((f) => f.url().includes("width=390"))!;
               const clickHeading = async (offset = 20) => {
+                await page.waitForFunction(() => {
+                  const iframe = document.querySelector<HTMLIFrameElement>(
+                    'iframe[data-frame="__viewport__/01-test/invoices/390"]',
+                  );
+                  return (
+                    !document.documentElement.classList.contains(
+                      "is-navigating",
+                    ) && iframe?.contentWindow?.__framio?.ready
+                  );
+                });
                 // Panel resizing and finder navigation animate the viewport. Click only
                 // after its geometry settles, so this reaches the intended element.
                 await page.evaluate(

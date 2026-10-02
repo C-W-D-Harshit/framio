@@ -1,3 +1,6 @@
+import { geometryFingerprint } from "./frame-geometry";
+import { registerFrame } from "./frame-bridge";
+import { PreviewImage } from "./preview-image";
 import {
   Monitor,
   Smartphone,
@@ -8,28 +11,24 @@ import {
 import { useLayerReport } from "./layers-panel";
 import { CommentPins } from "./comments";
 import type { Comment } from "../contracts/comments";
-import {
-  Handle,
-  Position,
-  useStore,
-  type Node,
-  type NodeProps,
-} from "@xyflow/react";
+import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type SyntheticEvent,
 } from "react";
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { Atom, AsyncResult } from "effect/reactivity";
 import { FrameMessage } from "../contracts/frame-message";
-import { heightsAtom } from "./state";
+import { previewAtom, readyVersionAtom } from "./state";
+import { BOOT_TIMEOUT_MS } from "./preview-policy";
 import type { SnapshotFrame } from "../contracts/snapshot";
 
 export type FrameNodeData = {
@@ -40,15 +39,8 @@ export type FrameNodeData = {
   onComment(id: string): void;
   height: number;
   cssVersion: number;
-  /** Large pages swap live iframes for server-rendered thumbnails when zoomed out. */
-  useThumbs: boolean;
 };
 export type FrameNodeType = Node<FrameNodeData, "frame">;
-
-/** Below this zoom, frames on large pages render as thumbnails instead of live iframes. */
-const LIVE_ZOOM = 0.25;
-/** Must match the deviceScaleFactor the server renders thumbnails at. */
-const THUMB_SCALE = 0.5;
 
 const enc = encodeURIComponent;
 const canonical = (f: SnapshotFrame) => f.frameId ?? f.id;
@@ -61,8 +53,8 @@ export const standaloneUrl = (f: SnapshotFrame) =>
   f.kind === "image"
     ? imageUrl(f)
     : `/f/${enc(f.page)}/${enc(f.slug)}?width=${f.meta.width}&height=${f.meta.height}`;
-const thumbUrl = (f: SnapshotFrame, css: number) =>
-  `/thumb/${enc(f.page)}/${enc(f.slug)}.png?v=${f.version}-${css}&width=${f.meta.width}`;
+export const thumbUrl = (f: SnapshotFrame, css: number, scale = 0.5) =>
+  `/thumb/${enc(f.page)}/${enc(f.slug)}.png?v=${f.version}-${css}&width=${f.meta.width}&scale=${scale}`;
 
 function enableFrameInput(event: SyntheticEvent<HTMLIFrameElement>) {
   // Until the runtime is installed, input must hit the canvas below.
@@ -73,43 +65,53 @@ function enableFrameInput(event: SyntheticEvent<HTMLIFrameElement>) {
 export const FrameNode = memo(function FrameNode({
   data,
   selected,
-  positionAbsoluteX,
-  positionAbsoluteY,
 }: NodeProps<FrameNodeType>) {
-  const { frame, height, cssVersion, useThumbs } = data;
+  const { frame, height, cssVersion } = data;
   const layers = useLayerReport(frame.id);
   const { width } = frame.meta;
-  const setHeights = useAtomSet(heightsAtom(frame.page));
-  const zoom = useStore((s) => s.transform[2]);
-  // Only frames near the viewport mount an iframe; off-screen frames cost nothing.
-  const visible = useStore((s) => {
-    const [tx, ty, z] = s.transform;
-    const left = positionAbsoluteX * z + tx;
-    const top = positionAbsoluteY * z + ty;
-    const mx = s.width * 0.5;
-    const my = s.height * 0.5;
-    return (
-      left < s.width + mx &&
-      left + width * z > -mx &&
-      top < s.height + my &&
-      top + height * z > -my
-    );
-  });
+  const mode = useAtomValue(previewAtom(frame.id));
+  const readyVersion = useAtomValue(readyVersionAtom(frame.id));
+  const { visible, scale } = mode;
   const isImage = frame.kind === "image";
-  const hasPins = data.comments.some(
-    (c) =>
-      c.frame === (frame.frameId ?? frame.id) &&
-      (data.showResolved || c.status === "open"),
+  const live = !isImage && mode.live;
+  const geometryKey = geometryFingerprint(frame, frame.meta.width, cssVersion);
+  const onHeight = useCallback(
+    (height: number) =>
+      window.dispatchEvent(
+        new CustomEvent("framio:height", {
+          detail: { id: frame.id, height, key: geometryKey },
+        }),
+      ),
+    [frame.id, geometryKey],
   );
-  const live =
-    !isImage &&
-    (visible || selected) &&
-    (selected || !useThumbs || zoom >= LIVE_ZOOM || hasPins);
 
   // Double-buffered reloads: the new version loads hidden and replaces the old one once rendered.
   const [shown, setShown] = useState(frame.version);
-  const pending = frame.version !== shown ? frame.version : null;
+  const pending = frame.version !== shown && mode.reload ? frame.version : null;
   const pendingRef = useRef<HTMLIFrameElement>(null);
+  const loadingVersion = pending ?? shown;
+  const bootTimeoutAtom = useMemo(
+    () =>
+      Atom.make(
+        Effect.gen(function* () {
+          if (!live) return;
+          yield* Effect.sleep(BOOT_TIMEOUT_MS);
+          yield* Effect.sync(() =>
+            window.dispatchEvent(
+              new CustomEvent("framio:frame-state", {
+                detail: {
+                  id: frame.id,
+                  version: loadingVersion,
+                  phase: "expired",
+                },
+              }),
+            ),
+          );
+        }),
+      ),
+    [live, frame.id, loadingVersion],
+  );
+  useAtomValue(bootTimeoutAtom);
   const switchAtom = useMemo(
     () =>
       Atom.make(
@@ -148,6 +150,31 @@ export const FrameNode = memo(function FrameNode({
       setShown(switchResult.value);
   }, [switchResult]);
 
+  useEffect(() => {
+    if (!live) setShown(frame.version);
+    else
+      window.dispatchEvent(
+        new CustomEvent("framio:frame-state", {
+          detail: {
+            id: frame.id,
+            version: shown,
+            phase: "shown",
+          },
+        }),
+      );
+  }, [live, shown, frame.id, frame.version]);
+  useEffect(() => {
+    if (live)
+      window.dispatchEvent(
+        new CustomEvent("framio:frame-state", {
+          detail: {
+            id: frame.id,
+            version: pending ?? shown,
+            phase: "loading",
+          },
+        }),
+      );
+  }, [live, pending, shown, frame.id]);
   const versions = pending === null ? [shown] : [shown, pending];
 
   return (
@@ -155,22 +182,28 @@ export const FrameNode = memo(function FrameNode({
       {frame.meta.widths && width === Math.max(...frame.meta.widths) && (
         <div
           className="frame-drag absolute bottom-full left-0 flex max-w-full items-center gap-2 whitespace-nowrap"
-          style={{ fontSize: 12 / zoom, paddingBottom: 42 / zoom }}
+          style={{
+            fontSize: "calc(12px / var(--zoom, 1))",
+            paddingBottom: "calc(42px / var(--zoom, 1))",
+          }}
         >
           <Frame
             className="shrink-0 text-signal"
-            style={{ width: 14 / zoom, height: 14 / zoom }}
+            style={{
+              width: "calc(14px / var(--zoom, 1))",
+              height: "calc(14px / var(--zoom, 1))",
+            }}
           />
           <span className="font-medium">{frame.meta.name}</span>
           <span
             className="font-mono text-muted-foreground"
-            style={{ fontSize: 11 / zoom }}
+            style={{ fontSize: "calc(11px / var(--zoom, 1))" }}
           >
             · {frame.relFile.split("/").pop()}
           </span>
           <span
             className="rounded-sm border px-[.5em] py-[.2em] text-muted-foreground"
-            style={{ fontSize: 11 / zoom }}
+            style={{ fontSize: "calc(11px / var(--zoom, 1))" }}
           >
             {frame.meta.widths.length} viewports
           </span>
@@ -183,7 +216,10 @@ export const FrameNode = memo(function FrameNode({
       )}
       <div
         className="frame-drag absolute bottom-full left-0 flex max-w-full cursor-default items-baseline gap-[0.5em] truncate whitespace-nowrap"
-        style={{ fontSize: 11 / zoom, paddingBottom: 6 / zoom }}
+        style={{
+          fontSize: "calc(11px / var(--zoom, 1))",
+          paddingBottom: "calc(6px / var(--zoom, 1))",
+        }}
         title="Drag to move · Double-click to zoom · Right-click for more"
       >
         {!!layers?.warnings.length && (
@@ -193,7 +229,10 @@ export const FrameNode = memo(function FrameNode({
           >
             <AlertTriangle
               className="inline"
-              style={{ width: 12 / zoom, height: 12 / zoom }}
+              style={{
+                width: "calc(12px / var(--zoom, 1))",
+                height: "calc(12px / var(--zoom, 1))",
+              }}
             />{" "}
             {layers.warnings.length}
           </span>
@@ -213,11 +252,26 @@ export const FrameNode = memo(function FrameNode({
           {frame.meta.widths ? (
             <span className="flex items-center gap-[.5em]">
               {width < 600 ? (
-                <Smartphone style={{ width: 12 / zoom, height: 12 / zoom }} />
+                <Smartphone
+                  style={{
+                    width: "calc(12px / var(--zoom, 1))",
+                    height: "calc(12px / var(--zoom, 1))",
+                  }}
+                />
               ) : width < 1000 ? (
-                <Tablet style={{ width: 12 / zoom, height: 12 / zoom }} />
+                <Tablet
+                  style={{
+                    width: "calc(12px / var(--zoom, 1))",
+                    height: "calc(12px / var(--zoom, 1))",
+                  }}
+                />
               ) : (
-                <Monitor style={{ width: 12 / zoom, height: 12 / zoom }} />
+                <Monitor
+                  style={{
+                    width: "calc(12px / var(--zoom, 1))",
+                    height: "calc(12px / var(--zoom, 1))",
+                  }}
+                />
               )}
               {width < 600 ? "Mobile" : width < 1000 ? "Tablet" : "Desktop"}
             </span>
@@ -230,45 +284,44 @@ export const FrameNode = memo(function FrameNode({
         </span>
       </div>
       <div
-        className="relative overflow-hidden bg-frame-surface"
+        className="frame-surface relative overflow-hidden bg-frame-surface"
         style={{
           height,
-          outline: selected ? `${2 / zoom}px solid var(--signal)` : "none",
+          outline: selected
+            ? "calc(2px / var(--zoom, 1)) solid var(--signal)"
+            : "none",
           boxShadow: "0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25)",
         }}
       >
-        {isImage && visible && (
-          <img
-            src={imageUrl(frame)}
-            alt={frame.meta.name}
-            draggable={false}
-            className="block size-full object-contain"
-          />
-        )}
-        {!isImage && visible && useThumbs && (
-          <img
-            src={thumbUrl(frame, cssVersion)}
-            alt=""
-            draggable={false}
-            className="absolute inset-0 w-full"
-            // Frames that never went live still need their real height for layout; report it like an iframe would.
-            onLoad={(event) => {
-              const height = Math.round(
-                event.currentTarget.naturalHeight / THUMB_SCALE,
-              );
-              setHeights((current) =>
-                current[frame.id] === height
-                  ? current
-                  : { ...current, [frame.id]: height },
-              );
-            }}
-          />
-        )}
+        {visible &&
+          (!live || readyVersion !== shown) &&
+          (isImage && scale === 1 ? (
+            <img
+              src={imageUrl(frame)}
+              alt={frame.meta.name}
+              draggable={false}
+              className="block size-full object-contain"
+            />
+          ) : (
+            <PreviewImage
+              src={thumbUrl(frame, cssVersion, scale)}
+              alt={frame.meta.name}
+              onHeight={onHeight}
+            />
+          ))}
         {live &&
           versions.map((v) => (
             <iframe
               key={v}
-              ref={v === pending ? pendingRef : undefined}
+              ref={(iframe) => {
+                if (!iframe) return;
+                if (v === pending) pendingRef.current = iframe;
+                const unregister = registerFrame(iframe);
+                return () => {
+                  unregister();
+                  if (pendingRef.current === iframe) pendingRef.current = null;
+                };
+              }}
               title={frame.meta.name}
               data-frame={frame.id}
               onLoad={enableFrameInput}
@@ -287,7 +340,6 @@ export const FrameNode = memo(function FrameNode({
         comments={data.comments}
         showResolved={data.showResolved}
         onComment={data.onComment}
-        zoom={zoom}
       />
       {(frame.note || frame.source) && (
         <div

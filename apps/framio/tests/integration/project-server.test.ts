@@ -530,7 +530,8 @@ test(
           const box = (await node!.boundingBox())!;
           await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
           await page.keyboard.down("Control");
-          await page.mouse.wheel({ deltaY: -80 });
+          // Cross the 28% admission threshold with normalized Linux wheel deltas.
+          await page.mouse.wheel({ deltaY: -160 });
           await page.waitForSelector("iframe[data-frame]");
           const during = await page.evaluate(() => ({
             pointerEvents: [
@@ -596,4 +597,353 @@ test(
       },
     ),
   60_000,
+);
+
+test(
+  "embedded assets negotiate compression and thumbnails use scaled, temporary captures",
+  () =>
+    withProjectServer(
+      (root) => {
+        writeFileSync(
+          join(root, ".framio/pages/01-test/performance.tsx"),
+          'export const meta={name:"Performance",width:390,height:300};export default function Frame(){return <div style={{height:949}}>Geometry</div>}',
+        );
+      },
+      async (url, root) => {
+        const request = (path: string, encoding = "gzip") =>
+          fetch(`${url}${path}`, { headers: { "accept-encoding": encoding } });
+        const html = await request("/");
+        expect(html.headers.get("content-encoding")).toBe("gzip");
+        expect(html.headers.get("cache-control")).toBe("no-cache");
+        const document = await html.text();
+        const js = document.match(/src="([^"]+\.js)"/)![1]!;
+        const asset = await request(js.startsWith("/") ? js : `/${js}`);
+        expect(asset.headers.get("cache-control")).toContain("immutable");
+        expect(asset.headers.get("vary")).toBe("Accept-Encoding");
+        const uncompressed = await request("/_runtime.js", "gzip;q=0, *;q=1");
+        expect(uncompressed.headers.get("content-encoding")).toBeNull();
+        expect(uncompressed.headers.get("cache-control")).toBe("no-cache");
+        const frame = await (await request("/f/01-test/performance")).text();
+        const runtime = frame.match(/src="(\/_runtime.js\?v=[^"]+)"/)![1]!;
+        expect((await request(runtime)).headers.get("cache-control")).toContain(
+          "immutable",
+        );
+        const thumbnail = await request(
+          "/thumb/01-test/performance.png?scale=0.125",
+        );
+        expect(thumbnail.status).toBe(200);
+        expect(thumbnail.headers.get("x-framio-height")).toBe("949");
+        const png = new DataView(await thumbnail.arrayBuffer());
+        expect(png.getUint32(16)).toBe(Math.round(390 * 0.125));
+        expect(
+          (await request("/thumb/01-test/performance.png?scale=0.2")).status,
+        ).toBe(400);
+        const { readdirSync } = await import("node:fs");
+        const state = join(root, ".framio/.state");
+        const previews = readdirSync(state).find((name) =>
+          name.startsWith("previews-"),
+        )!;
+        expect(readdirSync(join(state, previews))).toEqual([]);
+      },
+    ),
+  30_000,
+);
+
+test(
+  "large canvases bound live frames even when every responsive viewport is selected",
+  () =>
+    withProjectServer(
+      (root) => {
+        for (let i = 0; i < 20; i++)
+          writeFileSync(
+            join(root, `.framio/pages/01-test/budget-${i}.tsx`),
+            `export const meta={name:"Budget ${i}",width:390,height:300};export default function Frame(){return <div style={{height:300}}>Budget ${i}</div>}`,
+          );
+      },
+      async (url, root) => {
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          await page.setViewport({ width: 1600, height: 1000 });
+          await page.evaluateOnNewDocument(
+            (project) =>
+              localStorage.setItem(
+                `framio:viewport:${project}/01-test`,
+                JSON.stringify({ x: 100, y: 100, zoom: 1 }),
+              ),
+            basename(root),
+          );
+          await page.goto(url);
+          await page.waitForFunction(() => {
+            const frames = [
+              ...document.querySelectorAll<HTMLIFrameElement>(
+                "iframe[data-frame]",
+              ),
+            ];
+            return (
+              frames.length === 6 &&
+              frames.every((frame) => frame.contentWindow?.__framio?.ready)
+            );
+          });
+          expect(await page.$$("iframe[data-frame]")).toHaveLength(6);
+          await page.keyboard.down(
+            process.platform === "darwin" ? "Meta" : "Control",
+          );
+          await page.keyboard.press("a");
+          await page.keyboard.up(
+            process.platform === "darwin" ? "Meta" : "Control",
+          );
+          await page.waitForFunction(
+            () =>
+              document.querySelectorAll(".react-flow__node.selected").length ===
+              20,
+          );
+          expect(
+            (await page.$$("iframe[data-frame]")).length,
+          ).toBeLessThanOrEqual(6);
+          const liveWithoutThumbnails = await page.$$eval(
+            "iframe[data-frame]",
+            (frames) =>
+              frames.every(
+                (frame) => !frame.parentElement?.querySelector("img"),
+              ),
+          );
+          expect(liveWithoutThumbnails).toBe(true);
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  30_000,
+);
+
+test(
+  "silent initial iframe boots release admission slots without claiming readiness",
+  () =>
+    withProjectServer(
+      (root) => {
+        for (let i = 0; i < 10; i++)
+          writeFileSync(
+            join(root, `.framio/pages/01-test/timeout-${i}.tsx`),
+            `export const meta={name:"Timeout ${i}",width:100,height:100};export default function Frame(){return <div>Frame ${i}</div>}`,
+          );
+      },
+      async (url, root) => {
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          await page.setViewport({ width: 1600, height: 1000 });
+          await page.evaluateOnNewDocument(
+            (project) =>
+              localStorage.setItem(
+                `framio:viewport:${project}/01-test`,
+                JSON.stringify({ x: 100, y: 100, zoom: 1 }),
+              ),
+            basename(root),
+          );
+          const stalled = new Set<string>();
+          await page.setRequestInterception(true);
+          page.on("request", (request) => {
+            const address = new URL(request.url());
+            if (
+              address.pathname.startsWith("/f/") &&
+              address.searchParams.get("canvas") === "1" &&
+              (stalled.has(address.pathname) || stalled.size < 2)
+            ) {
+              stalled.add(address.pathname);
+              void request.respond({
+                status: 200,
+                contentType: "text/html",
+                body: "<html><body>Runtime unavailable</body></html>",
+              });
+            } else void request.continue();
+          });
+          await page.goto(url);
+          await page.waitForFunction(
+            () => document.querySelectorAll("iframe[data-frame]").length === 2,
+          );
+          expect(stalled.size).toBe(2);
+          await page.waitForFunction(
+            () => {
+              const frames = [
+                ...document.querySelectorAll<HTMLIFrameElement>(
+                  "iframe[data-frame]",
+                ),
+              ];
+              return (
+                frames.length === 6 &&
+                frames.filter((frame) => frame.contentWindow?.__framio?.ready)
+                  .length === 4
+              );
+            },
+            { timeout: 20_000 },
+          );
+          const silent = await page.$$eval("iframe[data-frame]", (frames) =>
+            frames
+              .filter(
+                (frame) =>
+                  !(frame as HTMLIFrameElement).contentWindow?.__framio?.ready,
+              )
+              .map((frame) => ({
+                fallback: !!frame.parentElement?.querySelector("img"),
+                inputReady: frame.getAttribute("data-input-ready"),
+              })),
+          );
+          expect(silent).toEqual([
+            { fallback: true, inputReady: null },
+            { fallback: true, inputReady: null },
+          ]);
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  30_000,
+);
+
+test(
+  "reload restores measured geometry before frame documents finish loading",
+  () =>
+    withProjectServer(
+      (root) =>
+        writeFileSync(
+          join(root, ".framio/pages/01-test/geometry.tsx"),
+          'export const meta={name:"Geometry",width:390,height:844};export default function Frame(){return <div style={{height:949}}>Measured</div>}',
+        ),
+      async (url) => {
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          await page.goto(url);
+          await page.waitForFunction(() => {
+            const surface =
+              document.querySelector<HTMLElement>(".frame-surface");
+            return (
+              surface?.style.height === "949px" &&
+              Object.keys(localStorage).some((key) =>
+                key.startsWith("framio:geometry:"),
+              )
+            );
+          });
+          const held: import("puppeteer-core").HTTPRequest[] = [];
+          await page.setRequestInterception(true);
+          page.on("request", (request) => {
+            if (/^\/(f|thumb)\//.test(new URL(request.url()).pathname))
+              held.push(request);
+            else void request.continue();
+          });
+          await page.reload({ waitUntil: "domcontentloaded" });
+          await page.waitForSelector(".frame-surface");
+          expect(
+            await page.$eval(
+              ".frame-surface",
+              (surface) => (surface as HTMLElement).style.height,
+            ),
+          ).toBe("949px");
+          for (const request of held) await request.abort();
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  30_000,
+);
+
+test(
+  "a broken entry preserves shared healthy chunks and dependency edits still rebuild them",
+  () =>
+    withProjectServer(
+      (root) => {
+        mkdirSync(join(root, ".framio/components"), { recursive: true });
+        writeFileSync(
+          join(root, ".framio/components/shared.tsx"),
+          'export const title="Before";',
+        );
+        writeFileSync(
+          join(root, ".framio/pages/01-test/aaa-broken.tsx"),
+          "export default function (",
+        );
+        for (let i = 0; i < 8; i++)
+          writeFileSync(
+            join(root, `.framio/pages/01-test/healthy-${i}.tsx`),
+            `import {title} from "../../components/shared";export default function Frame(){return <h1>{title} ${i}</h1>}`,
+          );
+      },
+      async (url, root) => {
+        const snapshot = async () =>
+          (await (await fetch(`${url}/api/project`)).json()) as Snapshot;
+        const first = await snapshot();
+        const frames = first.pages[0]!.frames;
+        expect(
+          frames.find((frame) => frame.slug === "aaa-broken")?.error,
+        ).toBeTruthy();
+        const healthy = frames.filter((frame) =>
+          frame.slug.startsWith("healthy"),
+        );
+        expect(healthy).toHaveLength(8);
+        expect(healthy.every((frame) => frame.error === null)).toBe(true);
+        const entries = await Promise.all(
+          healthy.map(
+            async (frame) =>
+              await (
+                await fetch(`${url}/js/${frame.id}.js?v=${frame.version}`)
+              ).text(),
+          ),
+        );
+        const chunks = entries.flatMap((entry) =>
+          [...entry.matchAll(/(?:\.\.\/)?chunks\/[^"']+\.js/g)].map((match) =>
+            match[0].replace(/^\.\.\//, ""),
+          ),
+        );
+        expect(chunks.length).toBeGreaterThan(0);
+        for (const chunk of new Set(chunks))
+          expect((await fetch(`${url}/js/${chunk}`)).status).toBe(200);
+        writeFileSync(
+          join(root, ".framio/components/shared.tsx"),
+          'export const title="After";',
+        );
+        const deadline = Date.now() + 10_000;
+        let changed = first;
+        while (Date.now() < deadline) {
+          changed = await snapshot();
+          if (
+            healthy.every(
+              (old) =>
+                changed.pages[0]!.frames.find((frame) => frame.id === old.id)
+                  ?.version !== old.version,
+            )
+          )
+            break;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(
+          healthy.every(
+            (old) =>
+              changed.pages[0]!.frames.find((frame) => frame.id === old.id)
+                ?.version !== old.version,
+          ),
+        ).toBe(true);
+        expect(
+          changed.pages[0]!.frames.filter((frame) =>
+            frame.slug.startsWith("healthy"),
+          ).every((frame) => frame.error === null),
+        ).toBe(true);
+      },
+    ),
+  30_000,
 );

@@ -5,6 +5,7 @@ import { makeScreenshotHandler } from "../services/screenshot-request";
 import { makeComments } from "../services/comments";
 import { publishIfUnchanged } from "../platform/atomic-file";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import * as Semaphore from "effect/Semaphore";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -38,7 +39,12 @@ import type { Frame } from "../domain/project";
 import { CanvasFile, PositiveNumber } from "../domain/project";
 import { Policies } from "../domain/policies";
 import { PortOccupied, ServerStartupFailed } from "../domain/errors";
-import { runtimeFile, uiFiles } from "../generated/assets.js";
+import {
+  runtimeFile,
+  runtimeGzipFile,
+  uiFiles,
+  uiGzipFiles,
+} from "../generated/assets.js";
 import { projectPaths } from "../lib/paths";
 import { FRAME_CSS } from "../runtime/frame-style";
 import {
@@ -49,6 +55,25 @@ import {
 import { Screenshots } from "../services/screenshots";
 export type { Snapshot, SnapshotFrame } from "../contracts/snapshot";
 
+const runtimeVersion = Bun.hash(runtimeFile).toString(16);
+
+export function acceptsGzip(header: string | undefined) {
+  const encodings = (header ?? "")
+    .toLowerCase()
+    .split(",")
+    .map((part) => {
+      const [name, ...params] = part.trim().split(";");
+      const q = params.find((param) => param.trim().startsWith("q="));
+      return { name, quality: q ? Number(q.trim().slice(2)) : 1 };
+    });
+  return (
+    (
+      encodings.find((encoding) => encoding.name === "gzip") ??
+      encodings.find((encoding) => encoding.name === "*")
+    )?.quality! > 0
+  );
+}
+
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -57,22 +82,31 @@ const MIME: Record<string, string> = {
   ".png": "image/png",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8",
 };
-function frameHtml(frame: Frame, canvas: boolean, state: ProjectGeneration) {
+function frameHtml(
+  frame: Frame,
+  canvas: boolean,
+  state: ProjectGeneration,
+  generation?: string,
+  preview = false,
+) {
   const built = state.artifacts.frames.get(frame.id);
   const boot = {
     id: frame.id,
     canvas,
+    preview,
     width: frame.meta.widths ? frame.meta.width : undefined,
     viewportId: viewportId(frame.id, frame.meta, frame.meta.width),
     version: built?.version ?? 0,
     error: frame.metaError ?? built?.error ?? null,
   };
-  const src = `/js/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}.js?v=${boot.version}`;
+  const pin = generation ? `&g=${generation}` : "";
+  const src = `/js/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}.js?v=${boot.version}${pin}`;
   return `<!doctype html><html lang="en"${frame.meta.theme === "dark" ? ' class="dark"' : ""}><head>
 <meta charset="utf-8"><meta name="viewport" content="width=${frame.meta.width}"><title>${frame.meta.name.replace(/</g, "&lt;")}</title>
-<link rel="stylesheet" href="/_theme.css?v=${state.css.version}"><style>:root{--fvh:${frame.meta.height / 100}px}${FRAME_CSS}</style>
-<script>window.__FRAMIO_BOOT__=${JSON.stringify(boot).replace(/</g, "\\u003c")}</script><script src="/_runtime.js"></script>
+<link rel="stylesheet" href="/_theme.css?v=${state.css.version}${pin}"><style>:root{--fvh:${frame.meta.height / 100}px}${FRAME_CSS}</style>
+<script>window.__FRAMIO_BOOT__=${JSON.stringify(boot).replace(/</g, "\\u003c")}</script><script src="/_runtime.js?v=${runtimeVersion}"></script>
 </head><body><div id="root"></div>${boot.error ? "" : `<script type="module" src="${src}"></script>`}</body></html>`;
 }
 
@@ -342,41 +376,73 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
     Layer.provide(RpcServer.layerProtocolWebsocket({ path: "/ws" })),
     Layer.provide(RpcSerialization.layerJson),
   );
+  const thumbnailPermits = yield* Semaphore.make(2);
+  const thumbnailDirectory = yield* Effect.acquireRelease(
+    fs.makeTempDirectory({ directory: p.state, prefix: "previews-" }),
+    (directory) =>
+      fs
+        .remove(directory, { recursive: true, force: true })
+        .pipe(Effect.catch((error) => Effect.logWarning(error.message))),
+  );
+  const thumbnailSizes = new Map<string, number>();
+  const thumbnailBudget = 32 * 1024 * 1024;
   const thumbnails = yield* Cache.make({
     capacity: 128,
     lookup: (key: string) =>
-      project.withStableState((state) =>
-        Effect.gen(function* () {
-          const [id, width] = yield* Schema.decodeUnknownEffect(
-            Schema.fromJsonString(
-              Schema.Tuple([Schema.String, PositiveNumber]),
-            ),
-          )(key.slice(0, key.lastIndexOf("|"))).pipe(
-            Effect.mapError(
-              (error) => new ServerStartupFailed({ message: error.message }),
-            ),
-          );
-          const frame = state.pages
-            .flatMap((page) => page.frames)
-            .find((frame) => frame.id === id);
-          if (!frame)
-            return yield* new ServerStartupFailed({
-              message: "Frame not found",
-            });
-          return yield* shots.capture(
-            {
-              ...frame,
-              meta: {
-                ...frame.meta,
-                ...frameViewports(frame, width)[0]!,
-              },
-            },
-            join(p.state, "thumbs", frame.page, `${frame.slug}@${width}.png`),
-            0.5,
-            { emitLayers: false },
-          );
-        }),
-      ),
+      project
+        .withGeneration((state, generation) =>
+          Effect.gen(function* () {
+            const [id, width, scale] = yield* Schema.decodeUnknownEffect(
+              Schema.fromJsonString(
+                Schema.Tuple([Schema.String, PositiveNumber, PositiveNumber]),
+              ),
+            )(key.slice(0, key.lastIndexOf("|"))).pipe(
+              Effect.mapError(
+                (error) => new ServerStartupFailed({ message: error.message }),
+              ),
+            );
+            const frame = state.pages
+              .flatMap((page) => page.frames)
+              .find((frame) => frame.id === id);
+            if (!frame)
+              return yield* new ServerStartupFailed({
+                message: "Frame not found",
+              });
+            const version = `${frame.kind === "image" ? state.imageVersions.get(frame.id) : state.artifacts.frames.get(frame.id)?.hash}-${Bun.hash(state.css.text).toString(16)}`;
+            if (key.slice(key.lastIndexOf("|") + 1) !== version)
+              return yield* new ServerStartupFailed({
+                message:
+                  "Preview generation changed; request the current version",
+              });
+            const output = join(thumbnailDirectory, `${randomUUID()}.png`);
+            return yield* Effect.scoped(
+              Effect.gen(function* () {
+                yield* Effect.addFinalizer(() =>
+                  fs
+                    .remove(output, { force: true })
+                    .pipe(Effect.catch(() => Effect.void)),
+                );
+                const shot = yield* shots.capture(
+                  {
+                    ...frame,
+                    meta: {
+                      ...frame.meta,
+                      ...frameViewports(frame, width)[0]!,
+                    },
+                  },
+                  output,
+                  scale,
+                  { emitLayers: false, generation },
+                );
+                return {
+                  height: shot.height,
+                  bytes: yield* fs.readFile(output),
+                };
+              }),
+            );
+          }),
+        )
+        .pipe(Semaphore.withPermits(thumbnailPermits, 1)),
   });
   const staticFile = (file: string, contentType?: string) =>
     HttpServerResponse.file(file, { contentType }).pipe(
@@ -388,7 +454,13 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
     Effect.gen(function* () {
       const url = new URL(request.url, info.url);
       const path = decodeURIComponent(url.pathname);
-      const state = yield* project.get;
+      const token = url.searchParams.get("g");
+      const pinned = token ? yield* project.pinned(token) : undefined;
+      if (token && !pinned && !path.startsWith("/shots/"))
+        return HttpServerResponse.text("Capture generation expired", {
+          status: 410,
+        });
+      const state = pinned ?? (yield* project.get);
       const all = state.pages.flatMap((page) => page.frames);
       if (path === "/_theme.css")
         return HttpServerResponse.text(
@@ -398,10 +470,22 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           )?.css.text ?? state.css.text,
           { contentType: "text/css; charset=utf-8" },
         );
+      const gzip = acceptsGzip(request.headers["accept-encoding"]);
       if (path === "/_runtime.js")
-        return HttpServerResponse.uint8Array(runtimeFile, {
-          contentType: "text/javascript; charset=utf-8",
-        });
+        return HttpServerResponse.uint8Array(
+          gzip ? runtimeGzipFile : runtimeFile,
+          {
+            contentType: "text/javascript; charset=utf-8",
+            headers: {
+              vary: "Accept-Encoding",
+              ...(gzip ? { "content-encoding": "gzip" } : {}),
+              "cache-control":
+                url.searchParams.get("v") === runtimeVersion
+                  ? "public, max-age=31536000, immutable"
+                  : "no-cache",
+            },
+          },
+        );
       if (
         (path.startsWith("/f/") || path.startsWith("/thumb/")) &&
         (url.searchParams.has("width") || url.searchParams.has("height"))
@@ -455,6 +539,8 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
             },
             url.searchParams.has("canvas"),
             state,
+            token ?? undefined,
+            url.searchParams.has("preview"),
           ),
           { contentType: "text/html; charset=utf-8" },
         );
@@ -474,7 +560,7 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
         const js =
           assets?.artifacts.files.get(rel) ??
           (rel.startsWith("chunks/")
-            ? [state, ...state.retained]
+            ? [state, ...state.retained, ...(yield* project.pinnedValues)]
                 .map((assets) => assets.artifacts.files.get(rel))
                 .find((text) => text !== undefined)
             : undefined);
@@ -497,9 +583,36 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
         );
         if (!frame)
           return HttpServerResponse.text("Frame not found", { status: 404 });
-        const key = `${JSON.stringify([frame.id, Number(url.searchParams.get("width") ?? frame.meta.width)])}|${frame.kind === "image" ? state.imageVersions.get(frame.id) : state.artifacts.frames.get(frame.id)?.version}-${state.css.version}`;
+        const scale = Number(url.searchParams.get("scale") ?? 0.5);
+        if (![0.0625, 0.125, 0.25, 0.5, 1].includes(scale))
+          return HttpServerResponse.text("Invalid preview scale", {
+            status: 400,
+          });
+        const key = `${JSON.stringify([frame.id, Number(url.searchParams.get("width") ?? frame.meta.width), scale])}|${frame.kind === "image" ? state.imageVersions.get(frame.id) : state.artifacts.frames.get(frame.id)?.hash}-${Bun.hash(state.css.text).toString(16)}`;
         return yield* Cache.get(thumbnails, key).pipe(
-          Effect.flatMap((shot) => staticFile(shot.path, "image/png")),
+          Effect.flatMap((shot) =>
+            Effect.gen(function* () {
+              thumbnailSizes.delete(key);
+              thumbnailSizes.set(key, shot.bytes.byteLength);
+              let size = [...thumbnailSizes.values()].reduce(
+                (sum, bytes) => sum + bytes,
+                0,
+              );
+              while (size > thumbnailBudget || thumbnailSizes.size > 128) {
+                const [oldest, bytes] = thumbnailSizes.entries().next().value!;
+                thumbnailSizes.delete(oldest);
+                size -= bytes;
+                yield* Cache.invalidate(thumbnails, oldest);
+              }
+              return HttpServerResponse.uint8Array(shot.bytes, {
+                contentType: "image/png",
+                headers: {
+                  "cache-control": "no-cache",
+                  "x-framio-height": String(shot.height),
+                },
+              });
+            }),
+          ),
           Effect.catch((error) =>
             Cache.invalidate(thumbnails, key).pipe(
               Effect.as(
@@ -543,10 +656,20 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           ? HttpServerResponse.setHeader(response, "cache-control", "no-cache")
           : response;
       }
-      const asset = uiFiles[path.slice(1)];
-      return HttpServerResponse.uint8Array(asset ?? uiFiles["index.html"]!, {
+      const assetKey = uiFiles[path.slice(1)] ? path.slice(1) : "index.html";
+      const asset = gzip ? uiGzipFiles[assetKey] : uiFiles[assetKey];
+      return HttpServerResponse.uint8Array(asset!, {
         contentType:
-          MIME[path.slice(path.lastIndexOf("."))] ?? "text/html; charset=utf-8",
+          MIME[assetKey.slice(assetKey.lastIndexOf("."))] ??
+          "text/html; charset=utf-8",
+        headers: {
+          vary: "Accept-Encoding",
+          ...(gzip ? { "content-encoding": "gzip" } : {}),
+          "cache-control":
+            assetKey === "index.html" || assetKey.endsWith(".txt")
+              ? "no-cache"
+              : "public, max-age=31536000, immutable",
+        },
       });
     }),
   );

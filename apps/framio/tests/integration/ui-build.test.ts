@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 import { expect, test } from "bun:test";
 import { BunFileSystem } from "@effect/platform-bun";
 import { Effect } from "effect";
@@ -43,6 +44,12 @@ test("UI publication retains loaded bytes without retaining build trees", async 
       );
       expect(new TextDecoder().decode(assets.runtimeFile)).toContain(
         `runtime ${i}`,
+      );
+      expect(gunzipSync(assets.uiGzipFiles["index.html"])).toEqual(
+        Buffer.from(assets.uiFiles["index.html"]),
+      );
+      expect(gunzipSync(assets.runtimeGzipFile)).toEqual(
+        Buffer.from(assets.runtimeFile),
       );
       first ??= assets;
       expect(readdirSync(join(root, "dist"))).toEqual([]);

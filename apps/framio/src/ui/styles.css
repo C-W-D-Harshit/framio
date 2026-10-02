@@ -1,5 +1,18 @@
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap");
-@import "tailwindcss";
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: optional;
+  src: url("./fonts/geist.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: optional;
+  src: url("./fonts/geist-mono.woff2") format("woff2");
+}
+@import "tailwindcss" source(".");
 @import "tw-animate-css";
 @import "@xyflow/react/dist/base.css";
 
@@ -179,4 +192,13 @@ iframe[data-frame]:not([data-input-ready]),
 }
 .studio-canvas {
   background: var(--background);
+}
+
+.frame-surface {
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.3),
+    0 8px 24px rgb(0 0 0 / 0.25);
+}
+.is-navigating .frame-surface {
+  box-shadow: none !important;
 }

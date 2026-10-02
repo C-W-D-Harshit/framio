@@ -14,6 +14,7 @@ import { CanvasMessage } from "../contracts/frame-message";
 const BootSchema = Schema.Struct({
   id: Schema.String,
   canvas: Schema.Boolean,
+  preview: Schema.optional(Schema.Boolean),
   width: Schema.optional(Schema.Finite),
   viewportId: Schema.optional(Schema.String),
   error: Schema.NullOr(Schema.String),
@@ -147,7 +148,9 @@ Effect.runFork(
           );
       }
 
+      let latestReport: LayerReport | undefined;
       function reportStatus(error: string | null) {
+        if (boot.preview) return;
         Queue.offerUnsafe(statuses, error);
       }
       yield* Effect.forever(
@@ -165,7 +168,7 @@ Effect.runFork(
                   version: boot.version,
                   error,
                   warnings: window.__framio?.ready
-                    ? measureLayers().warnings
+                    ? latestReport?.warnings
                     : undefined,
                 }),
               }),
@@ -261,7 +264,6 @@ Effect.runFork(
         yield* painted;
         if (!window.__framio.error) {
           window.__framio.ready = true;
-          reportStatus(null);
           postParent({ type: "ready", height: contentHeight() });
           publishLayers();
         }
@@ -274,7 +276,8 @@ Effect.runFork(
       if (!boot.error) yield* Effect.forkScoped(waitForReady);
 
       function publishLayers() {
-        const report = measureLayers();
+        if (boot.preview) return;
+        const report = (latestReport = measureLayers());
         postParent({ type: "layers", report });
         reportStatus(window.__framio.error);
       }
@@ -282,13 +285,13 @@ Effect.runFork(
       yield* Effect.forever(
         Effect.gen(function* () {
           yield* Queue.take(layerUpdates);
-          yield* Effect.sleep(100);
+          yield* Effect.sleep(500);
           if (window.__framio.ready) publishLayers();
         }),
       ).pipe(Effect.forkScoped);
       documentEvents.addEventListener("DOMContentLoaded", () => {
         const root = document.getElementById("root");
-        if (!root) return;
+        if (!root || boot.preview) return;
         const observer = new MutationObserver(() =>
           Queue.offerUnsafe(layerUpdates, undefined),
         );
@@ -296,6 +299,22 @@ Effect.runFork(
           childList: true,
           subtree: true,
           attributes: true,
+          attributeFilter: [
+            "class",
+            "style",
+            "hidden",
+            "src",
+            "width",
+            "height",
+            "open",
+            "aria-label",
+            "data-layer",
+            "data-layer-path",
+            "role",
+            "aria-hidden",
+            "data-framio-layer",
+            "data-framio-name",
+          ],
           characterData: true,
         });
         observers.push(observer);

@@ -161,6 +161,8 @@ const readImage = Effect.fn("Project.readImage")(function* (
 });
 export const scanProject = Effect.fn("Project.scan")(function* (
   p: ProjectPaths,
+  previous: readonly Page[] = [],
+  changed?: ReadonlySet<string>,
 ): Effect.fn.Return<
   Page[],
   import("effect/PlatformError").PlatformError,
@@ -171,6 +173,14 @@ export const scanProject = Effect.fn("Project.scan")(function* (
   const dirs = (yield* fs.readDirectory(p.pages))
     .filter((dir) => !dir.startsWith("."))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const changes = changed
+    ? [...changed].map((file) => file.replaceAll("\\", "/"))
+    : undefined;
+  const oldFrames = new Map(
+    previous.flatMap((page) =>
+      page.frames.map((frame) => [frame.id, frame] as const),
+    ),
+  );
   const pages: Page[] = [];
   for (const dir of dirs) {
     if ((yield* fs.stat(join(p.pages, dir))).type !== "Directory") continue;
@@ -183,10 +193,22 @@ export const scanProject = Effect.fn("Project.scan")(function* (
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     const frames = yield* Effect.forEach(
       files,
-      (file) =>
-        file.endsWith(".tsx")
-          ? readFrame(p, dir, file)
-          : readImage(p, dir, file),
+      (file) => {
+        const old = oldFrames.get(`${dir}/${file.replace(/\.tsx$/, "")}`);
+        const path = `pages/${dir}/${file}`;
+        return old &&
+          changes &&
+          !changes.some(
+            (file) =>
+              path === file ||
+              `${path}.json` === file ||
+              path.startsWith(`${file}/`),
+          )
+          ? Effect.succeed({ ...old, parent: null })
+          : file.endsWith(".tsx")
+            ? readFrame(p, dir, file)
+            : readImage(p, dir, file);
+      },
       { concurrency: 8 },
     );
     const canvas = yield* fs

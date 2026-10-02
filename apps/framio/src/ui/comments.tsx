@@ -38,13 +38,11 @@ export function CommentPins({
   frame,
   comments,
   showResolved,
-  zoom,
   onComment,
 }: {
   frame: SnapshotFrame;
   comments: readonly Comment[];
   showResolved: boolean;
-  zoom: number;
   onComment(id: string): void;
 }) {
   const pins = useMemo(
@@ -83,7 +81,7 @@ export function CommentPins({
             style={{
               left: at.x,
               top: at.y,
-              transform: `translate(-50%, -50%) scale(${1 / zoom})`,
+              transform: `translate(-50%, -50%) scale(calc(1 / var(--zoom, 1)))`,
             }}
           >
             {comments.indexOf(pin) + 1}

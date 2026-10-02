@@ -10,7 +10,7 @@
     },
     "apps/framio": {
       "name": "framio",
-      "version": "0.0.6",
+      "version": "0.0.7",
       "bin": {
         "framio": "./src/cli.ts",
       },

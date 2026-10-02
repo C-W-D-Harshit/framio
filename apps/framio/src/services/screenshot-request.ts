@@ -45,7 +45,7 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
           ],
         };
       const reports: LayerObservation[] = [];
-      const result = yield* project.withStableState((state) =>
+      const result = yield* project.withGeneration((state, generation) =>
         Effect.gen(function* () {
           const capture = (
             frame: Frame,
@@ -60,7 +60,7 @@ export const makeScreenshotHandler = Effect.fn("Screenshots.handler")(
                   `${frame.slug}${frame.meta.widths || body.width ? `@${frame.meta.width}` : ""}.png`,
                 ),
                 scale,
-                { layers: body.layers },
+                { layers: body.layers, generation },
               )
               .pipe(
                 Effect.tap((shot) =>

@@ -26,18 +26,7 @@ export function postLayer(
 }
 /** One report subscription per live frame, also supplies warnings on the canvas. */
 export function useLayerReport(frame: string) {
-  const [report, setReport] = useAtom(layersAtom(frame));
-  useEffect(() => {
-    const listener = (event: Event) => {
-      const detail = (
-        event as CustomEvent<{ frame: string; report: LayerReport }>
-      ).detail;
-      if (detail.frame === frame) setReport(detail.report);
-    };
-    window.addEventListener("framio:layers", listener);
-    return () => window.removeEventListener("framio:layers", listener);
-  }, [frame, setReport]);
-  return report;
+  return useAtomValue(layersAtom(frame));
 }
 type Row = {
   key: string;
