@@ -10,14 +10,30 @@ import { list, open, start, status, stop } from "./server";
 import { serve } from "../services/server-application";
 import { PositiveNumber, ViewportDimension } from "../domain/project";
 const startFlags = {
-  background: Flag.Boolean("background").pipe(Flag.withDefault(false)),
-  noOpen: Flag.Boolean("no-open").pipe(Flag.withDefault(false)),
+  verbose: Flag.Boolean("verbose").pipe(
+    Flag.withDefault(false),
+    Flag.withDescription("Show runtime build diagnostics"),
+  ),
+  background: Flag.Boolean("background").pipe(
+    Flag.withDefault(false),
+    Flag.withDescription("Run the canvas in the background"),
+  ),
+  noOpen: Flag.Boolean("no-open").pipe(
+    Flag.withDefault(false),
+    Flag.withDescription("Start without opening the browser"),
+  ),
 };
+const verbose = Flag.Boolean("verbose").pipe(
+  Flag.withDefault(false),
+  Flag.withDescription("Show full subprocess output"),
+);
 const makeRoot = () =>
   Command.make("framio", startFlags, start).pipe(
     Command.withDescription("A design canvas for coding agents"),
     Command.withSubcommands([
-      Command.make("start", startFlags, start),
+      Command.make("start", startFlags, start).pipe(
+        Command.withDescription("Open the canvas and watch your designs"),
+      ),
       Command.make(
         "upgrade",
         {
@@ -31,33 +47,50 @@ const makeRoot = () =>
       Command.make(
         "init",
         {
+          verbose,
           skipInstall: Flag.Boolean("skip-install").pipe(
             Flag.withDefault(false),
           ),
         },
-        ({ skipInstall }) => init(skipInstall),
+        ({ skipInstall, verbose }) => init(skipInstall, verbose),
+      ).pipe(
+        Command.withDescription(
+          "Set up a canvas and agent skills in this project",
+        ),
       ),
       Command.make(
         "stop",
         { all: Flag.Boolean("all").pipe(Flag.withDefault(false)) },
         ({ all }) => stop(all),
+      ).pipe(
+        Command.withDescription("Stop this canvas, or every canvas with --all"),
       ),
-      Command.make("list", {}, () => list),
-      Command.make("status", {}, () => status),
-      Command.make("open", {}, () => open),
+      Command.make("list", {}, () => list).pipe(
+        Command.withDescription("List running canvases"),
+      ),
+      Command.make("status", {}, () => status).pipe(
+        Command.withDescription("Check this canvas"),
+      ),
+      Command.make("open", {}, () => open).pipe(
+        Command.withDescription("Open an already running canvas"),
+      ),
       Command.make(
         "install",
-        { packages: Argument.String("package").pipe(Argument.variadic()) },
-        ({ packages }) => install(packages),
-      ),
+        {
+          packages: Argument.String("package").pipe(Argument.variadic()),
+          verbose,
+        },
+        ({ packages, verbose }) => install(packages, verbose),
+      ).pipe(Command.withDescription("Install design packages")),
       Command.make(
         "add",
         {
           items: Argument.String("item").pipe(Argument.variadic()),
           overwrite: Flag.Boolean("overwrite").pipe(Flag.withDefault(false)),
+          verbose,
         },
-        ({ items, overwrite }) => add(items, overwrite),
-      ),
+        ({ items, overwrite, verbose }) => add(items, overwrite, verbose),
+      ).pipe(Command.withDescription("Add components from a shadcn registry")),
       Command.make(
         "inspect",
         {
@@ -69,6 +102,8 @@ const makeRoot = () =>
           layer: Flag.String("layer").pipe(Flag.optional),
         },
         inspect,
+      ).pipe(
+        Command.withDescription("Inspect frame geometry and styles as JSON"),
       ),
       Command.make(
         "screenshot",
@@ -94,7 +129,7 @@ const makeRoot = () =>
           ),
         },
         screenshot,
-      ),
+      ).pipe(Command.withDescription("Capture frames, layers or a website")),
       Command.make(
         "__serve",
         {

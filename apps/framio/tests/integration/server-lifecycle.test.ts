@@ -76,7 +76,11 @@ afterEach(async () => {
     rmSync(root, { recursive: true, force: true });
 });
 
-for (const args of [["start", "--no-open"], ["--no-open"]])
+for (const args of [
+  ["start", "--no-open"],
+  ["--no-open"],
+  ["start", "--no-open", "--verbose"],
+])
   test(`foreground ${args.join(" ")} stays attached and Ctrl+C stops its server`, async () => {
     const root = project();
     const child = launch(root, args);
@@ -84,6 +88,13 @@ for (const args of [["start", "--no-open"], ["--no-open"]])
     expect(child.exitCode).toBeNull();
     child.kill("SIGINT");
     expect(await child.exited).toBe(0);
+    const output = await new Response(child.stdout).text();
+    expect(output).toContain(info.url);
+    expect(output).toContain("Ctrl+C to stop");
+    expect(output).toContain("Canvas stopped");
+    if (args.includes("--verbose"))
+      expect(output).toContain("frames, generation");
+    else expect(output).not.toContain("INFO (#");
     await gone(info.pid);
     expect(await readServerInfo(projectPaths(root))).toBeNull();
     expect(existsSync(join(root, ".framio/.state/server.lock"))).toBe(false);

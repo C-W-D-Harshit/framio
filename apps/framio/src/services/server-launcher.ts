@@ -26,6 +26,7 @@ export class ServerLauncher extends Context.Service<
     foreground: (
       p: ProjectPaths,
       open: boolean,
+      verbose?: boolean,
     ) => Effect.Effect<number, PlatformError.PlatformError, Scope.Scope>;
   }
 >()("framio/services/ServerLauncher") {
@@ -79,10 +80,13 @@ export class ServerLauncher extends Context.Service<
       const foreground = Effect.fn("ServerLauncher.foreground")(function* (
         p: ProjectPaths,
         open: boolean,
+        verbose = false,
       ) {
         const [command, ...args] = selfCommand([
           "__supervise",
           p.root,
+          "--terminal",
+          ...(verbose ? ["--verbose"] : []),
           ...(open ? ["--open"] : []),
         ]);
         const child = yield* spawner.spawn(

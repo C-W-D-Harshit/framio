@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CursorZones, Fx } from "@/components/landing/site/primitives";
 import { Grain } from "@/components/landing/site/texture";
 import { Hero, SiteNav } from "@/components/landing/site/hero";
+import { Context } from "@/components/landing/site/context";
 import { HowItWorks } from "@/components/landing/site/how";
 import { Features } from "@/components/landing/site/features";
 import { ClosingCTA, FAQ, Footer } from "@/components/landing/site/closing";
@@ -32,7 +33,7 @@ export default function Landing() {
   return (
     <Fx.Provider value={motionEnabled}>
       <CursorZones.Provider value={zones}>
-        <div className="relative min-h-screen overflow-x-hidden bg-landing-page font-sans text-landing-ink antialiased">
+        <div className="relative min-h-screen overflow-x-clip bg-landing-page font-sans text-landing-ink antialiased">
           {cursorEnabled && (
             <TargetCursor
               targetSelector=".cursor-target"
@@ -55,6 +56,7 @@ export default function Landing() {
               <SiteNav />
               <main id="main-content">
                 <Hero />
+                <Context />
                 <HowItWorks />
                 <Features />
                 <FAQ />

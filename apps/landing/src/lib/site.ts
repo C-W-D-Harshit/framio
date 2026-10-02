@@ -3,23 +3,43 @@ export const RELEASE_VERSION = "v0.0.6";
 export const REPO_URL = "https://github.com/C-W-D-Harshit/framio";
 export const SITE_TITLE = "Design canvas for Claude Code and Codex · Framio";
 export const SITE_DESCRIPTION =
-  "Framio is a free, open-source design canvas for Claude Code and Codex. Review React and Tailwind designs, pin feedback, and compare them with your running app.";
+  "Framio is a free, open-source design canvas for Claude Code and Codex. Design new screens or redesign existing ones from your repo, then point at what to fix.";
 export const INSTALL_COMMAND =
   "curl -fsSL https://framio.design/install.sh | sh";
 
 // The visible FAQ and its structured data share the same answers.
 export const faqs = [
   {
-    q: "Which agents does Framio work with?",
-    a: "Framio works with Claude Code and Codex. framio init installs the skill in .claude/skills and .agents/skills, so any coding agent that reads either folder can use it.",
+    q: "What is Framio?",
+    a: "Framio is a free, open-source design canvas for coding agents. Your agent writes screens as React and Tailwind files in .framio/, and Framio renders them on a local canvas where you select elements and pin comments for the agent to fix.",
   },
   {
-    q: "Do I need a design tool or an account?",
-    a: "No. Framio is one binary. The canvas runs on localhost and the designs are files in your project.",
+    q: "How do I design UI with Claude Code?",
+    a: 'Install Framio, run framio init in your project, and ask Claude Code to "use Framio to design the onboarding for my invoicing app." It asks about the product, writes each screen as a .tsx file, and you review the screens on the canvas. Codex works the same way.',
+  },
+  {
+    q: "Can Framio redesign my existing app?",
+    a: 'Yes. Ask your agent to "use Framio to redesign our pricing page." It screenshots the running page onto a moodboard, writes DESIGN.md from your current colors and fonts, and changes what you asked for. When you pick a design, it builds it in your app and compares the two at every width.',
+  },
+  {
+    q: "Will new designs match my current design system?",
+    a: "Your agent reads your code, theme, and copy before it designs, and records your colors, fonts, and radii in DESIGN.md. Every frame uses those tokens. Frames are built with shadcn/ui instead of importing your app's components, and your agent moves the design into your components when you ship it.",
+  },
+  {
+    q: "Which agents does Framio work with?",
+    a: "framio init installs the skill in .claude/skills for Claude Code and .agents/skills for Codex. Other agents that read either folder, such as OpenCode, Cursor, Grok CLI, and Antigravity, can use it too.",
+  },
+  {
+    q: "Is Framio a Figma alternative?",
+    a: "For developers who design with a coding agent, often yes. Framio has no drawing tools. Your agent writes the design as code, and you review it by clicking and commenting. If your team draws designs by hand, keep Figma for that.",
+  },
+  {
+    q: "Is Framio related to Frame.io?",
+    a: "No. Framio is an independent, open-source design canvas for coding agents. Frame.io is Adobe's video review platform.",
   },
   {
     q: "Does Framio change my app's code?",
-    a: "No. Designs live in .framio/. When you pick a design, ask your agent to build it in your app. Use framio screenshot --url <app-url> --compare <page>/<frame> to compare the implementation with the design.",
+    a: "Not while you design. Designs live in .framio/. When you pick one, ask your agent to build it in your app. It checks the result against the design with framio screenshot --url <app-url> --compare <page>/<frame>.",
   },
   {
     q: "What operating systems does Framio support?",
@@ -31,7 +51,7 @@ export const faqs = [
   },
   {
     q: "Is Framio free?",
-    a: "Yes. Framio is free and open source under the MIT license. There is no subscription or account requirement.",
+    a: "Yes. Framio is free and open source under the MIT license. It is one binary with no account or subscription, and the canvas runs on localhost.",
   },
 ];
 

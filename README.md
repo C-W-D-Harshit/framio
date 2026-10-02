@@ -30,6 +30,17 @@ Then ask your agent:
 
 > Use Framio to design the onboarding for my invoicing app.
 
+Setup shows separate progress for canvas files, agent skills, packages, and the screenshot
+browser. `framio init --skip-install` creates files and prints the commands to finish setup.
+Use `--verbose` with `init`, `install`, or `add` to see full subprocess logs. Failed commands
+print their diagnostics and a retry instruction.
+`framio start --verbose` also shows runtime build diagnostics. Background canvases write
+those diagnostics to the log path printed at startup.
+
+Interactive terminals show an ASCII Framio mark and live task states. `NO_COLOR` disables
+color. CI, dumb terminals, and redirected output use plain text without cursor animation.
+`framio inspect` keeps its JSON output, and redirected `framio list` keeps tab-separated rows.
+
 The agent asks a few questions, shows you a couple of visual directions, and builds the screens
 you pick. It screenshots each one and fixes what it sees before moving on.
 

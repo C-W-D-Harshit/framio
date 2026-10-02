@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Runtime from "effect/Runtime";
+import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import { FetchHttpClient } from "effect/http";
 import { ServerRegistry } from "./services/server-registry";
@@ -12,6 +12,7 @@ import { ServerLauncher } from "./services/server-launcher";
 import { supervise } from "./services/session-supervisor";
 import { serve } from "./services/server-application";
 import { InvalidInput } from "./domain/errors";
+import { TerminalUI } from "./services/terminal-ui";
 declare const FRAMIO_VERSION: string | undefined;
 const VERSION = typeof FRAMIO_VERSION === "string" ? FRAMIO_VERSION : "dev";
 const Platform = Layer.mergeAll(BunServices.layer, FetchHttpClient.layer);
@@ -43,9 +44,18 @@ Effect.gen(function* () {
     process.exitCode = yield* supervise(parsed[0], parsed[1] === "--open");
   } else if (args[0] === "__serve") {
     const parsed = yield* Schema.decodeUnknownEffect(
-      Schema.Tuple([Schema.String, Schema.optional(Schema.Literal("--open"))]),
+      Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
+        Schema.Literals(["--open", "--terminal", "--verbose"]),
+      ]),
     )(args.slice(1));
-    yield* serve(parsed[0], parsed[1] === "--open");
+    const server = serve(
+      parsed[0],
+      parsed.includes("--open"),
+      parsed.includes("--terminal"),
+    );
+    yield* parsed.includes("--terminal") && !parsed.includes("--verbose")
+      ? server.pipe(Effect.provideService(References.MinimumLogLevel, "Warn"))
+      : server;
   } else {
     const { runCommands } = yield* Effect.promise(
       () => import("./commands/command-tree"),
@@ -56,9 +66,8 @@ Effect.gen(function* () {
   }
 }).pipe(
   Effect.scoped,
-  Effect.provide(Registry),
   Effect.catch((error) =>
-    Console.error(error.message).pipe(
+    Effect.flatMap(TerminalUI, (ui) => ui.message("error", error.message)).pipe(
       Effect.andThen(
         Effect.sync(() => {
           process.exitCode = 1;
@@ -66,6 +75,8 @@ Effect.gen(function* () {
       ),
     ),
   ),
+  Effect.provide(Registry),
+  Effect.provide(TerminalUI.layer(VERSION)),
   BunRuntime.runMain({
     disableErrorReporting: true,
     teardown: (exit, onExit) =>

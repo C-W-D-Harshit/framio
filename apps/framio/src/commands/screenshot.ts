@@ -11,6 +11,7 @@ import { ServerLauncher } from "../services/server-launcher";
 import { requireProject } from "./shared";
 import { validateScreenshot } from "../domain/screenshot";
 import { InvalidInput } from "../domain/errors";
+import { TerminalUI } from "../services/terminal-ui";
 
 export const screenshot = Effect.fn("screenshot")(function* (options: {
   frames: readonly string[];
@@ -39,6 +40,7 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
     options.all,
   );
   const p = projectPaths(yield* requireProject);
+  const ui = yield* TerminalUI;
   const { info } = yield* (yield* ServerLauncher).ensure(p, true);
   const client = yield* HttpApiClient.make(Api, { baseUrl: info.url });
   const response = yield* client.project.screenshot({
@@ -47,12 +49,17 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
   let failed = false;
   for (const r of response.results) {
     if (r.path)
-      yield* Console.log(
-        `${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`,
-      );
+      yield* ui.interactive
+        ? ui.message(
+            "success",
+            `${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`,
+          )
+        : Console.log(
+            `${relative(process.cwd(), r.path)}  (${r.width}×${r.height}, ${r.frame})`,
+          );
     if (r.report) {
       for (const warning of r.report.warnings)
-        yield* Console.error(`warning in ${r.frame}: ${warning.message}`);
+        yield* ui.message("warning", `in ${r.frame}: ${warning.message}`);
       for (const node of flattenLayers(r.report.tree))
         yield* Console.log(
           `  ${node.path}  (${Math.round(node.box.width)}×${Math.round(node.box.height)})`,
@@ -64,7 +71,7 @@ export const screenshot = Effect.fn("screenshot")(function* (options: {
       );
     if (r.error) {
       failed = true;
-      yield* Console.error(`error in ${r.frame}:\n${r.error}\n`);
+      yield* ui.message("error", `in ${r.frame}:\n${r.error}`);
     }
   }
   if (failed)
