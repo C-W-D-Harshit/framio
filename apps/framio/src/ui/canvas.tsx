@@ -1,5 +1,6 @@
 import { projectSession } from "./project-session";
 import { sourceFrame } from "./frame-bridge";
+import { copyText } from "./clipboard";
 import { runPreviewController } from "./services/preview-controller";
 import {
   geometryFingerprint,
@@ -565,7 +566,7 @@ function CanvasInner({
         e.preventDefault();
         if (e.key === "Enter")
           window.open(standaloneUrl(frame), "_blank", "noopener,noreferrer");
-        else void navigator.clipboard.writeText(frame.relFile);
+        else void copyText(frame.relFile);
       } else if (mod && (e.key === "=" || e.key === "+")) {
         e.preventDefault();
         flow.zoomIn({ duration: 150 });
@@ -1003,7 +1004,7 @@ function CanvasInner({
             {
               label: "Copy file path",
               hint: `${MOD} ⇧ C`,
-              onSelect: () => navigator.clipboard.writeText(menuFrame.relFile),
+              onSelect: () => copyText(menuFrame.relFile),
             },
           ]}
         />

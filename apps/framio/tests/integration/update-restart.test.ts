@@ -23,12 +23,13 @@ const updaterStorage = resolve(
 const fixtureSource = `
 import {mkdirSync,writeFileSync,rmSync} from "node:fs";
 const root=process.argv[2],version=process.argv[3],state=root+"/.framio/.state"; mkdirSync(state,{recursive:true});
-const server=Bun.serve({hostname:"127.0.0.1",port:Number(process.env.FRAMIO_SERVER_PORT??0),fetch(req){
+const host=process.argv[process.argv.indexOf("--host")+1]; if(host!=="127.0.0.1") process.exit(41);
+const server=Bun.serve({hostname:host,port:Number(process.env.FRAMIO_SERVER_PORT??0),fetch(req){
  if(new URL(req.url).pathname==="/api/health") return Response.json({ok:true,root,pid:process.pid,protocol:"framio-v4-1",version});
  if(new URL(req.url).pathname==="/restart") {writeFileSync(state+"/restart.json",JSON.stringify({phase:"requested",port:server.port,version:"2.0.0",error:null})); queueMicrotask(()=>finish(75)); return Response.json({ok:true});}
  return Response.json({ok:true});
 }});
-writeFileSync(state+"/server.lock",String(process.pid)); writeFileSync(state+"/server.json",JSON.stringify({pid:process.pid,port:server.port,url:"http://127.0.0.1:"+server.port,version,supervisorPid:Number(process.env.FRAMIO_SUPERVISOR_PID),startedAt:new Date().toISOString()}));
+writeFileSync(state+"/server.lock",String(process.pid)); writeFileSync(state+"/server.json",JSON.stringify({pid:process.pid,host,port:server.port,url:"http://127.0.0.1:"+server.port,version,supervisorPid:Number(process.env.FRAMIO_SUPERVISOR_PID),startedAt:new Date().toISOString()}));
 async function finish(code){ await server.stop(true); rmSync(state+"/server.json",{force:true}); rmSync(state+"/server.lock",{force:true}); process.exit(code); }
 process.on("SIGTERM",()=>void finish(0));
 `;
@@ -52,7 +53,7 @@ for (const mode of ["foreground", "background", "recovery"])
     writeFileSync(fixture, fixtureSource);
     writeFileSync(
       target,
-      `#!/bin/sh\nif [ "$1" = --version ]; then printf 'framio 2.0.0\\n'; else ${recovery ? "exit 42" : `exec '${process.execPath}' '${fixture}' "$2" 2.0.0`}; fi\n`,
+      `#!/bin/sh\nif [ "$1" = --version ]; then printf 'framio 2.0.0\\n'; else shift; root="$1"; shift; ${recovery ? "exit 42" : `exec '${process.execPath}' '${fixture}' "$root" 2.0.0 "$@"`}; fi\n`,
     );
     chmodSync(target, 0o755);
     if (recovery) {
@@ -65,7 +66,7 @@ for (const mode of ["foreground", "background", "recovery"])
       const backup = join(data, id, "previous");
       writeFileSync(
         backup,
-        `#!/bin/sh\nif [ "$1" = --version ]; then printf 'framio 1.0.0\\n'; else exec '${process.execPath}' '${fixture}' "$2" 1.0.0; fi\n`,
+        `#!/bin/sh\nif [ "$1" = --version ]; then printf 'framio 1.0.0\\n'; else shift; root="$1"; shift; exec '${process.execPath}' '${fixture}' "$root" 1.0.0 "$@"; fi\n`,
       );
       chmodSync(backup, 0o755);
       const db = openUpdateStorage(data);
@@ -80,7 +81,7 @@ for (const mode of ["foreground", "background", "recovery"])
       mkdirSync(join(root, ".framio/.state"), { recursive: true });
     writeFileSync(
       program,
-      `import {Effect,Layer} from "effect"; import {BunServices,BunRuntime} from "@effect/platform-bun"; import {FetchHttpClient} from "effect/http"; import {supervise} from ${JSON.stringify(supervisor)}; import {ServerRegistry} from ${JSON.stringify(registry)}; supervise(process.argv[2],false,{readinessTimeout:"2 seconds",command:[process.execPath,${JSON.stringify(fixture)},process.argv[2],"1.0.0"],updater:{target:${JSON.stringify(target)},directory:${JSON.stringify(join(dir, "updates"))},development:false,version:"1.0.0",platform:"darwin-arm64"}}).pipe(Effect.scoped,Effect.provide(ServerRegistry.layer.pipe(Layer.provideMerge(Layer.mergeAll(BunServices.layer,FetchHttpClient.layer)))),BunRuntime.runMain);`,
+      `import {Effect,Layer} from "effect"; import {BunServices,BunRuntime} from "@effect/platform-bun"; import {FetchHttpClient} from "effect/http"; import {supervise} from ${JSON.stringify(supervisor)}; import {ServerRegistry} from ${JSON.stringify(registry)}; supervise(process.argv[2],false,{host:"127.0.0.1",readinessTimeout:"2 seconds",command:[process.execPath,${JSON.stringify(fixture)},process.argv[2],"1.0.0","--host","127.0.0.1"],updater:{target:${JSON.stringify(target)},directory:${JSON.stringify(join(dir, "updates"))},development:false,version:"1.0.0",platform:"darwin-arm64"}}).pipe(Effect.scoped,Effect.provide(ServerRegistry.layer.pipe(Layer.provideMerge(Layer.mergeAll(BunServices.layer,FetchHttpClient.layer)))),BunRuntime.runMain);`,
     );
     const children = roots.map((root) =>
       Bun.spawn([process.execPath, program, root], {
@@ -116,6 +117,8 @@ for (const mode of ["foreground", "background", "recovery"])
           : null;
       });
       expect(replacement.port).toBe(first.port);
+      expect(first.host).toBe("127.0.0.1");
+      expect(replacement.host).toBe(first.host);
       expect(replacement.supervisorPid).toBe(children[0]!.pid);
       const health = await (await fetch(first.url + "/api/health")).json();
       expect(health.root).toBe(roots[0]!);

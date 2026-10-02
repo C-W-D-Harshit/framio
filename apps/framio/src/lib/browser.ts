@@ -37,7 +37,10 @@ export const ensureBrowser = Effect.fn("Browser.ensure")(
           cacheDir: BROWSERS_DIR,
           platform,
         }),
-      catch: (cause) => new BrowserUnavailable({ message: String(cause) }),
+      catch: (cause) =>
+        new BrowserUnavailable({
+          message: `Could not download the screenshot browser. Live previews still work. Check the VM's internet access and write permission for ${BROWSERS_DIR}. ${String(cause)}`,
+        }),
     });
     return installed.executablePath;
   },

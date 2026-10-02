@@ -3,6 +3,7 @@ import { Copy, Layers, X } from "lucide-react";
 import type { LayerNode } from "../contracts/layers";
 import type { SnapshotFrame } from "../contracts/snapshot";
 import { Button } from "./components/ui/button";
+import { copyText } from "./clipboard";
 import {
   Sidebar,
   SidebarHeader,
@@ -25,7 +26,7 @@ export function InspectPanel({
   const [error, setError] = useState<string | null>(null);
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(selector);
+      await copyText(selector);
       setCopied(true);
       setError(null);
     } catch {

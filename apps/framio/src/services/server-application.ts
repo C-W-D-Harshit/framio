@@ -4,10 +4,13 @@ import { ServerRegistry } from "./server-registry";
 import { displayPath, projectPaths } from "../lib/paths";
 import { basename } from "node:path";
 import { TerminalUI } from "./terminal-ui";
+import { defaultHost } from "../domain/server-addresses";
+import { printServerUrls } from "./server-display";
 export const serve = Effect.fn("serve")(function* (
   root: string,
   shouldOpen: boolean,
   terminal = false,
+  host = defaultHost,
 ) {
   root = yield* (yield* FileSystem.FileSystem).realPath(root);
   const registry = yield* ServerRegistry;
@@ -24,20 +27,20 @@ export const serve = Effect.fn("serve")(function* (
     yield* ui.message("info", "Starting canvas...");
   }
   const { runServer } = yield* Effect.promise(() => import("../server/server"));
-  const server = yield* runServer(root);
+  const server = yield* runServer(root, host);
   yield* registry.register(p, server.info);
   if (ui) {
-    yield* ui.row("Canvas", server.info.url);
+    yield* printServerUrls(server.info);
     yield* ui.row("Files", displayPath(p.framio));
     yield* ui.row("Status", "Watching for changes");
     yield* ui.next("Keep this terminal open", ["Ctrl+C to stop"]);
     yield* Effect.addFinalizer(() => ui.message("info", "Canvas stopped."));
   }
   if (shouldOpen) {
-    const { openBrowser } = yield* Effect.promise(
+    const { tryOpenBrowser } = yield* Effect.promise(
       () => import("../commands/server"),
     );
-    yield* openBrowser(server.info.url);
+    yield* tryOpenBrowser(server.info.url);
   }
   yield* server.restart;
   process.exitCode = 75;

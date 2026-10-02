@@ -11,6 +11,7 @@ import {
   EmptyContent,
 } from "./components/ui/empty";
 import { Toolbar, type Tool } from "./toolbar";
+import { copyText } from "./clipboard";
 
 function CopyPrompt({
   text,
@@ -29,9 +30,10 @@ function CopyPrompt({
         variant="secondary"
         size="xs"
         className="h-7 shrink-0 gap-1.5 bg-accent px-2.5 text-xs font-normal"
+        aria-label="Copy prompt"
         onClick={async () => {
           try {
-            await navigator.clipboard.writeText(text);
+            await copyText(text);
             setCopied(true);
           } catch {
             setCopied(false);

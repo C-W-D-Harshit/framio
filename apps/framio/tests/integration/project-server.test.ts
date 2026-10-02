@@ -9,7 +9,7 @@ import {
   readFileSync,
   rmSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { BunServices } from "@effect/platform-bun";
 import { Effect, Layer, Option, Stream } from "effect";
@@ -44,6 +44,167 @@ async function withProjectServer(
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+test(
+  "remote HTTP supports copying and receives live frame updates",
+  () =>
+    withProjectServer(
+      () => {},
+      async (url, root) => {
+        const address = Object.values(networkInterfaces())
+          .flat()
+          .find(
+            (entry) => entry && !entry.internal && entry.family === "IPv4",
+          )?.address;
+        expect(address).toBeDefined();
+        const remote = new URL(url);
+        remote.hostname = address!;
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          page.setDefaultTimeout(5000);
+          await page.goto(remote.href);
+          expect(await page.evaluate(() => window.isSecureContext)).toBe(false);
+          expect(
+            await page.evaluate(() => navigator.clipboard === undefined),
+          ).toBe(true);
+          await page.evaluate(() => {
+            document.addEventListener("copy", () => {
+              document.body.dataset.copied = (
+                document.activeElement as HTMLTextAreaElement
+              ).value;
+            });
+          });
+          await page.locator('button[aria-label="Copy prompt"]').click();
+          await page.waitForFunction(() =>
+            [...document.querySelectorAll("button")].some(
+              (button) => button.textContent?.trim() === "Copied",
+            ),
+          );
+          expect(await page.evaluate(() => document.body.dataset.copied)).toBe(
+            "Design screens on the Test page.",
+          );
+          expect(
+            await page.evaluate(() => document.activeElement?.tagName),
+          ).toBe("BUTTON");
+          expect(await page.$("textarea")).toBeNull();
+          const frame = join(root, ".framio/pages/01-test/remote.tsx");
+          const write = (text: string) =>
+            writeFileSync(
+              frame,
+              `import React from "react";export const meta={name:"Remote",width:390,height:300};export default function Frame(){return <h1>${text}</h1>}`,
+            );
+          write("Remote live frame");
+          const initial = await page.waitForSelector(
+            'iframe[src*="/f/01-test/remote?"]',
+            { visible: true },
+          );
+          const initialFrame = await initial!.contentFrame();
+          await initialFrame!.waitForSelector("h1");
+          expect(
+            await initialFrame!.$eval("h1", (element) => element.textContent),
+          ).toBe("Remote live frame");
+          write("Updated over the network");
+          const updated = await page.waitForSelector(
+            'iframe[src*="/f/01-test/remote?"][src*="v=2"]',
+            { visible: true },
+          );
+          const updatedFrame = await updated!.contentFrame();
+          await updatedFrame!.waitForSelector("h1");
+          expect(
+            await updatedFrame!.$eval("h1", (element) => element.textContent),
+          ).toBe("Updated over the network");
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  30_000,
+);
+
+test(
+  "failed thumbnails show feedback and selected frames still render live",
+  () =>
+    withProjectServer(
+      (root) => {
+        writeFileSync(
+          join(root, ".framio/pages/01-test/image.svg"),
+          '<svg xmlns="http://www.w3.org/2000/svg" width="390" height="300"><rect width="390" height="300" fill="red"/></svg>',
+        );
+        for (let i = 0; i < 9; i++)
+          writeFileSync(
+            join(root, `.framio/pages/01-test/frame-${i}.tsx`),
+            `import React from "react";export const meta={name:"Frame ${i}",width:390,height:300};export default function Frame(){return <h1>Live ${i}</h1>}`,
+          );
+      },
+      async (url, root) => {
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          page.setDefaultTimeout(5000);
+          await page.setViewport({ width: 1280, height: 800 });
+          await page.evaluateOnNewDocument(
+            (project) =>
+              localStorage.setItem(
+                `framio:viewport:${project}/01-test`,
+                JSON.stringify({ x: 100, y: 100, zoom: 0.2 }),
+              ),
+            basename(root),
+          );
+          await page.setRequestInterception(true);
+          page.on("request", (request) => {
+            void (request.url().includes("/thumb/")
+              ? request.respond({
+                  status: 503,
+                  body: "Screenshot browser unavailable",
+                })
+              : request.continue());
+          });
+          await page.goto(url);
+          await page.waitForFunction(() =>
+            [...document.querySelectorAll('[role="status"]')].some((status) =>
+              status.textContent?.includes("Preview unavailable"),
+            ),
+          );
+          await page.waitForFunction(() => {
+            const image = document.querySelector<HTMLImageElement>(
+              'img[src*="/img/01-test/image"]',
+            );
+            return image?.complete && image.naturalWidth > 0;
+          });
+          await page
+            .locator(
+              '[aria-label="Project navigation"] button[title$="/frame-0.tsx"]',
+            )
+            .click();
+          await page.waitForFunction(
+            () =>
+              [
+                ...document.querySelectorAll<HTMLIFrameElement>(
+                  'iframe[src*="/f/01-test/frame-0?"]',
+                ),
+              ].some((iframe) =>
+                iframe.contentDocument?.body.textContent?.includes("Live 0"),
+              ),
+            { polling: 50 },
+          );
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  30_000,
+);
 
 test(
   "frame groups collapse and reopen without clearing canvas selection",

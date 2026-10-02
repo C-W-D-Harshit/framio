@@ -8,10 +8,12 @@ import { projectPaths } from "../lib/paths";
 import { selfCommand } from "../lib/bun";
 import { RestartJournal } from "../contracts/restart";
 import { ServerStartupFailed } from "../domain/errors";
+import { defaultHost } from "../domain/server-addresses";
 export const supervise = Effect.fn("SessionSupervisor.run")(function* (
   root: string,
   open: boolean,
   options: {
+    host?: string;
     terminal?: boolean;
     verbose?: boolean;
     updater?: Parameters<typeof makeUpdater>[0];
@@ -41,6 +43,8 @@ export const supervise = Effect.fn("SessionSupervisor.run")(function* (
   const serverArgs = [
     "__serve",
     root,
+    "--host",
+    options.host ?? defaultHost,
     ...(options.terminal ? ["--terminal"] : []),
     ...(options.verbose ? ["--verbose"] : []),
   ];

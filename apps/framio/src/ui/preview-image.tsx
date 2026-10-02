@@ -10,10 +10,12 @@ export function PreviewImage({
   src,
   alt,
   onHeight,
+  fallbackSrc,
 }: {
   src: string;
   alt: string;
   onHeight?: (height: number) => void;
+  fallbackSrc?: string;
 }) {
   const image = useMemo(
     () =>
@@ -45,6 +47,8 @@ export function PreviewImage({
   const value = AsyncResult.isSuccess(result) ? result.value : undefined;
   const displayed =
     value ?? (AsyncResult.isSuccess(previous) ? previous.value : undefined);
+  const displayedUrl =
+    displayed?.url ?? (AsyncResult.isFailure(result) ? fallbackSrc : undefined);
   useEffect(() => {
     if (value) retain(image);
   }, [value, image]);
@@ -52,13 +56,21 @@ export function PreviewImage({
     if (value?.height && Number.isFinite(value.height))
       onHeight?.(value.height);
   }, [value, onHeight]);
-  return displayed ? (
+  return displayedUrl ? (
     <img
       data-preview-src={src}
-      src={displayed.url}
+      src={displayedUrl}
       alt={alt}
       draggable={false}
       className="absolute inset-0 block w-full object-contain"
     />
+  ) : AsyncResult.isFailure(result) ? (
+    <div
+      role="status"
+      className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground"
+    >
+      <span>Preview unavailable</span>
+      <span>Select this frame to view it live.</span>
+    </div>
   ) : null;
 }

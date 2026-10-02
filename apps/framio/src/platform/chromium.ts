@@ -34,7 +34,10 @@ export const acquireChromium = Effect.acquireRelease(
           args: ["--hide-scrollbars"],
           timeout: 30_000,
         }),
-      catch: (cause) => new BrowserUnavailable({ message: String(cause) }),
+      catch: (cause) =>
+        new BrowserUnavailable({
+          message: `Could not start the screenshot browser. Live previews still work. Check Chromium's system libraries and sandbox support. ${String(cause)}`,
+        }),
     }),
   ),
   (browser) => close(() => browser.close()),
