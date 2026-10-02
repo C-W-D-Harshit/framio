@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import * as Effect from "effect/Effect";
-import { emptyUpdate } from "../../src/contracts/update";
+import { emptyUpdate, UpdateFailure } from "../../src/contracts/update";
 import { makeUpdater } from "../../src/services/update/updater";
 import { makeUpdateStorage } from "../../src/services/update/storage";
 import {
@@ -29,6 +29,20 @@ import {
   writableTarget,
 } from "../../src/platform/update-files";
 import { makeDiscovery } from "../../src/services/update/discovery";
+const fixtureRelease = {
+  version: "2.0.0",
+  tag: "v2.0.0",
+  description: "Faster canvas",
+  notesUrl: "https://github.com/C-W-D-Harshit/framio/releases/tag/v2.0.0",
+  assetId: 1,
+  assetName: "framio-darwin-arm64.tar.gz",
+  assetUrl:
+    "https://api.github.com/repos/C-W-D-Harshit/framio/releases/assets/1",
+  assetSize: 100,
+  checksumUrl:
+    "https://api.github.com/repos/C-W-D-Harshit/framio/releases/assets/2",
+  requiresProjectUpdate: false,
+};
 const directories: string[] = [];
 function temporary() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "framio-update-")));
@@ -69,21 +83,7 @@ test("custom canonical installations share staged state, install atomically and 
         ...emptyUpdate,
         phase: "ready",
         stagedHash: hash,
-        release: {
-          version: "2.0.0",
-          tag: "v2.0.0",
-          description: "Faster canvas",
-          notesUrl:
-            "https://github.com/C-W-D-Harshit/framio/releases/tag/v2.0.0",
-          assetId: 1,
-          assetName: "framio-darwin-arm64.tar.gz",
-          assetUrl:
-            "https://api.github.com/repos/C-W-D-Harshit/framio/releases/assets/1",
-          assetSize: 100,
-          checksumUrl:
-            "https://api.github.com/repos/C-W-D-Harshit/framio/releases/assets/2",
-          requiresProjectUpdate: false,
-        },
+        release: fixtureRelease,
       });
     }),
   );
@@ -97,6 +97,20 @@ test("custom canonical installations share staged state, install atomically and 
         platform: "darwin-arm64",
       });
       expect((yield* updater.status()).phase).toBe("ready");
+      yield* updater.store.write("discovery:darwin-arm64", {
+        release: {
+          ...fixtureRelease,
+          version: "3.0.0",
+          tag: "v3.0.0",
+          assetId: 3,
+        },
+        etag: null,
+        nextCheck: Date.now() + 86400000,
+        failures: 0,
+        error: null,
+      });
+      yield* updater.check();
+      expect((yield* updater.status()).release?.version).toBe("2.0.0");
       yield* updater.install();
       const state = yield* updater.status();
       expect(state.installedVersion).toBe("2.0.0");
@@ -211,7 +225,7 @@ test("daily cache uses ETags, keeps offline metadata and respects rate limit bac
           };
         });
       yield* store.write("discovery:darwin-arm64", {
-        release: null,
+        release: fixtureRelease,
         etag: "fixture",
         nextCheck: 0,
         failures: 0,
@@ -222,6 +236,14 @@ test("daily cache uses ETags, keeps offline metadata and respects rate limit bac
       yield* discovery.check();
       expect(calls).toBe(1);
       yield* discovery.check(true);
+      expect(calls).toBe(2);
+      const offline = makeDiscovery(store, "darwin-arm64", () =>
+        Effect.fail(new UpdateFailure({ message: "offline" })),
+      );
+      const cached = yield* offline.check(true);
+      expect(cached.release).toEqual(fixtureRelease);
+      expect(cached.error).toBe("offline");
+      yield* discovery.check();
       expect(calls).toBe(2);
       const limited = makeDiscovery(store, "darwin-arm64", () =>
         Effect.succeed({
