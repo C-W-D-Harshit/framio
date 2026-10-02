@@ -1,3 +1,4 @@
+import { projectSession } from "./project-session";
 import { sourceFrame } from "./frame-bridge";
 import { runPreviewController } from "./services/preview-controller";
 import {
@@ -140,12 +141,12 @@ function CanvasInner({
   const flow = useReactFlow<FrameNodeType>();
   const [showResolved, setShowResolved] = useState(false);
   const [activeComment, setActiveComment] = useState<string | null>(() =>
-    sessionStorage.getItem(`framio:active-comment:${page.id}`),
+    projectSession.getItem(`active-comment:${page.id}`),
   );
   useEffect(() => {
     if (activeComment)
-      sessionStorage.setItem(`framio:active-comment:${page.id}`, activeComment);
-    else sessionStorage.removeItem(`framio:active-comment:${page.id}`);
+      projectSession.setItem(`active-comment:${page.id}`, activeComment);
+    else projectSession.removeItem(`active-comment:${page.id}`);
   }, [activeComment, page.id]);
   const [draft, setDraftState] = useState<CommentDraft | null>(() => {
     const decoded = Schema.decodeUnknownResult(
@@ -154,22 +155,19 @@ function CanvasInner({
           Schema.Struct({ frame: Schema.String, anchor: CommentAnchor }),
         ),
       ),
-    )(sessionStorage.getItem(`framio:comment-anchor:${page.id}`) ?? "null");
+    )(projectSession.getItem(`comment-anchor:${page.id}`) ?? "null");
     return decoded._tag === "Success" ? decoded.success : null;
   });
   const setDraft = useCallback(
     (next: CommentDraft | null) => {
       if (next === null && draft)
-        sessionStorage.removeItem(`framio:comment-body:${draft.frame}`);
+        projectSession.removeItem(`comment-body:${draft.frame}`);
       setDraftState(next);
     },
     [draft],
   );
   useEffect(() => {
-    sessionStorage.setItem(
-      `framio:comment-anchor:${page.id}`,
-      JSON.stringify(draft),
-    );
+    projectSession.setItem(`comment-anchor:${page.id}`, JSON.stringify(draft));
   }, [draft, page.id]);
   const pageComments = useMemo(
     () => comments.filter((c) => c.frame.startsWith(`${page.id}/`)),

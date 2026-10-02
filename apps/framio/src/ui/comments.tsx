@@ -1,3 +1,4 @@
+import { projectSession } from "./project-session";
 import { Kbd } from "./components/ui/kbd";
 import { Avatar, AvatarFallback } from "./components/ui/avatar";
 import { Badge } from "./components/ui/badge";
@@ -124,15 +125,15 @@ export function CommentsPanel({
     ? undefined
     : (visible.find((comment) => comment.id === active) ?? visible[0]);
   const draftKey = draft
-    ? `framio:comment-body:${draft.frame}`
-    : `framio:reply-body:${current?.id ?? ""}`;
+    ? `comment-body:${draft.frame}`
+    : `reply-body:${current?.id ?? ""}`;
   const [body, setBody] = useState(
-    () => sessionStorage.getItem(draftKey) ?? "",
+    () => projectSession.getItem(draftKey) ?? "",
   );
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   useEffect(() => {
-    setBody(sessionStorage.getItem(draftKey) ?? "");
+    setBody(projectSession.getItem(draftKey) ?? "");
     setSaveError(null);
   }, [draftKey]);
   const send = async (
@@ -142,7 +143,7 @@ export function CommentsPanel({
     try {
       const result = await save(operation);
       if (result.ok) {
-        sessionStorage.removeItem(draftKey);
+        projectSession.removeItem(draftKey);
         setBody("");
         onSaved();
         if (operation.type === "status" && operation.status === "open")
@@ -189,13 +190,13 @@ export function CommentsPanel({
         placeholder={draft ? "Leave feedback…" : "Reply to this thread..."}
         value={body}
         onChange={(event) => {
-          sessionStorage.setItem(draftKey, event.target.value);
+          projectSession.setItem(draftKey, event.target.value);
           setBody(event.target.value);
         }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
-            sessionStorage.removeItem(draftKey);
+            projectSession.removeItem(draftKey);
             setBody("");
             onSaved();
           } else if (event.key === "Enter" && !event.shiftKey) {

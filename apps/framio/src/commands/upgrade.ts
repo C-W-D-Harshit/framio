@@ -36,7 +36,7 @@ export const upgrade = Effect.fn("upgrade")(function* (flags: {
   if (state.error) yield* Console.log(state.error);
   if (state.installationNotice) yield* Console.log(state.installationNotice);
   const next =
-    state.phase === "ready"
+    state.phase === "ready" || state.phase === "install-failed"
       ? "install"
       : ["available", "download-failed"].includes(state.phase)
         ? "download"

@@ -1,3 +1,4 @@
+import { projectSession } from "./project-session";
 import { hiddenPreview, type PreviewMode } from "./preview-policy";
 import type { LayerReport, RenameRequest } from "../contracts/layers";
 import * as Effect from "effect/Effect";
@@ -33,7 +34,7 @@ export const saveCanvasAtom = runtime.fn((payload: typeof CanvasRequest.Type) =>
 );
 const storedSelection = Schema.decodeUnknownResult(
   Schema.fromJsonString(SelectionSchema),
-)(sessionStorage.getItem("framio:selection") ?? "{}");
+)(projectSession.getItem("selection") ?? "{}");
 export const selectionAtom = Atom.make<typeof SelectionRequest.Type>(
   storedSelection._tag === "Success"
     ? storedSelection.success

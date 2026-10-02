@@ -62,9 +62,12 @@ jobs:
           test -s "$notes"
           python3 - "$notes" <<'PY'
           import pathlib, sys
-          description = pathlib.Path(sys.argv[1]).read_text().strip().split("\n\n", 1)[0]
-          if description.startswith("#") or len(description) > 280:
+          description, _, details = pathlib.Path(sys.argv[1]).read_text().strip().partition("\n\n")
+          if not description or description.startswith("#") or len(description) > 280:
               raise SystemExit("Start release notes with a short authored paragraph of at most 280 characters")
+          heading, _, changes = details.strip().partition("\n")
+          if not heading.startswith("#") or not changes.strip():
+              raise SystemExit("Follow the description with a heading and detailed changes")
           PY
           (cd artifacts && sha256sum *.tar.gz > SHA256SUMS)
           gh release create "$GITHUB_REF_NAME" artifacts/*.tar.gz artifacts/SHA256SUMS --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file "$notes"

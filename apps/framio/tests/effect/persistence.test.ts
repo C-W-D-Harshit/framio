@@ -1,8 +1,39 @@
 import * as Fiber from "effect/Fiber";
+import * as Scheduler from "effect/Scheduler";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { makePersistence } from "../../src/services/persistence";
+
+it.effect(
+  "a save racing the restart barrier is either drained or refused",
+  () =>
+    Effect.gen(function* () {
+      const saved: unknown[] = [];
+      const service = yield* makePersistence({
+        selection: () => Effect.void,
+        canvas: (payload) =>
+          Effect.sync(() => {
+            saved.push(payload);
+          }),
+        onError: () => Effect.void,
+      });
+      const payload = { page: "a", positions: { one: { x: 1, y: 2 } } };
+      for (let budget = 5; budget <= 32; budget++) {
+        saved.length = 0;
+        yield* service.resume;
+        const [accepted] = yield* Effect.all(
+          [service.canvas(payload).pipe(Effect.result), service.flush],
+          { concurrency: "unbounded" },
+        ).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, budget));
+        assert.deepStrictEqual(
+          saved,
+          accepted._tag === "Success" ? [payload] : [],
+          `operation budget ${budget}`,
+        );
+      }
+    }),
+);
 
 it.effect(
   "merges pending deltas per page and serializes newer saves after an active save",

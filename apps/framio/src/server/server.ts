@@ -4,7 +4,8 @@ import { RestartJournal } from "../contracts/restart";
 import { UpdateFailure } from "../contracts/update";
 import { isAlive } from "../services/server-registry";
 import { makeLayersApi } from "./layers/api";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { frameViewports, viewports, viewportId } from "../domain/viewports";
 import { makeScreenshotHandler } from "../services/screenshot-request";
 import { makeComments } from "../services/comments";
@@ -118,6 +119,18 @@ function frameHtml(
 export const runServer = Effect.fn("Server.start")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const p = projectPaths(root);
+  const projectId = createHash("sha256")
+    .update(yield* fs.realPath(root))
+    .digest("hex");
+  const html = Buffer.from(
+    Buffer.from(uiFiles["index.html"]!)
+      .toString("utf8")
+      .replace(
+        "<head>",
+        `<head><meta name="framio-project" content="${projectId}">`,
+      ),
+  );
+  const htmlGzip = gzipSync(html);
   yield* fs.makeDirectory(p.state, { recursive: true });
   const project = Context.get(
     yield* Layer.build(ProjectState.layer(p)),
@@ -457,6 +470,17 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const path = request.url.split("?")[0];
+        if (request.method === "POST" && path === "/api/update") {
+          const origin = request.headers["origin"];
+          if (
+            origin &&
+            origin !== info.url &&
+            origin !== `http://127.0.0.1:${info.port}`
+          )
+            return HttpServerResponse.text("Update origin refused", {
+              status: 403,
+            });
+        }
         if (request.method === "POST" && path !== "/api/update")
           return yield* Effect.gen(function* () {
             if (yield* Ref.get(restarting))
@@ -475,13 +499,13 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
               return yield* Effect.die(new Error("Project restarting"));
             return yield* request.upgrade;
           }).pipe(
-            Semaphore.withPermits(writes, 1),
             Effect.tap((socket) =>
               Ref.update(
                 connections,
                 (sockets) => new Set([...sockets, socket]),
               ),
             ),
+            Semaphore.withPermits(writes, 1),
           ),
           (socket) =>
             closeSocket(socket).pipe(
@@ -803,7 +827,14 @@ export const runServer = Effect.fn("Server.start")(function* (root: string) {
           : response;
       }
       const assetKey = uiFiles[path.slice(1)] ? path.slice(1) : "index.html";
-      const asset = gzip ? uiGzipFiles[assetKey] : uiFiles[assetKey];
+      const asset =
+        assetKey === "index.html"
+          ? gzip
+            ? htmlGzip
+            : html
+          : gzip
+            ? uiGzipFiles[assetKey]
+            : uiFiles[assetKey];
       return HttpServerResponse.uint8Array(asset!, {
         contentType:
           MIME[assetKey.slice(assetKey.lastIndexOf("."))] ??

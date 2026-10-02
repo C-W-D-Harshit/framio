@@ -1,13 +1,167 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import puppeteer from "puppeteer-core";
 import { BunServices } from "@effect/platform-bun";
 import * as Effect from "effect/Effect";
 import { runServer } from "../../src/server/server";
 import { ensureBrowser } from "../../src/lib/browser";
 import { emptyUpdate, type UpdateStatus } from "../../src/contracts/update";
+test("update actions reject foreign browser origins before touching the updater", async () => {
+  const root = mkdtempSync(join(tmpdir(), "framio-update-origins-"));
+  mkdirSync(join(root, ".framio/pages"), { recursive: true });
+  writeFileSync(join(root, ".framio/theme.css"), "");
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { info } = yield* runServer(root);
+          yield* Effect.promise(async () => {
+            for (const origin of [
+              "https://example.test",
+              "null",
+              "http://localhost:1",
+            ]) {
+              const response = await fetch(info.url + "/api/update", {
+                method: "POST",
+                headers: { origin },
+                body: new TextEncoder().encode('{"action":"restart"}'),
+              });
+              expect(response.status).toBe(403);
+            }
+            for (const origin of [info.url, `http://127.0.0.1:${info.port}`]) {
+              const response = await fetch(info.url + "/api/update", {
+                method: "POST",
+                headers: { origin, "content-type": "application/json" },
+                body: JSON.stringify({ action: "restart" }),
+              });
+              expect(response.status).toBe(200);
+              expect((await response.json()).error).toContain(
+                "session supervisor",
+              );
+            }
+          });
+        }),
+      ).pipe(Effect.provide(BunServices.layer)),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+test("drafts stay with their project when the same tab and port are reused", async () => {
+  const temporary = mkdtempSync(join(tmpdir(), "framio-project-drafts-"));
+  const roots = [
+    join(temporary, "first/design"),
+    join(temporary, "second/design"),
+  ];
+  for (const root of roots) {
+    mkdirSync(join(root, ".framio/pages/01-test"), { recursive: true });
+    symlinkSync(
+      resolve(import.meta.dir, "../../node_modules"),
+      join(root, ".framio/node_modules"),
+    );
+    writeFileSync(join(root, ".framio/theme.css"), "body { margin: 0 }");
+    writeFileSync(
+      join(root, ".framio/pages/01-test/example.tsx"),
+      'export const meta={name:"Example",width:400,height:300};export default function Frame(){return <main style={{height:300,background:"white"}}>Project fixture</main>}',
+    );
+  }
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const executablePath = yield* ensureBrowser();
+          const browser = yield* Effect.acquireRelease(
+            Effect.promise(() =>
+              puppeteer.launch({ executablePath, headless: true }),
+            ),
+            (browser) => Effect.promise(() => browser.close()),
+          );
+          const page = yield* Effect.promise(() => browser.newPage());
+          page.setDefaultTimeout(5000);
+          let url = "";
+          for (const [index, root] of [
+            roots[0]!,
+            roots[1]!,
+            roots[0]!,
+          ].entries()) {
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const { info } = yield* runServer(root);
+                if (url) expect(info.url).toBe(url);
+                url = info.url;
+                yield* Effect.promise(async () => {
+                  await page.goto(info.url, { waitUntil: "networkidle0" });
+                  await page.waitForSelector(
+                    'iframe[data-frame="01-test/example"]',
+                  );
+                  const input = 'textarea[aria-label="New comment"]';
+                  if (index === 1) {
+                    expect(await page.$(input)).toBeNull();
+                  }
+                  if (index < 2) {
+                    await page.click('button[aria-label="Comment"]');
+                    await page.waitForFunction(() =>
+                      document
+                        .querySelector<HTMLIFrameElement>(
+                          'iframe[data-frame="01-test/example"]',
+                        )
+                        ?.contentDocument?.querySelector("main"),
+                    );
+                    await page.click('button[aria-label="Fit all frames"]');
+                    await Bun.sleep(400);
+                    const frame = await page.$(
+                      'iframe[data-frame="01-test/example"]',
+                    );
+                    const box = (await frame!.boundingBox())!;
+                    await page.mouse.click(
+                      box.x + box.width / 2,
+                      box.y + box.height / 2,
+                    );
+                    await page.waitForSelector(input);
+                    expect(
+                      await page.$eval(
+                        input,
+                        (element) => (element as HTMLTextAreaElement).value,
+                      ),
+                    ).toBe("");
+                    await page.type(
+                      input,
+                      index === 0
+                        ? "First project draft"
+                        : "Second project draft",
+                    );
+                    await page.reload({ waitUntil: "networkidle0" });
+                  }
+                  await page.waitForSelector(input);
+                  expect(
+                    await page.$eval(
+                      input,
+                      (element) => (element as HTMLTextAreaElement).value,
+                    ),
+                  ).toBe(
+                    index === 1
+                      ? "Second project draft"
+                      : "First project draft",
+                  );
+                });
+              }),
+            );
+          }
+        }),
+      ).pipe(Effect.provide(BunServices.layer)),
+    );
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}, 30000);
 test("footer supports keyboard descriptions, direct download, progress, install later and recovery", async () => {
   const root = mkdtempSync(join(tmpdir(), "framio-update-ui-"));
   mkdirSync(join(root, ".framio/pages"), { recursive: true });

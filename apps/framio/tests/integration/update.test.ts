@@ -14,6 +14,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
+import * as Fiber from "effect/Fiber";
 import { emptyUpdate, UpdateFailure } from "../../src/contracts/update";
 import { makeUpdater } from "../../src/services/update/updater";
 import { makeUpdateStorage } from "../../src/services/update/storage";
@@ -25,6 +27,7 @@ import {
   executableVersion,
   extractExecutable,
   hashFile,
+  native,
   supportedPlatform,
   writableTarget,
 } from "../../src/platform/update-files";
@@ -59,6 +62,73 @@ function run<A, E>(effect: Effect.Effect<A, E, import("effect/Scope").Scope>) {
 afterEach(() => {
   for (const dir of directories.splice(0))
     rmSync(dir, { recursive: true, force: true });
+});
+test("CLI status directs a failed installation back to installation", async () => {
+  const dir = temporary();
+  const target = join(dir, "framio");
+  executable(target, "1.0.0");
+  const store = openUpdateStorage(join(dir, ".framio/updates"));
+  store.write(`installation:${installationIdentity(target).id}`, {
+    ...emptyUpdate,
+    phase: "install-failed",
+    release: fixtureRelease,
+    stagedHash: "verified",
+    error: "Installation was interrupted",
+  });
+  store.close();
+  const child = Bun.spawn(
+    [process.execPath, resolve(import.meta.dir, "../../src/cli.ts"), "upgrade"],
+    {
+      env: { ...process.env, HOME: dir, FRAMIO_INSTALLATION_TARGET: target },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const [code, output, error] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(code).toBe(0);
+  expect(output + error).toContain("Next action: framio upgrade --install");
+  expect(readFileSync(target, "utf8")).toContain("framio 1.0.0");
+});
+test("cancelled native work retains its claim until asynchronous cleanup finishes", async () => {
+  await run(
+    Effect.gen(function* () {
+      const store = yield* makeUpdateStorage(temporary());
+      const entered = yield* Deferred.make<void>();
+      const aborted = yield* Deferred.make<void>();
+      const cleanup = yield* Deferred.make<void>();
+      const owner = yield* store
+        .lock(
+          "installation",
+          native(async (signal) => {
+            await Effect.runPromise(Deferred.succeed(entered, undefined));
+            await new Promise<void>((resolve) =>
+              signal.addEventListener("abort", () => resolve(), { once: true }),
+            );
+            await Effect.runPromise(Deferred.succeed(aborted, undefined));
+            await Effect.runPromise(Deferred.await(cleanup));
+          }),
+        )
+        .pipe(Effect.forkScoped);
+      yield* Deferred.await(entered);
+      const stopping = yield* Fiber.interrupt(owner).pipe(Effect.forkScoped);
+      yield* Deferred.await(aborted);
+      try {
+        expect(yield* store.owned("installation")).toBe(true);
+        expect(
+          (yield* store.lock("installation", Effect.void).pipe(Effect.result))
+            ._tag,
+        ).toBe("Failure");
+      } finally {
+        yield* Deferred.succeed(cleanup, undefined);
+      }
+      yield* Fiber.join(stopping);
+      expect(yield* store.owned("installation")).toBe(false);
+    }),
+  );
 });
 test("custom canonical installations share staged state, install atomically and retain rollback", async () => {
   const dir = temporary(),

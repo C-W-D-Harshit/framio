@@ -18,9 +18,22 @@ import { spawn } from "node:child_process";
 import * as Effect from "effect/Effect";
 import { UpdateFailure, type Release } from "../contracts/update";
 export const native = <A>(work: (signal: AbortSignal) => Promise<A>) =>
-  Effect.tryPromise({
-    try: work,
-    catch: (cause) => new UpdateFailure({ message: String(cause) }),
+  Effect.callback<A, UpdateFailure>((resume, signal) => {
+    const pending = Promise.resolve().then(() => {
+      signal.throwIfAborted();
+      return work(signal);
+    });
+    pending.then(
+      (value) => resume(Effect.succeed(value)),
+      (cause) =>
+        resume(Effect.fail(new UpdateFailure({ message: String(cause) }))),
+    );
+    return Effect.promise(() =>
+      pending.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
   });
 export function supportedPlatform(
   os = process.platform,
