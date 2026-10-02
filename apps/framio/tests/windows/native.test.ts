@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { processBirth } from "../../src/platform/process-liveness";
+import { stopWindowsProcessTree } from "../../src/platform/server-child";
+import { isAlive } from "../../src/services/server-registry";
 import {
   executableVersion,
   extractExecutable,
@@ -21,6 +23,56 @@ test("process birth identifies a live Windows owner", () => {
   expect(birth).not.toBeNull();
   expect(processBirth(process.pid)).toBe(birth);
 });
+
+test.skipIf(process.platform !== "win32")(
+  "Windows cleanup terminates an owned process and its descendant",
+  async () => {
+    const directory = mkdtempSync(join(tmpdir(), "framio tree cleanup "));
+    const fixture = join(directory, "tree.ts");
+    let child: ReturnType<typeof Bun.spawn> | undefined;
+    let descendant: number | undefined;
+    try {
+      writeFileSync(
+        fixture,
+        `
+        if (process.argv[2] === "leaf") {
+          console.log("ready");
+          setInterval(() => {}, 1000);
+        } else {
+          const leaf = Bun.spawn([process.execPath, import.meta.path, "leaf"], { stdout: "pipe" });
+          await leaf.stdout.getReader().read();
+          console.log(leaf.pid);
+          setInterval(() => {}, 1000);
+        }
+      `,
+      );
+      child = Bun.spawn([process.execPath, fixture], { stdout: "pipe" });
+      if (!child.stdout || typeof child.stdout === "number")
+        throw new Error("Missing process tree fixture output");
+      const reader = child.stdout.getReader();
+      descendant = Number(
+        new TextDecoder().decode((await reader.read()).value).trim(),
+      );
+      reader.releaseLock();
+      expect(Number.isInteger(descendant) && descendant > 0).toBe(true);
+      expect(isAlive(descendant)).toBe(true);
+      expect(await Effect.runPromise(stopWindowsProcessTree(child.pid))).toBe(
+        true,
+      );
+      await child.exited;
+      expect(isAlive(child.pid)).toBe(false);
+      expect(isAlive(descendant)).toBe(false);
+    } finally {
+      if (descendant && isAlive(descendant)) process.kill(descendant);
+      if (child && child.exitCode === null) {
+        child.kill();
+        await child.exited;
+      }
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+  15000,
+);
 
 test("native archive extraction and replacement keep a running executable alive", async () => {
   const directory = mkdtempSync(join(tmpdir(), "framio native test "));
