@@ -2,7 +2,7 @@ import { injectLayerSources } from "./layers/source";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import * as FileSystem from "effect/FileSystem";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import type { ProjectPaths } from "../lib/paths";
 import type { Frame } from "../domain/project";
 
@@ -90,8 +90,8 @@ export const buildFrames = Effect.fn("Frames.build")(function* (
               build.onLoad({ filter: /\.[jt]sx$/ }, async (args) => {
                 const frame = sourceFrames.get(args.path);
                 if (
-                  !args.path.startsWith(p.pages + "/") &&
-                  !args.path.startsWith(join(p.framio, "components") + "/")
+                  !args.path.startsWith(p.pages + sep) &&
+                  !args.path.startsWith(join(p.framio, "components") + sep)
                 )
                   return undefined;
                 const content =
@@ -110,7 +110,7 @@ export const buildFrames = Effect.fn("Frames.build")(function* (
         return { ok: false as const, error: formatLogs(p, out.logs) };
       const outputs = await Promise.all(
         out.outputs.map(async (output) => ({
-          path: output.path.replace(/^\.\//, ""),
+          path: output.path.replaceAll("\\", "/").replace(/^\.\//, ""),
           text: await output.text(),
         })),
       );

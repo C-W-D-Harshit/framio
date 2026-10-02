@@ -53,7 +53,7 @@ and attaches the configured custom domain. The landing page is deployed at `http
 
 ## Installer
 
-The landing build copies the repository root `install.sh` into its static output.
+The landing build copies the repository root `install.sh` and `install.ps1` into its static output.
 Turbo includes that source file in the build inputs so installer changes invalidate
 the landing build cache. Update the root script and redeploy to publish changes.
 

@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { createHash } from "node:crypto";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { PackageCommandFailed } from "../domain/errors";
 import {
   RegistryObservation,
@@ -31,10 +31,21 @@ export const installRegistryItems = Effect.fn("installRegistryItems")(
     const adapter = join(temporary, "install.mjs");
     const receipt = join(temporary, "receipt.json");
     yield* fs.writeFileString(adapter, REGISTRY_INSTALLER_SOURCE);
+    const npx =
+      process.platform === "win32"
+        ? [
+            "node",
+            join(
+              dirname(Bun.which("npx") ?? ""),
+              "node_modules/npm/bin/npx-cli.js",
+            ),
+          ]
+        : ["npx"];
     const child = yield* spawner.spawn(
       ChildProcess.make(
-        "npx",
+        npx[0]!,
         [
+          ...npx.slice(1),
           "--yes",
           `--package=${SHADCN_PACKAGE}`,
           "--",
@@ -50,7 +61,11 @@ export const installRegistryItems = Effect.fn("installRegistryItems")(
         ],
         {
           cwd: directory,
-          env: { PATH: options.path, NO_COLOR: "1" },
+          env: {
+            PATH: options.path,
+            NO_COLOR: "1",
+            FRAMIO_BUN_EXECUTABLE: process.execPath,
+          },
           extendEnv: true,
           stdin: "ignore",
           stdout: "pipe",

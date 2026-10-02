@@ -32,7 +32,7 @@ const validateDestination = (destination) => {
 
 try {
   const executable = process.env.PATH.split(delimiter)
-    .map((directory) => join(directory, "shadcn"))
+    .map((directory) => process.platform === "win32" ? join(directory, "../shadcn/dist/index.js") : join(directory, "shadcn"))
     .find((path) => existsSync(path));
   if (!executable) throw new Error("The pinned shadcn package was not available.");
   const entry = realpathSync(executable);

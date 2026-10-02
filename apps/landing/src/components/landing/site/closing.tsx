@@ -156,7 +156,7 @@ export function Footer() {
       </Container>
       <Container className="mt-14 flex flex-col gap-2 font-mono text-[12px] text-landing-muted md:flex-row md:justify-between">
         <span>MIT License · {RELEASE_VERSION}</span>
-        <span>macOS on Apple Silicon · Linux x64 and arm64</span>
+        <span>macOS on Apple Silicon · Linux x64 and arm64 · Windows x64</span>
       </Container>
     </footer>
   );

@@ -5,13 +5,14 @@ import {
   copyFile,
   mkdir,
   open,
+  readdir,
   realpath,
   rename,
   stat,
   unlink,
 } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createReadStream } from "node:fs";
 import { createGunzip } from "node:zlib";
 import { spawn } from "node:child_process";
@@ -43,7 +44,8 @@ export function supportedPlatform(
   if (os === "darwin" && translated) arch = "arm64";
   if (
     (os === "darwin" && arch === "arm64") ||
-    (os === "linux" && (arch === "x64" || arch === "arm64"))
+    (os === "linux" && (arch === "x64" || arch === "arm64")) ||
+    (os === "win32" && arch === "x64")
   )
     return `${os}-${arch}`;
   throw new Error("No Framio release is available for this platform.");
@@ -67,6 +69,7 @@ export const command = (file: string, args: string[]) =>
       new Promise<string>((resolve, reject) => {
         const child = spawn(file, args, {
           signal,
+          windowsHide: true,
           stdio: ["ignore", "pipe", "pipe"],
           env: { ...process.env, BUN_BE_BUN: "0" },
         });
@@ -129,6 +132,8 @@ export const removeFile = (file: string) =>
     });
   });
 export async function syncDirectory(directory: string) {
+  // Windows cannot open directories through this API. File contents are synced before rename.
+  if (process.platform === "win32") return;
   const fd = await open(directory, "r");
   try {
     await fd.sync();
@@ -142,17 +147,39 @@ export const replaceExecutable = (
   mode: number,
 ) =>
   native(async () => {
-    const temporary = join(dirname(target), `.framio-update-${randomUUID()}`);
+    const temporary = join(
+      dirname(target),
+      `.framio-update-${randomUUID()}${process.platform === "win32" ? ".exe" : ""}`,
+    );
     try {
       await copyFile(source, temporary, constants.COPYFILE_EXCL);
       await chmod(temporary, mode);
-      const fd = await open(temporary, "r");
+      const fd = await open(temporary, "r+");
       try {
         await fd.sync();
       } finally {
         await fd.close();
       }
-      await rename(temporary, target);
+      if (process.platform === "win32") {
+        // Loaded executables can be renamed on Windows, but cannot be overwritten.
+        const prefix = `.${basename(target)}.retired-`;
+        for (const file of await readdir(dirname(target))) {
+          if (file.startsWith(prefix) && file.endsWith(".exe"))
+            await unlink(join(dirname(target), file)).catch(() => {});
+        }
+        const retired = join(dirname(target), `${prefix}${randomUUID()}.exe`);
+        await rename(target, retired);
+        try {
+          await rename(temporary, target);
+        } catch (error) {
+          await rename(retired, target);
+          throw error;
+        }
+        // A running canvas may still hold the old image. Retry cleanup on the next update.
+        await unlink(retired).catch(() => {});
+      } else {
+        await rename(temporary, target);
+      }
       await syncDirectory(dirname(target));
     } finally {
       await unlink(temporary).catch(() => {});
@@ -164,7 +191,7 @@ export const backupExecutable = (target: string, backup: string) =>
     const temporary = `${backup}.${randomUUID()}.tmp`;
     try {
       await copyFile(target, temporary, constants.COPYFILE_EXCL);
-      const fd = await open(temporary, "r");
+      const fd = await open(temporary, "r+");
       try {
         await fd.sync();
       } finally {

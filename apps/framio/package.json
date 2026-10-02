@@ -22,7 +22,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun run test:all",
     "test:effect": "vitest run --config vitest.effect.config.ts",
-    "test:integration": "sh scripts/test-integration.sh",
+    "test:integration": "bun scripts/test-integration.ts",
     "test:all": "bun run test:effect && bun run test:integration",
     "check": "bun run typecheck && bun run test:all",
     "format": "prettier --write src scripts tests package.json tsconfig.json vitest.effect.config.ts ../../.github",

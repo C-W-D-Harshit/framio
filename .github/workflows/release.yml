@@ -16,6 +16,7 @@ jobs:
           - runner: macos-latest # arm64
           - runner: ubuntu-latest # x64
           - runner: ubuntu-24.04-arm # arm64
+          - runner: windows-latest # x64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -36,12 +37,22 @@ jobs:
         # Keep Chromium's sandbox enabled on this ephemeral runner.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: bun run check
+        if: runner.os != 'Windows'
+      - run: bun run typecheck && bun run test:effect
+        if: runner.os == 'Windows'
+      - run: bun test apps/framio/tests/windows
+        if: runner.os == 'Windows'
       - run: bun run build:binary
+        id: binary
       - name: Smoke test
+        shell: bash
         run: |
           bin=$(ls apps/framio/dist/bin/framio-* | grep -v '\.tar\.gz$')
           python3 apps/framio/scripts/smoke-binary.py "$bin"
           python3 apps/framio/scripts/smoke-updater.py "$bin"
+      - name: Windows installer, canvas and browser checks
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.binary.outcome == 'success' }}
+        run: python apps/framio/scripts/smoke-windows.py apps/framio/dist/bin/framio-win32-x64.exe
       - uses: actions/upload-artifact@v4
         with:
           name: framio-${{ matrix.runner }}

@@ -22,7 +22,10 @@ export const stageRelease = Effect.fn("UpdateStaging.stage")(function* (
     await mkdir(directory, { recursive: true, mode: 0o700 });
   });
   const archive = join(directory, "download.partial"),
-    executable = join(directory, "staged");
+    executable = join(
+      directory,
+      process.platform === "win32" ? "staged.exe" : "staged",
+    );
   yield* removeFile(archive);
   yield* removeFile(executable);
   const sums = yield* boundedFetch(
@@ -55,7 +58,8 @@ export const stageRelease = Effect.fn("UpdateStaging.stage")(function* (
   yield* extractExecutable(
     archive,
     executable,
-    release.assetName.replace(/\.tar\.gz$/, ""),
+    release.assetName.replace(/\.tar\.gz$/, "") +
+      (release.assetName.startsWith("framio-win32-") ? ".exe" : ""),
   );
   if ((yield* executableVersion(executable)) !== release.version)
     return yield* new UpdateFailure({

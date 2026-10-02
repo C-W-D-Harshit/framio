@@ -323,6 +323,15 @@ export function InstallCTA({
           </span>
         ))}
       </code>
+      <a
+        href="/docs/#install"
+        className={cn(
+          "text-[12px] underline underline-offset-4",
+          onBlue ? "text-on-corner-blue" : "text-landing-muted",
+        )}
+      >
+        Installing on Windows? Use PowerShell.
+      </a>
     </div>
   );
 }

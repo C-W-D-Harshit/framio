@@ -6,6 +6,7 @@ export const launchBrowser = (command: string[]) =>
   Effect.try({
     try: () => {
       Bun.spawn(command, {
+        windowsHide: true,
         stdin: "ignore",
         stdout: "ignore",
         stderr: "ignore",

@@ -243,12 +243,25 @@ export class ServerRegistry extends Context.Service<
           return yield* new ServerIdentityMismatch({
             message: `Cannot verify Framio pid ${info.pid} for ${root}; refusing to stop it.`,
           });
-        yield* Effect.try({
-          try: () => process.kill(info.pid, "SIGTERM"),
-          catch: (cause) => new ServerStartupFailed({ message: String(cause) }),
-        });
+        if (process.platform === "win32") {
+          yield* fs.writeFileString(
+            join(projectPaths(root).state, `stop-${info.pid}`),
+            "stop",
+          );
+        } else
+          yield* Effect.try({
+            try: () => process.kill(info.pid, "SIGTERM"),
+            catch: (cause) =>
+              new ServerStartupFailed({ message: String(cause) }),
+          });
         const stopped = yield* Effect.gen(function* () {
-          while (isAlive(info.pid)) yield* Effect.sleep("50 millis");
+          while (
+            isAlive(info.pid) ||
+            (process.platform === "win32" &&
+              info.supervisorPid &&
+              isAlive(info.supervisorPid))
+          )
+            yield* Effect.sleep("50 millis");
         }).pipe(Effect.timeoutOption("10 seconds"));
         if (stopped._tag === "None")
           return yield* new ServerStartupFailed({

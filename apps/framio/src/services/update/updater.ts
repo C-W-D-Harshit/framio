@@ -28,7 +28,8 @@ declare const FRAMIO_VERSION: string | undefined;
 export const runningVersion =
   typeof FRAMIO_VERSION === "string" ? FRAMIO_VERSION : "dev";
 export const compiled = () =>
-  Bun.main.startsWith("/$bunfs") || Bun.main.startsWith("B:/~BUN");
+  Bun.main.startsWith("/$bunfs") ||
+  Bun.main.replaceAll("\\", "/").startsWith("B:/~BUN");
 export const makeUpdater = Effect.fn("Updater.make")(function* (
   options: {
     directory?: string;
@@ -51,8 +52,14 @@ export const makeUpdater = Effect.fn("Updater.make")(function* (
   );
   const key = `installation:${identity.id}`;
   const files = join(directory, identity.id),
-    staged = join(files, "staged"),
-    backup = join(files, "previous");
+    staged = join(
+      files,
+      process.platform === "win32" ? "staged.exe" : "staged",
+    ),
+    backup = join(
+      files,
+      process.platform === "win32" ? "previous.exe" : "previous",
+    );
   const store = yield* makeUpdateStorage(directory);
   const discovery = makeDiscovery(
     store,

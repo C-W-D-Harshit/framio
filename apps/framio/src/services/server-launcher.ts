@@ -67,6 +67,19 @@ export class ServerLauncher extends Context.Service<
                 yield* child.stop;
                 return { info, started: false };
               }
+              if (temporary && process.platform === "win32")
+                yield* Effect.addFinalizer(() =>
+                  registry
+                    .stop(info, p.root)
+                    .pipe(
+                      Effect.catch((error) =>
+                        Effect.logWarning(
+                          "Temporary server cleanup failed",
+                          error.message,
+                        ),
+                      ),
+                    ),
+                );
               if (!temporary) yield* child.detach;
               return { info, started: true };
             }

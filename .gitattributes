@@ -1,0 +1,2 @@
+# Embedded scaffold bytes must match the release baseline on every build host.
+* text=auto eol=lf

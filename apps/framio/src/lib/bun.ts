@@ -25,6 +25,7 @@ export const runBun = Effect.fn("runBun")(function* (
       cwd,
       env,
       detached: true,
+      windowsHide: true,
       forceKillAfter: "10 seconds",
       stdout: opts.quiet ? "pipe" : "inherit",
       stderr: opts.quiet ? "pipe" : "inherit",
@@ -52,7 +53,8 @@ export const runBun = Effect.fn("runBun")(function* (
 /** Command to re-invoke this CLI, both from source (`bun src/cli.ts`) and as a compiled binary. */
 export function selfCommand(args: string[]): string[] {
   const compiled =
-    Bun.main.startsWith("/$bunfs") || Bun.main.startsWith("B:/~BUN");
+    Bun.main.startsWith("/$bunfs") ||
+    Bun.main.replaceAll("\\", "/").startsWith("B:/~BUN");
   return compiled
     ? [process.execPath, ...args]
     : [process.execPath, Bun.main, ...args];
