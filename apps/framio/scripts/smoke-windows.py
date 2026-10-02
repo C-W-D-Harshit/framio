@@ -43,7 +43,11 @@ with tempfile.TemporaryDirectory(prefix="framio windows smoke ") as temporary:
         if (result.returncode == 0) != expect_success:
             raise RuntimeError(result.stdout + result.stderr)
     def cli(*args, timeout=90, env=None):
-        return subprocess.check_output([str(target), *args], cwd=project, env=env or environment, text=True, encoding="utf-8", stderr=subprocess.STDOUT, timeout=timeout)
+        print("Checking framio " + " ".join(args), flush=True)
+        result = subprocess.run([str(target), *args], cwd=project, env=env or environment, text=True, encoding="utf-8", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        if result.returncode:
+            raise RuntimeError(f"framio {' '.join(args)} exited {result.returncode}:\n{result.stdout}")
+        return result.stdout
     def request(path):
         with urllib.request.urlopen(info["url"] + path, timeout=5) as response:
             return json.load(response)
@@ -67,7 +71,7 @@ with tempfile.TemporaryDirectory(prefix="framio windows smoke ") as temporary:
         cli("start", "--background", "--no-open")
         info = json.loads((project / ".framio" / ".state" / "server.json").read_text())
         assert request("/api/health")["pid"] == info["pid"]
-        assert str(info["pid"]) in cli("ps")
+        assert str(info["pid"]) in cli("list")
         first_pid = info["pid"]
         cli("start", "--background", "--no-open")
         assert request("/api/health")["pid"] == first_pid
