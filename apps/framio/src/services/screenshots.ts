@@ -24,6 +24,7 @@ type CaptureOptions = {
   layers?: readonly string[];
   inspectOnly?: boolean;
   emitLayers?: boolean;
+  generation?: string;
 };
 export class Screenshots extends Context.Service<
   Screenshots,
@@ -108,6 +109,7 @@ export class Screenshots extends Context.Service<
               layers = [],
               inspectOnly = false,
               emitLayers = true,
+              generation,
             }: CaptureOptions = {},
           ) =>
             resources.withPage((page) =>
@@ -121,7 +123,7 @@ export class Screenshots extends Context.Service<
                     return yield* new CaptureFailed({
                       message: "Image frames have no DOM layers.",
                     });
-                  const src = `${baseUrl}/img/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}?v=${Date.now()}`;
+                  const src = `${baseUrl}/img/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}?${generation ? `g=${generation}` : `v=${Date.now()}`}`;
                   yield* chromiumOperation(() =>
                     page.setContent(
                       `<html><body style="margin:0"><img src="${src}" style="display:block;width:${width}px;height:${height}px"></body></html>`,
@@ -147,7 +149,7 @@ export class Screenshots extends Context.Service<
                 }
                 yield* chromiumOperation(() =>
                   page.goto(
-                    `${baseUrl}/f/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}?width=${frame.meta.width}&height=${frame.meta.height}`,
+                    `${baseUrl}/f/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}?width=${frame.meta.width}&height=${frame.meta.height}${generation ? `&g=${generation}` : ""}${!emitLayers ? "&preview=1" : ""}`,
                   ),
                 );
                 yield* chromiumOperation(() =>

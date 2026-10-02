@@ -15,6 +15,7 @@ export const SnapshotFrame = Schema.Struct({
   note: Schema.optional(Schema.String),
   source: Schema.optional(Schema.String),
   version: Schema.Finite,
+  geometryVersion: Schema.optional(Schema.String),
   error: Schema.NullOr(Schema.String),
 });
 export type SnapshotFrame = typeof SnapshotFrame.Type;

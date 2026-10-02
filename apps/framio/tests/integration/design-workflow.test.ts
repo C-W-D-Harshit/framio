@@ -317,3 +317,84 @@ test("numeric YAML design tokens generate CSS while blank values stay invalid", 
     );
   }
 });
+
+test("incremental project scans refresh changed files and retain unchanged image bytes", async () => {
+  const p = project();
+  const page = join(p.pages, "01-moodboard");
+  writeFileSync(
+    join(page, "frame.tsx"),
+    'export const meta={name:"Before"};export default function Frame(){return null}',
+  );
+  writeFileSync(join(page, "image.svg"), svg('width="390" height="844"'));
+  const first = await scanProject(p);
+  writeFileSync(
+    join(page, "frame.tsx"),
+    'export const meta={name:"After"};export default function Frame(){return null}',
+  );
+  const next = await Effect.runPromise(
+    scanProjectEffect(
+      p,
+      first,
+      new Set(["pages\\01-moodboard\\frame.tsx"]),
+    ).pipe(Effect.provide(BunFileSystem.layer)),
+  );
+  expect(
+    next[0]!.frames.find((frame) => frame.slug === "frame")?.meta.name,
+  ).toBe("After");
+  expect(
+    next[0]!.frames.find((frame) => frame.kind === "image")?.imageContent,
+  ).toBe(
+    first[0]!.frames.find((frame) => frame.kind === "image")?.imageContent,
+  );
+  writeFileSync(join(page, "image.svg"), svg('width="768" height="1024"'));
+  const refreshed = await Effect.runPromise(
+    scanProjectEffect(p, next, new Set(["pages/01-moodboard"])).pipe(
+      Effect.provide(BunFileSystem.layer),
+    ),
+  );
+  expect(
+    refreshed[0]!.frames.find((frame) => frame.kind === "image")?.meta.width,
+  ).toBe(768);
+});
+
+test("a reused Tailwind compiler discovers new utilities and resets on theme edits", async () => {
+  const p = project();
+  symlinkSync(
+    join(import.meta.dir, "../../node_modules"),
+    join(p.framio, "node_modules"),
+  );
+  writeFileSync(p.theme, '@import "tailwindcss";');
+  const file = join(p.pages, "01-moodboard/frame.tsx");
+  writeFileSync(
+    file,
+    'export default function Frame(){return <div className="p-4"/>}',
+  );
+  const session: import("../../src/server/tailwind").ThemeSession = {
+    builds: 0,
+  };
+  const build = () =>
+    Effect.runPromise(
+      buildThemeCssEffect(p, session).pipe(Effect.provide(BunFileSystem.layer)),
+    );
+  expect((await build()).css).toContain(".p-4");
+  const compiler = session.compiler;
+  writeFileSync(
+    file,
+    'export default function Frame(){return <div className="p-8 text-red-500"/>}',
+  );
+  const next = await build();
+  expect(next.error).toBeNull();
+  expect(next.css).toContain(".p-8");
+  expect(next.css).toContain(".text-red-500");
+  expect(session.compiler).toBe(compiler);
+  writeFileSync(
+    p.theme,
+    '@import "tailwindcss"; @theme { --color-brand: #123456; }',
+  );
+  writeFileSync(
+    file,
+    'export default function Frame(){return <div className="text-brand"/>}',
+  );
+  expect((await build()).css).toContain(".text-brand");
+  expect(session.compiler).not.toBe(compiler);
+});

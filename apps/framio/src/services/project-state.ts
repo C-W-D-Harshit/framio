@@ -1,3 +1,4 @@
+import { makeGenerationLeases } from "./generation-leases";
 import type { LayerWarning } from "../contracts/layers";
 import { readComments } from "./comments";
 import type { Comment } from "../contracts/comments";
@@ -8,6 +9,7 @@ import * as Metric from "effect/Metric";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import * as Semaphore from "effect/Semaphore";
 import * as Schedule from "effect/Schedule";
 import { watchProject } from "../platform/project-watch";
 import { basename, join } from "node:path";
@@ -20,7 +22,7 @@ import {
   type BuildArtifacts,
 } from "../server/bundler";
 import { scanProject } from "../server/project";
-import { buildThemeCss } from "../server/tailwind";
+import { buildThemeCss, type ThemeSession } from "../server/tailwind";
 import { Diagnostics, measure } from "./diagnostics";
 import { makeBuildCoordinator } from "./build-coordinator";
 
@@ -50,6 +52,7 @@ export function projectSnapshot(
   root: string,
   value: ProjectGeneration,
 ): Snapshot {
+  const cssHash = Bun.hash(value.css.text).toString(16);
   return {
     projectName: basename(root),
     comments: value.comments,
@@ -80,6 +83,7 @@ export function projectSnapshot(
           frame.kind === "image"
             ? (value.imageVersions.get(frame.id) ?? 0)
             : (value.artifacts.frames.get(frame.id)?.version ?? 0),
+        geometryVersion: `${frame.kind === "image" ? value.imageVersions.get(frame.id) : value.artifacts.frames.get(frame.id)?.hash}-${cssHash}`,
         error:
           frame.metaError ??
           value.artifacts.frames.get(frame.id)?.error ??
@@ -104,6 +108,8 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
           ),
         ),
   );
+  const capturePermits = yield* Semaphore.make(8);
+  const leases = yield* makeGenerationLeases<ProjectGeneration>();
   const initial: ProjectGeneration = {
     comments: [],
     commentsError: null,
@@ -117,6 +123,7 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
     imageVersions: new Map(),
     runtimeErrors: new Map(),
   };
+  const themeSession: ThemeSession = { builds: 0 };
   const build = Effect.fn("ProjectState.build")(
     function* (
       previous: ProjectGeneration,
@@ -132,7 +139,10 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
           Effect.flatMap(readComments),
           Effect.result,
         );
-      const pages = yield* scanProject(p);
+      const pages =
+        files.size === 1 && files.has("comments.json") && !full
+          ? previous.pages
+          : yield* scanProject(p, previous.pages, full ? undefined : files);
       const frames = pages.flatMap((page) => page.frames);
       const previousFrames = new Map(
         previous.pages.flatMap((page) =>
@@ -163,6 +173,15 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         [...files].some(
           (file) => file.endsWith(".css") || file === "DESIGN.md",
         );
+      if (
+        full ||
+        [...files].some(
+          (file) =>
+            file.endsWith(".css") || /^(package\.json|bun\.lockb?)$/.test(file),
+        )
+      ) {
+        themeSession.source = undefined;
+      }
       const [built, theme] = yield* Effect.all(
         [
           code
@@ -173,7 +192,7 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
               )
             : Effect.succeed({ artifacts: previous.artifacts, changed: [] }),
           cssChanged
-            ? buildThemeCss(p)
+            ? buildThemeCss(p, themeSession)
             : Effect.succeed({
                 css: previous.css.text,
                 error: previous.css.error,
@@ -188,19 +207,13 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         frames.filter((frame) => frame.kind === "image"),
         (frame) =>
           Effect.gen(function* () {
-            const file = join(
-              imageDirectory,
-              String(previous.generation + 1),
-              frame.page,
-              frame.slug,
-            );
-            yield* fs.makeDirectory(
-              join(imageDirectory, String(previous.generation + 1), frame.page),
-              { recursive: true },
-            );
             const bytes =
               frame.imageContent ?? (yield* fs.readFile(frame.file));
-            yield* fs.writeFile(file, bytes);
+            const file = join(
+              imageDirectory,
+              `${Bun.hash(bytes).toString(16)}-${frame.slug}`,
+            );
+            if (!(yield* fs.exists(file))) yield* fs.writeFile(file, bytes);
             imageVersions.set(frame.id, Number(Bun.hash(bytes)));
             imageBytes += bytes.byteLength;
             imageFiles.set(frame.id, file);
@@ -276,19 +289,26 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
         css: {
           text: theme.css,
           error: theme.error,
-          version: previous.css.version + (cssChanged ? 1 : 0),
+          version:
+            previous.css.version +
+            (theme.css !== previous.css.text ||
+            theme.error !== previous.css.error
+              ? 1
+              : 0),
         },
       };
-      for (const old of [previous, ...previous.retained]) {
-        if (
-          old.generation > 0 &&
-          !retained.some((assets) => assets.generation === old.generation)
-        )
-          yield* fs.remove(join(imageDirectory, String(old.generation)), {
-            recursive: true,
-            force: true,
-          });
+      const active = yield* leases.values;
+      const referencedImages = new Set(
+        [next, ...retained, ...active].flatMap((assets) => [
+          ...assets.imageFiles.values(),
+        ]),
+      );
+      for (const name of yield* fs.readDirectory(imageDirectory)) {
+        const file = join(imageDirectory, name);
+        if (!referencedImages.has(file))
+          yield* fs.remove(file, { force: true });
       }
+
       yield* Metric.update(Diagnostics.builds, 1);
       yield* Effect.logInfo(
         `built ${frames.length} frames, generation ${next.generation}`,
@@ -400,7 +420,24 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
     ),
     Effect.forkScoped,
   );
-  return coordinator;
+  const withGeneration = <A, E, R>(
+    use: (state: ProjectGeneration, token: string) => Effect.Effect<A, E, R>,
+  ) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const lease = yield* Effect.acquireRelease(
+          coordinator.withStableState(leases.acquire),
+          leases.release,
+        );
+        return yield* use(lease.state, lease.token);
+      }),
+    ).pipe(Semaphore.withPermits(capturePermits, 1));
+  return {
+    ...coordinator,
+    withGeneration,
+    pinned: leases.get,
+    pinnedValues: leases.values,
+  };
 });
 export class ProjectState extends Context.Service<
   ProjectState,

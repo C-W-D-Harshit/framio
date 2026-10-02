@@ -1,3 +1,4 @@
+import { reconcileSnapshot } from "../snapshot-reconciliation";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -29,19 +30,27 @@ const make = Effect.gen(function* () {
     selection: (payload) =>
       api.project.selection({ payload }).pipe(
         Effect.tap(() =>
-          SubscriptionRef.update(state, (current) => ({
-            ...current,
-            saveError: null,
-          })),
+          SubscriptionRef.update(state, (current) =>
+            current.saveError === null
+              ? current
+              : {
+                  ...current,
+                  saveError: null,
+                },
+          ),
         ),
       ),
     canvas: (payload) =>
       api.project.canvas({ payload }).pipe(
         Effect.tap(() =>
-          SubscriptionRef.update(state, (current) => ({
-            ...current,
-            saveError: null,
-          })),
+          SubscriptionRef.update(state, (current) =>
+            current.saveError === null
+              ? current
+              : {
+                  ...current,
+                  saveError: null,
+                },
+          ),
         ),
       ),
     onError: (error) =>
@@ -72,7 +81,7 @@ const make = Effect.gen(function* () {
         Stream.runForEach((snapshot) =>
           SubscriptionRef.update(state, (current) => ({
             ...current,
-            snapshot,
+            snapshot: reconcileSnapshot(current.snapshot, snapshot),
             connected: true,
           })),
         ),

@@ -1,3 +1,12 @@
+import { sourceFrame } from "./frame-bridge";
+import { runPreviewController } from "./services/preview-controller";
+import {
+  geometryFingerprint,
+  readGeometry,
+  writeGeometry,
+} from "./frame-geometry";
+import * as Effect from "effect/Effect";
+import { Atom } from "effect/reactivity";
 import { viewportId, viewports } from "../domain/viewports";
 import { CommentsPanel, type CommentDraft } from "./comments";
 import type { Comment } from "../contracts/comments";
@@ -9,12 +18,15 @@ import {
   useNodesInitialized,
   useReactFlow,
   useStore,
+  useStoreApi,
   type Edge,
   type NodeTypes,
   type Viewport,
 } from "@xyflow/react";
 import {
   useCallback,
+  useContext,
+  useEffectEvent,
   useEffect,
   useMemo,
   useRef,
@@ -27,9 +39,17 @@ import {
   FrameMessage,
   Viewport as ViewportSchema,
 } from "../contracts/frame-message";
-import { useAtom, useAtomSet } from "@effect/atom-react";
+import {
+  RegistryContext,
+  useAtom,
+  useAtomSet,
+  useAtomValue,
+} from "@effect/atom-react";
 import {
   heightsAtom,
+  previewAtom,
+  readyVersionAtom,
+  layersAtom,
   movedAtom,
   selectionAtom,
   saveSelectionAtom,
@@ -53,8 +73,6 @@ export type CanvasSelection = {
 
 const nodeTypes: NodeTypes = { frame: FrameNode };
 const FIT = { padding: 0.15 };
-/** Pages with more frames than this use thumbnails when zoomed out. */
-const THUMB_THRESHOLD = 8;
 
 type Props = {
   page: Page;
@@ -162,7 +180,59 @@ function CanvasInner({
     },
     [page.frames, onCommentsChange],
   );
-  const [heights, setHeights] = useAtom(heightsAtom(page.id));
+  const geometryKey = `${page.id}:${JSON.stringify(page.frames.map((frame) => [frame.id, frame.geometryVersion ?? [frame.version, cssVersion], frame.meta]))}`;
+  const [reportedHeights, setHeights] = useAtom(heightsAtom(geometryKey));
+  const cachedHeights = useMemo(
+    () => readGeometry(projectName, page.id, page.frames, cssVersion),
+    [projectName, page.id, page.frames, cssVersion],
+  );
+  const heights = useMemo(
+    () => ({ ...cachedHeights, ...reportedHeights }),
+    [cachedHeights, reportedHeights],
+  );
+  useEffect(
+    () => writeGeometry(projectName, page.id, page.frames, cssVersion, heights),
+    [projectName, page.id, page.frames, cssVersion, heights],
+  );
+  const registry = useContext(RegistryContext);
+  const store = useStoreApi<FrameNodeType>();
+  const scheduler = useMemo(
+    () =>
+      Atom.make(
+        runPreviewController({
+          read: () => {
+            const current = store.getState();
+            return {
+              frames: current.nodes.map((node) => ({
+                id: node.id,
+                kind: node.data.frame.kind,
+                x: node.position.x,
+                y: node.position.y,
+                width: node.data.frame.meta.width,
+                height: node.data.height,
+                selected: node.selected,
+                version: node.data.frame.version,
+              })),
+              viewport: {
+                x: current.transform[0],
+                y: current.transform[1],
+                zoom: current.transform[2],
+                width: current.width,
+                height: current.height,
+                dpr: devicePixelRatio,
+              },
+            };
+          },
+          subscribe: (wake) => store.subscribe(wake),
+          publish: (id, mode) => {
+            if (!mode.live) registry.set(readyVersionAtom(id), null);
+            registry.set(previewAtom(id), mode);
+          },
+        }),
+      ).pipe(Atom.setIdleTTL(0)),
+    [store, registry],
+  );
+  useAtomValue(scheduler);
   const saveSelection = useAtomSet(saveSelectionAtom);
   const saveCanvas = useAtomSet(saveCanvasAtom);
   const [savedViewport, saveViewport] = useSavedViewport(
@@ -188,7 +258,20 @@ function CanvasInner({
     () => ({ ...page.positions, ...moved }),
     [page.positions, moved],
   );
-  const useThumbs = page.frames.length > THUMB_THRESHOLD;
+
+  const parents = useMemo(
+    () => new Map(page.frames.map((frame) => [frame.id, frame.meta.name])),
+    [page.frames],
+  );
+  const frameComments = useMemo(() => {
+    const groups = new Map<string, readonly Comment[]>();
+    for (const comment of pageComments)
+      groups.set(comment.frame, [
+        ...(groups.get(comment.frame) ?? []),
+        comment,
+      ]);
+    return groups;
+  }, [page.frames, pageComments]);
 
   const laidOut = useMemo<FrameNodeType[]>(() => {
     return layoutViewports(page.frames, heights, saved).map(
@@ -199,14 +282,12 @@ function CanvasInner({
         dragHandle: ".frame-drag",
         data: {
           frame,
-          parentName: page.frames.find((parent) => parent.id === frame.parent)
-            ?.meta.name,
-          comments: pageComments,
+          parentName: frame.parent ? parents.get(frame.parent) : undefined,
+          comments: frameComments.get(frame.frameId ?? frame.id) ?? [],
           showResolved,
           onComment: openComment,
           height: heights[frame.id] ?? frame.meta.height,
           cssVersion,
-          useThumbs,
         },
       }),
     );
@@ -215,8 +296,8 @@ function CanvasInner({
     heights,
     saved,
     cssVersion,
-    useThumbs,
-    pageComments,
+    frameComments,
+    parents,
     showResolved,
     openComment,
   ]);
@@ -239,6 +320,18 @@ function CanvasInner({
       return laidOut.map((n) => {
         const o = old.get(n.id);
         if (!o) return n;
+        const same =
+          o.data.frame.version === n.data.frame.version &&
+          JSON.stringify(o.data.frame) === JSON.stringify(n.data.frame) &&
+          o.data.height === n.data.height &&
+          o.data.cssVersion === n.data.cssVersion &&
+          o.data.parentName === n.data.parentName &&
+          o.data.showResolved === n.data.showResolved &&
+          o.data.onComment === n.data.onComment &&
+          JSON.stringify(o.data.comments) === JSON.stringify(n.data.comments) &&
+          o.position.x === n.position.x &&
+          o.position.y === n.position.y;
+        if (same) return o;
         return {
           ...n,
           selected: o.selected,
@@ -248,43 +341,32 @@ function CanvasInner({
     });
   }, [laidOut, setNodes]);
 
-  const edges = useMemo<Edge[]>(
-    () =>
-      page.frames
-        .filter((f) => {
-          const parent = laidOut.find(
-            (node) => (node.data.frame.frameId ?? node.id) === f.parent,
-          );
-          const child = laidOut.find(
-            (node) => (node.data.frame.frameId ?? node.id) === f.id,
-          );
-          return parent && child && parent.position.x !== child.position.x;
-        })
-        .map((f) => ({
-          id: `${f.parent}->${f.id}`,
-          source:
-            laidOut.filter((n) => n.data.frame.frameId === f.parent).at(-1)
-              ?.id ?? f.parent!,
-          target:
-            laidOut.find((n) => n.data.frame.frameId === f.id)?.id ?? f.id,
-          selectable: false,
-        })),
-    [page.frames, laidOut],
-  );
-
-  // Frames report their real height after loading; keep the first fit in sync until the user moves.
-  const mountedAt = useRef(performance.now());
-  const userMoved = useRef(savedViewport !== null);
-  const autoFitting = useRef(false);
-  useEffect(() => {
-    if (userMoved.current || performance.now() - mountedAt.current > 3000)
-      return;
-    const raf = requestAnimationFrame(() => {
-      autoFitting.current = true;
-      flow.fitView(FIT).finally(() => (autoFitting.current = false));
+  const edges = useMemo<Edge[]>(() => {
+    const first = new Map<string, FrameNodeType>(),
+      last = new Map<string, FrameNodeType>();
+    for (const node of laidOut) {
+      const id = node.data.frame.frameId ?? node.id;
+      if (!first.has(id)) first.set(id, node);
+      last.set(id, node);
+    }
+    return page.frames.flatMap((frame) => {
+      const parent = frame.parent ? first.get(frame.parent) : undefined;
+      const child = first.get(frame.id);
+      return parent && child && parent.position.x !== child.position.x
+        ? [
+            {
+              id: `${frame.parent}->${frame.id}`,
+              source: last.get(frame.parent!)?.id ?? parent.id,
+              target: child.id,
+              selectable: false,
+            },
+          ]
+        : [];
     });
-    return () => cancelAnimationFrame(raf);
-  }, [laidOut, flow]);
+  }, [page.frames, laidOut]);
+
+  // The first fit uses cached geometry. Later measurements never move the camera.
+  const userMoved = useRef(savedViewport !== null);
 
   // --- Selection ------------------------------------------------------------
   const [selection, setSelection] = useAtom(selectionAtom);
@@ -519,100 +601,152 @@ function CanvasInner({
   ]);
 
   // --- Messages from frame iframes ------------------------------------------
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      const decoded = Schema.decodeUnknownResult(FrameMessage)(e.data);
-      if (Result.isFailure(decoded)) return;
-      const msg = decoded.success;
-      const iframe = [
-        ...document.querySelectorAll<HTMLIFrameElement>("iframe[data-frame]"),
-      ].find(
-        (iframe) =>
-          iframe.dataset.frame === msg.frame &&
-          iframe.contentWindow === e.source,
+  const sizeBatch = useRef<Record<string, number>>({});
+  const sizeAnimation = useRef<number | null>(null);
+  const reportHeight = (frame: string, height: number) => {
+    sizeBatch.current[frame] = height;
+    if (sizeAnimation.current !== null) return;
+    sizeAnimation.current = requestAnimationFrame(() => {
+      const sizes = sizeBatch.current;
+      sizeBatch.current = {};
+      sizeAnimation.current = null;
+      setHeights((current) =>
+        Object.entries(sizes).some(([id, height]) => current[id] !== height)
+          ? { ...current, ...sizes }
+          : current,
       );
-      if (!iframe || e.origin !== location.origin) return;
-      const frame: string = msg.frame;
-      switch (msg.type) {
-        case "layers":
+    });
+  };
+  useEffect(
+    () => () => {
+      if (sizeAnimation.current !== null)
+        cancelAnimationFrame(sizeAnimation.current);
+    },
+    [],
+  );
+  const receiveMessage = useEffectEvent((e: MessageEvent) => {
+    const decoded = Schema.decodeUnknownResult(FrameMessage)(e.data);
+    if (Result.isFailure(decoded)) return;
+    const msg = decoded.success;
+    const iframe = sourceFrame(e.source, msg.frame);
+    if (!iframe || e.origin !== location.origin) return;
+    const frame: string = msg.frame;
+    switch (msg.type) {
+      case "layers":
+        registry.set(layersAtom(frame), msg.report);
+        break;
+      case "size":
+      case "ready":
+        if (msg.type === "ready") {
+          registry.set(
+            readyVersionAtom(frame),
+            Number(new URL(iframe.src).searchParams.get("v")),
+          );
           window.dispatchEvent(
-            new CustomEvent("framio:layers", {
-              detail: { frame, report: msg.report },
+            new CustomEvent("framio:frame-state", {
+              detail: {
+                id: frame,
+                version: Number(new URL(iframe.src).searchParams.get("v")),
+                phase: "ready",
+              },
             }),
           );
-          break;
-        case "size":
-        case "ready":
-          if (typeof msg.height === "number")
-            setHeights((h) =>
-              h[frame] === msg.height ? h : { ...h, [frame]: msg.height },
-            );
-          break;
-        case "select": {
-          userMoved.current = true;
-          if (
-            tool === "comment" &&
-            msg.x !== undefined &&
-            msg.y !== undefined
-          ) {
-            makeDraft(frame, msg.x, msg.y, msg.element);
-            break;
-          }
-          const viewport = laidOut.find((n) => n.id === frame)?.data.frame;
-          selectFrames([frame]);
-          setSelection({
-            frames: [viewport?.frameId ?? frame],
-            element: msg.element,
-            layer: msg.layer,
-            ...(viewport?.meta.widths ? { width: viewport.meta.width } : {}),
-          });
+        }
+        if (
+          typeof msg.height === "number" &&
+          Number(new URL(iframe.src).searchParams.get("v")) ===
+            layoutIndex.nodes.get(frame)?.data.frame.version
+        )
+          reportHeight(frame, msg.height);
+        break;
+      case "error":
+        registry.set(
+          readyVersionAtom(frame),
+          Number(new URL(iframe.src).searchParams.get("v")),
+        );
+        window.dispatchEvent(
+          new CustomEvent("framio:frame-state", {
+            detail: {
+              id: frame,
+              version: Number(new URL(iframe.src).searchParams.get("v")),
+              phase: "ready",
+            },
+          }),
+        );
+        break;
+      case "select": {
+        userMoved.current = true;
+        if (tool === "comment" && msg.x !== undefined && msg.y !== undefined) {
+          makeDraft(frame, msg.x, msg.y, msg.element);
           break;
         }
-        case "dblclick":
-          zoomToFrames([frame]);
-          break;
-        case "contextmenu":
-          setMenu({ x: msg.clientX, y: msg.clientY, frame });
-          break;
-        case "pan-start":
-          startPan(msg.screenX, msg.screenY);
-          break;
-        case "pan-move":
-          movePan(msg.screenX, msg.screenY);
-          break;
-        case "pan-end":
-          endPan();
-          break;
-        case "key":
-          // Keys pressed while a frame has focus drive the canvas too.
-          window.dispatchEvent(
-            new KeyboardEvent(msg.phase, {
-              key: msg.key,
-              code: msg.code,
-              repeat: msg.repeat,
-              shiftKey: msg.shiftKey,
-              metaKey: msg.metaKey,
-              ctrlKey: msg.ctrlKey,
-              altKey: msg.altKey,
-            }),
-          );
-          break;
+        const viewport = laidOut.find((n) => n.id === frame)?.data.frame;
+        selectFrames([frame]);
+        setSelection({
+          frames: [viewport?.frameId ?? frame],
+          element: msg.element,
+          layer: msg.layer,
+          ...(viewport?.meta.widths ? { width: viewport.meta.width } : {}),
+        });
+        break;
       }
-    };
+      case "dblclick":
+        zoomToFrames([frame]);
+        break;
+      case "contextmenu":
+        setMenu({ x: msg.clientX, y: msg.clientY, frame });
+        break;
+      case "pan-start":
+        startPan(msg.screenX, msg.screenY);
+        break;
+      case "pan-move":
+        movePan(msg.screenX, msg.screenY);
+        break;
+      case "pan-end":
+        endPan();
+        break;
+      case "key":
+        // Keys pressed while a frame has focus drive the canvas too.
+        window.dispatchEvent(
+          new KeyboardEvent(msg.phase, {
+            key: msg.key,
+            code: msg.code,
+            repeat: msg.repeat,
+            shiftKey: msg.shiftKey,
+            metaKey: msg.metaKey,
+            ctrlKey: msg.ctrlKey,
+            altKey: msg.altKey,
+          }),
+        );
+        break;
+    }
+  });
+  const receiveHeight = useEffectEvent(
+    (event: CustomEvent<{ id: string; height: number; key: string }>) => {
+      const frame = layoutIndex.nodes.get(event.detail.id)?.data.frame;
+      if (
+        frame &&
+        event.detail.key ===
+          geometryFingerprint(frame, frame.meta.width, cssVersion) &&
+        Number.isFinite(event.detail.height) &&
+        event.detail.height > 0
+      )
+        reportHeight(event.detail.id, event.detail.height);
+    },
+  );
+  useEffect(() => {
+    const onHeight = (event: Event) =>
+      receiveHeight(
+        event as CustomEvent<{ id: string; height: number; key: string }>,
+      );
+    window.addEventListener("framio:height", onHeight);
+    const onMessage = (event: MessageEvent) => receiveMessage(event);
     window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [
-    selectFrames,
-    zoomToFrames,
-    startPan,
-    movePan,
-    endPan,
-    setHeights,
-    setSelection,
-    tool,
-    makeDraft,
-    laidOut,
-  ]);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("framio:height", onHeight);
+    };
+  }, []);
 
   // Restyle frames in place when theme.css changes, instead of reloading every iframe.
   const firstCss = useRef(cssVersion);
@@ -761,9 +895,19 @@ function CanvasInner({
             saveCanvas({ page: page.id, positions });
           }}
           onMoveStart={() => {
-            if (!autoFitting.current) userMoved.current = true;
+            document.documentElement.classList.add("is-navigating");
+            window.dispatchEvent(
+              new CustomEvent("framio:navigation", { detail: true }),
+            );
+            userMoved.current = true;
           }}
-          onMoveEnd={(_, vp) => userMoved.current && saveViewport(vp)}
+          onMoveEnd={(_, vp) => {
+            document.documentElement.classList.remove("is-navigating");
+            window.dispatchEvent(
+              new CustomEvent("framio:navigation", { detail: false }),
+            );
+            if (userMoved.current) saveViewport(vp);
+          }}
           defaultViewport={savedViewport ?? undefined}
           fitView={!savedViewport}
           fitViewOptions={FIT}

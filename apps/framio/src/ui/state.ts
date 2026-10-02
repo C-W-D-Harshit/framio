@@ -1,3 +1,4 @@
+import { hiddenPreview, type PreviewMode } from "./preview-policy";
 import type { LayerReport, RenameRequest } from "../contracts/layers";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -133,3 +134,11 @@ export const activityAtom = Atom.make<StudioActivity>((get) => {
     ].slice(0, 4),
   };
 });
+
+export const previewAtom = Atom.family((_frame: string) =>
+  Atom.make<PreviewMode>(hiddenPreview),
+);
+
+export const readyVersionAtom = Atom.family((_frame: string) =>
+  Atom.make<number | null>(null),
+);

@@ -46,7 +46,7 @@ export const makeLayersApi = Effect.fn("Layers.api")(function* (
     payload: typeof InspectRequest.Type,
   ) {
     const reports: LayerObservation[] = [];
-    const result = yield* project.withStableState((state) =>
+    const result = yield* project.withGeneration((state, generation) =>
       Effect.gen(function* () {
         const frame = findFrame(state.pages, payload.frame);
         if ("error" in frame) return { error: frame.error };
@@ -62,7 +62,7 @@ export const makeLayersApi = Effect.fn("Layers.api")(function* (
           },
           "",
           1,
-          { inspectOnly: true },
+          { inspectOnly: true, generation },
         );
         if (shot.report)
           reports.push({

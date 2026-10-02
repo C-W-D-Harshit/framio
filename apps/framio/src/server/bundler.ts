@@ -1,5 +1,6 @@
 import { injectLayerSources } from "./layers/source";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import * as FileSystem from "effect/FileSystem";
 import { join, relative } from "node:path";
 import type { ProjectPaths } from "../lib/paths";
@@ -68,6 +69,7 @@ export const buildFrames = Effect.fn("Frames.build")(function* (
     entries.set(entry, frame);
   }
   const sourceFrames = new Map(frames.map((frame) => [frame.file, frame]));
+  const buildPermits = yield* Semaphore.make(4);
   const run = (entrypoints: string[], splitting: boolean) =>
     Effect.tryPromise(async () => {
       const out = await Bun.build({
@@ -114,6 +116,7 @@ export const buildFrames = Effect.fn("Frames.build")(function* (
       );
       return { ok: true as const, outputs };
     }).pipe(
+      Semaphore.withPermits(buildPermits, 1),
       Effect.catch((error) =>
         Effect.succeed({ ok: false as const, error: error.message }),
       ),
@@ -132,21 +135,39 @@ export const buildFrames = Effect.fn("Frames.build")(function* (
         error: null,
       });
   } else {
-    yield* Effect.forEach(
-      [...entries],
-      ([entry, frame]) =>
-        run([entry], false).pipe(
-          Effect.map((single) => {
-            const text = single.ok ? (single.outputs[0]?.text ?? null) : null;
-            if (text) files.set(entryOutput(frame), text);
+    // Bisect only failing groups. Healthy groups retain shared chunks.
+    const recover = (group: [string, Frame][]): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const result = yield* run(
+          group.map(([entry]) => entry),
+          group.length > 1,
+        );
+        if (result.ok) {
+          for (const output of result.outputs)
+            files.set(output.path, output.text);
+          for (const [, frame] of group)
             results.set(frame.id, {
-              text,
-              error: single.ok ? null : single.error,
+              text: files.get(entryOutput(frame)) ?? null,
+              error: null,
             });
-          }),
-        ),
-      { concurrency: 4, discard: true },
-    );
+        } else if (group.length === 1) {
+          results.set(group[0]![1].id, { text: null, error: result.error });
+        } else {
+          const middle = Math.ceil(group.length / 2);
+          yield* Effect.all(
+            [recover(group.slice(0, middle)), recover(group.slice(middle))],
+            { concurrency: 2 },
+          );
+        }
+      });
+    const group = [...entries];
+    const middle = Math.ceil(group.length / 2);
+    if (group.length === 1) yield* recover(group);
+    else
+      yield* Effect.all(
+        [recover(group.slice(0, middle)), recover(group.slice(middle))],
+        { concurrency: 2 },
+      );
   }
   const changed: string[] = [];
   const builds = new Map<
