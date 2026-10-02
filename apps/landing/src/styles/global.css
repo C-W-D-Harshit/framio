@@ -403,3 +403,34 @@ summary::-webkit-details-marker {
     opacity: 0;
   }
 }
+
+/* Speed trace: bars grow from zero, one after another, when the trace scrolls in. */
+.trace-bar {
+  transition: transform 900ms var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 90ms + 200ms);
+}
+[data-reveal="hidden"] .trace-bar {
+  transform: scaleX(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .trace-bar {
+    transition: none;
+  }
+}
+
+/* Speed benchmark card: one ambient conic beam travels the border. A static gradient sits
+   underneath, so reduced motion still reads as a lit edge instead of a plain border. */
+@keyframes beam-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.beam-spin {
+  animation: beam-spin 7s linear infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .beam-spin {
+    animation: none;
+  }
+}
