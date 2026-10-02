@@ -464,8 +464,7 @@ test(
               ),
             );
             await page.keyboard.down("Control");
-            // Cross the 28% admission threshold with normalized Linux wheel deltas.
-          await page.mouse.wheel({ deltaY: -160 });
+            await page.mouse.wheel({ deltaY: -80 });
             await page.keyboard.up("Control");
             await page.waitForFunction(
               (before) =>
