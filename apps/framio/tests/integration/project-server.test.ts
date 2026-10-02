@@ -723,6 +723,95 @@ test(
 );
 
 test(
+  "silent initial iframe boots release admission slots without claiming readiness",
+  () =>
+    withProjectServer(
+      (root) => {
+        for (let i = 0; i < 10; i++)
+          writeFileSync(
+            join(root, `.framio/pages/01-test/timeout-${i}.tsx`),
+            `export const meta={name:"Timeout ${i}",width:100,height:100};export default function Frame(){return <div>Frame ${i}</div>}`,
+          );
+      },
+      async (url, root) => {
+        const browser = await puppeteer.launch({
+          executablePath: await Effect.runPromise(
+            ensureBrowser().pipe(Effect.provide(BunServices.layer)),
+          ),
+          headless: true,
+        });
+        try {
+          const page = await browser.newPage();
+          await page.setViewport({ width: 1600, height: 1000 });
+          await page.evaluateOnNewDocument(
+            (project) =>
+              localStorage.setItem(
+                `framio:viewport:${project}/01-test`,
+                JSON.stringify({ x: 100, y: 100, zoom: 1 }),
+              ),
+            basename(root),
+          );
+          const stalled = new Set<string>();
+          await page.setRequestInterception(true);
+          page.on("request", (request) => {
+            const address = new URL(request.url());
+            if (
+              address.pathname.startsWith("/f/") &&
+              address.searchParams.get("canvas") === "1" &&
+              (stalled.has(address.pathname) || stalled.size < 2)
+            ) {
+              stalled.add(address.pathname);
+              void request.respond({
+                status: 200,
+                contentType: "text/html",
+                body: "<html><body>Runtime unavailable</body></html>",
+              });
+            } else void request.continue();
+          });
+          await page.goto(url);
+          await page.waitForFunction(
+            () => document.querySelectorAll("iframe[data-frame]").length === 2,
+          );
+          expect(stalled.size).toBe(2);
+          await page.waitForFunction(
+            () => {
+              const frames = [
+                ...document.querySelectorAll<HTMLIFrameElement>(
+                  "iframe[data-frame]",
+                ),
+              ];
+              return (
+                frames.length === 6 &&
+                frames.filter((frame) => frame.contentWindow?.__framio?.ready)
+                  .length === 4
+              );
+            },
+            { timeout: 20_000 },
+          );
+          const silent = await page.$$eval("iframe[data-frame]", (frames) =>
+            frames
+              .filter(
+                (frame) =>
+                  !(frame as HTMLIFrameElement).contentWindow?.__framio?.ready,
+              )
+              .map((frame) => ({
+                fallback: !!frame.parentElement?.querySelector("img"),
+                inputReady: frame.getAttribute("data-input-ready"),
+              })),
+          );
+          expect(silent).toEqual([
+            { fallback: true, inputReady: null },
+            { fallback: true, inputReady: null },
+          ]);
+        } finally {
+          await browser.close();
+        }
+      },
+    ),
+  30_000,
+);
+
+test(
   "reload restores measured geometry before frame documents finish loading",
   () =>
     withProjectServer(

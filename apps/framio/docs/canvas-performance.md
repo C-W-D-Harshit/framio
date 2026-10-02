@@ -4,17 +4,47 @@ Implemented against the performance audit of commit `1d003e36221c9bf3a7d57f8cd87
 
 ## Results
 
-| Observation                                                      | Audit                                               | Implementation                                        |
-| ---------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------- |
-| React Scan frame updates during a 100-frame zoom from 24% to 20% | 1,300, including offscreen frames                   | 4, all newly visible frames                           |
-| Status API latency during eight uncached thumbnail captures      | 1,319 ms                                            | 2.7 ms                                                |
-| Warm thumbnail requests                                          | Browser images revalidated against files            | 0.73 to 1.60 ms in the eight-request sample           |
-| UI CSS before compression                                        | 274,064 bytes                                       | About 110 KB, fonts separate                          |
-| Embedded UI and runtime HTTP compression                         | None                                                | Build-time gzip with encoding negotiation             |
-| Steady live iframe admission                                     | Visibility and selection could activate many frames | At most 6, further limited by estimated device pixels |
-| Live iframe plus thumbnail                                       | Both remained mounted                               | Thumbnail removed after the displayed iframe is ready |
+| Observation                                                          | Audit                                               | Implementation                                        |
+| -------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------- |
+| React Scan frame updates during a 100-frame zoom from 24% to 20%     | 1,300, including offscreen frames                   | 4, all newly visible frames                           |
+| Status API latency after launching eight uncached thumbnail requests | 1,319 ms                                            | 2.7 ms                                                |
+| Warm thumbnail requests                                              | Browser images revalidated against files            | 0.73 to 1.60 ms in the eight-request sample           |
+| UI CSS before compression                                            | 274,064 bytes                                       | About 110 KB, fonts separate                          |
+| Embedded UI and runtime HTTP compression                             | None                                                | Build-time gzip with encoding negotiation             |
+| Steady live iframe admission                                         | Visibility and selection could activate many frames | At most 6, further limited by estimated device pixels |
+| Live iframe plus thumbnail                                           | Both remained mounted                               | Thumbnail removed after the displayed iframe is ready |
 
 The eight-capture sample used width 1441 and scale 0.5. It completed in 1,025.73 ms. These are individual local samples, not percentile claims. The React Scan comparison uses the same 100-frame fixture and identifies frame components by their frame props because production component names are minified.
+
+The audit sample is retained in `baselineEightCaptureSample` with its request conditions in `baselineEightCaptureConditions`. It launched eight workers requesting frames 91 through 98 at width 1441, with scale omitted. After a 120 ms delay, it measured `GET /api/health`, then `POST /api/frame-status` with `{"id":"100-frames/frame-100","version":164,"error":null}`. Timings used `time.monotonic()` and integer millisecond rounding. The thumbnail completion samples were 387, 560, 1273, 206, 1085, 910, 737 and 1445 ms. Health took 1 ms and status took 1319 ms.
+
+The implementation sample used the same status endpoint, but targeted the first requested frame's current version, explicitly set scale 0.5, waited 100 ms and rounded to two decimal places. Neither historical run verified server-side capture activity. The comparison demonstrates a local contention observation, not identical request conditions or a verified latency ratio. The current benchmark has no fixed delay. Each probe records outstanding thumbnail futures at its start and end, or reports `batch-finished-before-probe`. Outstanding HTTP requests can include queueing and cached responses; they do not prove a browser capture is active.
+
+Reproduce the audit's historical request sequence against the baseline fixture:
+
+```sh
+python3 - <<'PY'
+import concurrent.futures, urllib.request, time, json
+base = 'http://127.0.0.1:4750'
+def thumb(i):
+    started = time.monotonic()
+    with urllib.request.urlopen(f'{base}/thumb/100-frames/frame-{i:03}.png?width=1441', timeout=30) as response:
+        response.read()
+    return {'frame': i, 'durationMs': round((time.monotonic() - started) * 1000)}
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    jobs = [pool.submit(thumb, i) for i in range(91, 99)]
+    time.sleep(.12)
+    started = time.monotonic()
+    urllib.request.urlopen(base + '/api/health').read()
+    health = round((time.monotonic() - started) * 1000)
+    started = time.monotonic()
+    payload = {'id': '100-frames/frame-100', 'version': 164, 'error': None}
+    request = urllib.request.Request(base + '/api/frame-status', data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
+    urllib.request.urlopen(request, timeout=30).read()
+    status = round((time.monotonic() - started) * 1000)
+    print(json.dumps({'healthMs': health, 'statusMs': status, 'thumbs': [job.result() for job in jobs]}, indent=2))
+PY
+```
 
 The fully uncached 100-request batch at width 1442 and scale 0.5 completed in 7,763.19 ms. The audit batch took about 17.3 seconds at width 1440. The width differs by two pixels to bypass the preview cache, so treat this as a throughput sample rather than an exact benchmark ratio.
 
@@ -26,7 +56,7 @@ Admission prioritizes a single selected viewport, then existing visible live fra
 
 The controller admits at most two new iframe loads or replacements at once and at most six live frame nodes. It also estimates full frame surface area at device pixel ratio, with a 12-million-pixel budget. One oversized frame may remain live so a selected design can still be used. These estimates limit admission; they are not measurements of Chromium's actual GPU allocations.
 
-Navigation suppresses new loads and replacement admission. Existing replacements retain their slot until completion. Eviction clears readiness and releases preview resources. Ready live frames release their thumbnail. Image frames and TSX thumbnails use quantized scales of 1/16, 1/8, 1/4, 1/2 or 1 based on projected zoom and device pixel ratio, with hysteresis between tiers.
+Navigation suppresses new loads and replacement admission. Initial boots and replacements release their scheduling slot after eight seconds even if the document never reports readiness. Timeouts are scoped to the displayed or pending version and canceled on eviction or version changes. They do not mark the document ready, enable frame input or remove its fallback thumbnail. Late readiness messages still work normally. Eviction clears readiness and releases preview resources. Ready live frames release their thumbnail. Image frames and TSX thumbnails use quantized scales of 1/16, 1/8, 1/4, 1/2 or 1 based on projected zoom and device pixel ratio, with hysteresis between tiers.
 
 The client runs at most four preview fetches. Obsolete atom subscriptions cancel requests, and scoped object URLs are revoked when no longer retained for display. The server runs at most two background thumbnail captures, leaving capacity in the shared four-page capture pool for explicit screenshots and inspection. Its thumbnail cache holds at most 128 entries and 32 MiB of PNG bytes. Temporary capture files are removed before the response is returned, and the server scope removes its preview directory.
 

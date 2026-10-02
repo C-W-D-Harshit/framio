@@ -23,6 +23,7 @@ export const runPreviewController = (host: {
     const ready = new Map<string, number>();
     const shown = new Map<string, number>();
     const loading = new Map<string, number>();
+    const expired = new Map<string, number>();
     let navigating = false;
     const update = () => {
       const current = host.read();
@@ -34,23 +35,26 @@ export const runPreviewController = (host: {
         shown,
         navigating,
         loading,
+        expired,
       );
       for (const [id, mode] of next) {
         if (!mode.live) {
           ready.delete(id);
           shown.delete(id);
           loading.delete(id);
+          expired.delete(id);
         }
         if (mode !== modes.get(id)) host.publish(id, mode);
       }
       for (const id of modes.keys())
-        if (!next.has(id)) host.publish(id, hiddenPreview);
-      modes = next;
-      for (const id of ready.keys())
         if (!next.has(id)) {
+          host.publish(id, hiddenPreview);
           ready.delete(id);
           shown.delete(id);
+          loading.delete(id);
+          expired.delete(id);
         }
+      modes = next;
     };
     yield* Effect.acquireRelease(
       Effect.sync(() => {
@@ -63,16 +67,18 @@ export const runPreviewController = (host: {
             event: CustomEvent<{
               id: string;
               version: number;
-              phase: "ready" | "shown" | "loading";
+              phase: "ready" | "shown" | "loading" | "expired";
             }>,
           ) => {
             const { id, version, phase } = event.detail;
             if (!modes.get(id)?.live) return;
             (phase === "ready"
               ? ready
-              : phase === "loading"
-                ? loading
-                : shown
+              : phase === "expired"
+                ? expired
+                : phase === "loading"
+                  ? loading
+                  : shown
             ).set(id, version);
             signal();
           }) as EventListener,

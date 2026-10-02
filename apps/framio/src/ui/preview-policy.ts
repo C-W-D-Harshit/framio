@@ -22,6 +22,7 @@ export type PreviewFrame = {
 };
 export const LIVE_LIMIT = 6;
 export const BOOT_LIMIT = 2;
+export const BOOT_TIMEOUT_MS = 8_000;
 export const LIVE_PIXEL_BUDGET = 12_000_000;
 const scales = [0.0625, 0.125, 0.25, 0.5, 1];
 
@@ -40,6 +41,7 @@ export function planPreviews(
   shown: ReadonlyMap<string, number>,
   navigating: boolean,
   loading: ReadonlyMap<string, number> = new Map(),
+  expired: ReadonlyMap<string, number> = new Map(),
 ) {
   const { x, y, zoom: z, width: w, height: h } = viewport;
   const selected = frames.filter((frame) => frame.selected);
@@ -82,6 +84,8 @@ export function planPreviews(
   let booting = candidates.filter(
     ({ frame }) =>
       previous.get(frame.id)?.live &&
+      expired.get(frame.id) !==
+        (loading.get(frame.id) ?? shown.get(frame.id) ?? frame.version) &&
       ready.get(frame.id) !==
         (loading.get(frame.id) ?? shown.get(frame.id) ?? frame.version),
   ).length;

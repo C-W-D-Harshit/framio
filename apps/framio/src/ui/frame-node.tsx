@@ -28,6 +28,7 @@ import * as Schema from "effect/Schema";
 import { Atom, AsyncResult } from "effect/reactivity";
 import { FrameMessage } from "../contracts/frame-message";
 import { previewAtom, readyVersionAtom } from "./state";
+import { BOOT_TIMEOUT_MS } from "./preview-policy";
 import type { SnapshotFrame } from "../contracts/snapshot";
 
 export type FrameNodeData = {
@@ -88,6 +89,29 @@ export const FrameNode = memo(function FrameNode({
   const [shown, setShown] = useState(frame.version);
   const pending = frame.version !== shown && mode.reload ? frame.version : null;
   const pendingRef = useRef<HTMLIFrameElement>(null);
+  const loadingVersion = pending ?? shown;
+  const bootTimeoutAtom = useMemo(
+    () =>
+      Atom.make(
+        Effect.gen(function* () {
+          if (!live) return;
+          yield* Effect.sleep(BOOT_TIMEOUT_MS);
+          yield* Effect.sync(() =>
+            window.dispatchEvent(
+              new CustomEvent("framio:frame-state", {
+                detail: {
+                  id: frame.id,
+                  version: loadingVersion,
+                  phase: "expired",
+                },
+              }),
+            ),
+          );
+        }),
+      ),
+    [live, frame.id, loadingVersion],
+  );
+  useAtomValue(bootTimeoutAtom);
   const switchAtom = useMemo(
     () =>
       Atom.make(

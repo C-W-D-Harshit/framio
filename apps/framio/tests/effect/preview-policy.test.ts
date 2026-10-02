@@ -19,6 +19,62 @@ const viewport = { x: 0, y: 0, zoom: 1, width: 1280, height: 800, dpr: 2 };
 const live = (modes: Map<string, PreviewMode>) =>
   [...modes].filter(([, mode]) => mode.live).map(([id]) => id);
 describe("preview admission", () => {
+  it("releases expired boot slots without marking frames ready", () => {
+    const previous = planPreviews(
+      frames,
+      viewport,
+      new Map(),
+      new Map(),
+      new Map(),
+      false,
+    );
+    const stalled = live(previous);
+    expect(stalled).toHaveLength(BOOT_LIMIT);
+    const expired = new Map(stalled.map((id) => [id, 1]));
+    const next = planPreviews(
+      frames,
+      viewport,
+      previous,
+      new Map(),
+      new Map(),
+      false,
+      new Map(),
+      expired,
+    );
+    expect(live(next)).toHaveLength(BOOT_LIMIT * 2);
+    expect(stalled.every((id) => next.get(id)?.live)).toBe(true);
+    // An old timeout cannot release a newer version's slot.
+    const loading = new Map(stalled.map((id) => [id, 2]));
+    expect(
+      live(
+        planPreviews(
+          frames,
+          viewport,
+          previous,
+          new Map(),
+          new Map(),
+          false,
+          loading,
+          expired,
+        ),
+      ),
+    ).toEqual(stalled);
+    const changed = frames.map((frame) => ({ ...frame, version: 2 }));
+    const shown = new Map(stalled.map((id) => [id, 1]));
+    const replacements = planPreviews(
+      changed.filter((frame) => stalled.includes(frame.id)),
+      viewport,
+      previous,
+      new Map(),
+      shown,
+      false,
+      shown,
+      expired,
+    );
+    expect(
+      [...replacements.values()].filter((mode) => mode.reload),
+    ).toHaveLength(BOOT_LIMIT);
+  });
   it("bounds cold boots, settled live frames, and mass selection", () => {
     let modes = new Map<string, PreviewMode>();
     const ready = new Map<string, number>();
