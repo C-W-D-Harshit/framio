@@ -220,15 +220,28 @@ test("footer supports keyboard descriptions, direct download, progress, install 
               restartPhase: "idle",
               restartError: null,
             };
+            const availableRelease = state.release;
+            state.phase = "idle";
+            state.release = null;
+            state.canInstall = false;
+            state.error = "GitHub returned 503. Try checking again.";
             await page.setRequestInterception(true);
             page.on("request", (request) => {
               if (new URL(request.url()).pathname !== "/api/update")
                 return void request.continue();
               if (request.method() === "POST") {
-                actions.push(JSON.parse(request.postData()!).action);
-                state.phase = "downloading";
-                state.bytes = 10;
-                state.total = 100;
+                const action = JSON.parse(request.postData()!).action;
+                actions.push(action);
+                if (action === "check") {
+                  state.phase = "available";
+                  state.release = availableRelease;
+                  state.canInstall = true;
+                  state.error = null;
+                } else {
+                  state.phase = "downloading";
+                  state.bytes = 10;
+                  state.total = 100;
+                }
                 return void request.respond({
                   status: 200,
                   contentType: "application/json",
@@ -245,6 +258,23 @@ test("footer supports keyboard descriptions, direct download, progress, install 
             const button =
               'button[aria-describedby="framio-update-description"]';
             await page.waitForSelector(button);
+            expect(await page.$eval(button, (el) => el.textContent)).toContain(
+              "Check for updates",
+            );
+            expect(
+              await page.$eval('[role="alert"]', (el) => el.textContent),
+            ).toContain("503");
+            expect(
+              await page.$eval(
+                button,
+                (el) => (el as HTMLButtonElement).disabled,
+              ),
+            ).toBe(false);
+            await page.click(button);
+            await page.waitForFunction(() =>
+              document.body.innerText.includes("Update available"),
+            );
+            expect(actions).toEqual(["check"]);
             await page.focus(button);
             await page.keyboard.press("Tab");
             await page.keyboard.down("Shift");
@@ -265,7 +295,7 @@ test("footer supports keyboard descriptions, direct download, progress, install 
               ),
             ).toContain("2.0.0");
             await page.click(button);
-            expect(actions).toEqual(["download"]);
+            expect(actions).toEqual(["check", "download"]);
             await page.waitForFunction(() =>
               document.body.innerText.includes("Downloading"),
             );
@@ -280,7 +310,7 @@ test("footer supports keyboard descriptions, direct download, progress, install 
             await page.waitForFunction(() =>
               document.body.innerText.includes("Install update"),
             );
-            expect(actions).toEqual(["download"]);
+            expect(actions).toEqual(["check", "download"]);
             expect(await page.$eval(button, (el) => el.textContent)).toContain(
               "2.0.0",
             );

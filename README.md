@@ -270,6 +270,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues privately, as des
 
 The sidebar footer shows **Update available** when a newer stable release is found. Hover or focus the control for a short description, or open **About this update** on any device. **Complete release notes** opens the GitHub release.
 
+Use **Check for updates** in the footer to refresh release information. If an older Studio has no update control, run `framio upgrade --check` in your terminal, then return to Studio to download and install the update.
+
 Click **Update available** to download and verify the release. Framio keeps running. A verified download survives closing Framio. Click **Install update** whenever you are ready. This installs the executable and restarts only the current project at the same URL. Other projects continue running and offer **Restart to update** individually.
 
 ```sh
@@ -282,7 +284,7 @@ framio upgrade --rollback
 
 The default command shows status and offers an action in an interactive terminal. It makes no implicit mutation in scripts. `--download` only downloads and verifies. `--install` requires an existing verified download and does not download one first. CLI installation lists running projects for you to restart after saving work. `--rollback` restores the retained previous executable. It does not reverse changes to project files.
 
-Update discovery uses GitHub directly, with a shared daily cache, conditional requests and bounded retries. An explicit check refreshes the cache unless GitHub's rate limit is still active. Network failures do not block startup. Updates are stored under `~/.framio/updates`, keyed by the canonical installation path. Custom installation directories are supported. Framio never requests elevation. If your installation is not writable, ask its owner to update it or install Framio in a directory you own.
+Update discovery uses GitHub directly, with a shared 30-minute cache, conditional requests and bounded retries. An explicit check refreshes the cache unless GitHub's rate limit is still active. Studio displays discovery failures so you can retry. Network failures do not block startup. Updates are stored under `~/.framio/updates`, keyed by the canonical installation path. Custom installation directories are supported. Framio never requests elevation. If your installation is not writable, ask its owner to update it or install Framio in a directory you own.
 
 Source checkouts update through Git. The updater cannot replace Bun or the checkout. Releases without checksums cannot be downloaded through the updater.
 

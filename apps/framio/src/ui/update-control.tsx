@@ -35,7 +35,7 @@ export function updatePresentation(state: UpdateStatus) {
     return { label: "Retry download", action: "download" as const };
   if (state.phase === "available")
     return { label: "Update available", action: "download" as const };
-  return null;
+  return { label: "Check for updates", action: "check" as const };
 }
 export function UpdateControl() {
   const result = useAtomValue(updateAtom);
@@ -45,21 +45,6 @@ export function UpdateControl() {
   if (!AsyncResult.isSuccess(result) || !result.value) return null;
   const state = result.value;
   const presentation = updatePresentation(state);
-  if (!presentation)
-    return state.release?.requiresProjectUpdate ? (
-      <p className="text-xs text-muted-foreground">
-        This release needs a separate project update.{" "}
-        <a
-          href={state.release.notesUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline underline-offset-2"
-        >
-          Read the instructions
-        </a>
-        .
-      </p>
-    ) : null;
   const { action } = presentation;
   const release = state.release;
   const perform = async (next: (typeof UpdateAction.Type)["action"]) => {
@@ -77,14 +62,18 @@ export function UpdateControl() {
   const restarting = busy === "install" || busy === "restart";
   const loading = !!busy || !action;
   const description =
-    release?.description ??
-    "Restart this project to run the installed version of Framio.";
+    action === "check"
+      ? "Check GitHub for the latest stable Framio release."
+      : (release?.description ??
+        "Restart this project to run the installed version of Framio.");
   const version =
     state.phase === "ready" || state.phase === "downloading"
       ? release?.version
       : state.restartNeeded
         ? state.installedVersion
-        : release?.version;
+        : action === "check"
+          ? state.runningVersion
+          : release?.version;
   return (
     <div className="space-y-2 text-xs" aria-busy={loading}>
       <Tooltip>
@@ -93,7 +82,7 @@ export function UpdateControl() {
             <Button
               variant="outline"
               className="h-auto min-h-10 w-full justify-start gap-2 px-3 py-2 text-xs"
-              disabled={loading || !state.canInstall}
+              disabled={loading || (action !== "check" && !state.canInstall)}
               aria-describedby="framio-update-description"
               onClick={() => action && void perform(action)}
             />
@@ -107,11 +96,13 @@ export function UpdateControl() {
             <RotateCw className="size-3.5" />
           )}
           <span>
-            {busy === "install" && !state.restartNeeded
-              ? "Installing…"
-              : restarting
-                ? "Reconnecting…"
-                : presentation.label}
+            {busy === "check"
+              ? "Checking…"
+              : busy === "install" && !state.restartNeeded
+                ? "Installing…"
+                : restarting
+                  ? "Reconnecting…"
+                  : presentation.label}
           </span>
           {version && (
             <span className="ml-auto text-[10px] text-muted-foreground">
