@@ -1,5 +1,5 @@
 export const SITE_URL = "https://framio.design";
-export const RELEASE_VERSION = "v0.0.10";
+export const RELEASE_VERSION = "v0.0.11";
 export const REPO_URL = "https://github.com/C-W-D-Harshit/framio";
 export const SITE_TITLE = "Design canvas for Claude Code and Codex · Framio";
 export const SITE_DESCRIPTION =

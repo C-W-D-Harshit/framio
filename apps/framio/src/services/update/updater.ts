@@ -22,7 +22,7 @@ import {
 } from "../../contracts/update";
 import { GLOBAL_DIR } from "../../lib/paths";
 import { makeUpdateStorage, io } from "./storage";
-import { makeDiscovery, newer } from "./discovery";
+import { CHECK_INTERVAL_MS, makeDiscovery, newer } from "./discovery";
 import { stageRelease } from "./staging";
 declare const FRAMIO_VERSION: string | undefined;
 export const runningVersion =
@@ -185,6 +185,7 @@ export const makeUpdater = Effect.fn("Updater.make")(function* (
   });
   const status = Effect.fn("Updater.status")(function* () {
     const record = yield* reconcile();
+    const cache = yield* discovery.cachedStatus();
     const actual = yield* installed.pipe(
       Effect.catch(() => Effect.succeed(null)),
     );
@@ -203,6 +204,7 @@ export const makeUpdater = Effect.fn("Updater.make")(function* (
         : null;
     return {
       ...record,
+      error: record.error ?? cache?.error ?? null,
       runningVersion: version,
       installedVersion: actual,
       canInstall: !notice,
@@ -393,7 +395,7 @@ export const makeUpdater = Effect.fn("Updater.make")(function* (
           : Effect.void,
       ),
       Effect.catch(() => Effect.void),
-      Effect.repeat(Schedule.spaced("30 minutes")),
+      Effect.repeat(Schedule.spaced(CHECK_INTERVAL_MS)),
       Effect.forkScoped,
     );
   return {

@@ -1,6 +1,11 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { TestClock } from "effect/testing";
+import { UpdateFailure } from "../../src/contracts/update";
+import type { UpdateStorage } from "../../src/services/update/storage";
 import {
+  makeDiscovery,
   newer,
   shortDescription,
   validateRelease,
@@ -27,6 +32,90 @@ const release = (overrides = {}) => ({
     },
   ],
   ...overrides,
+});
+
+function memoryStorage(): UpdateStorage {
+  const records = new Map<string, unknown>();
+  return {
+    read: <S extends Schema.Constraint>(key: string, schema: S) =>
+      records.has(key)
+        ? Schema.decodeUnknownEffect(schema)(records.get(key)).pipe(
+            Effect.mapError(
+              (error) => new UpdateFailure({ message: error.message }),
+            ),
+          )
+        : Effect.succeed(null),
+    write: (key, value) =>
+      Effect.sync(() => {
+        records.set(key, value);
+      }),
+    lock: (_key, work) => Effect.scoped(work),
+    owned: () => Effect.succeed(false),
+  };
+}
+
+describe("release freshness", () => {
+  it.effect(
+    "discovers a release published after startup within 30 minutes",
+    () =>
+      Effect.gen(function* () {
+        let calls = 0;
+        const discovery = makeDiscovery(memoryStorage(), "darwin-arm64", () =>
+          Effect.sync(() => {
+            calls++;
+            return {
+              status: 200,
+              etag: `release-${calls}`,
+              text: JSON.stringify(release({ body: `Release ${calls}` })),
+              retryAfter: null,
+              reset: null,
+            };
+          }),
+        );
+        assert.strictEqual(
+          (yield* discovery.check()).release?.description,
+          "Release 1",
+        );
+        yield* TestClock.adjust("29 minutes");
+        yield* discovery.check();
+        assert.strictEqual(calls, 1);
+        yield* TestClock.adjust("1 minute");
+        assert.strictEqual(
+          (yield* discovery.check()).release?.description,
+          "Release 2",
+        );
+        assert.strictEqual(calls, 2);
+      }),
+  );
+  it.effect("refreshes successful daily caches written by older binaries", () =>
+    Effect.gen(function* () {
+      const store = memoryStorage();
+      yield* store.write("discovery:darwin-arm64", {
+        release: null,
+        etag: "old-release",
+        nextCheck: 86400000,
+        failures: 0,
+        error: null,
+      });
+      yield* TestClock.adjust("1 hour");
+      let calls = 0;
+      const discovery = makeDiscovery(store, "darwin-arm64", (_url, etag) =>
+        Effect.sync(() => {
+          calls++;
+          assert.strictEqual(etag, "old-release");
+          return {
+            status: 200,
+            etag: "new-release",
+            text: JSON.stringify(release()),
+            retryAfter: null,
+            reset: null,
+          };
+        }),
+      );
+      assert.strictEqual((yield* discovery.check()).release?.version, "1.2.3");
+      assert.strictEqual(calls, 1);
+    }),
+  );
 });
 describe("release validation", () => {
   it.effect(

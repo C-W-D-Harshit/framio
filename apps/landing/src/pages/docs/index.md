@@ -74,6 +74,8 @@ To bind a specific interface, use `framio start --host <address>`. Anyone who ca
 
 The canvas and CLI share update downloads, progress, and installation state. In the canvas, use the update control to download a release while you keep designing. Install when you are ready, then use **Restart to update** to switch the project to the installed version. A supervised restart retains the project's listen address and port.
 
+Studio checks for releases every 30 minutes. Use **Check for updates** in the sidebar footer for an immediate check. Discovery failures appear beside the control. If an older Studio has no update control, run `framio upgrade --check` in the terminal, then return to Studio to download and install the update.
+
 From the terminal:
 
 ```sh

@@ -276,7 +276,7 @@ test("a reused PID does not keep an abandoned operation locked", () => {
     store.close();
   }
 });
-test("daily cache uses ETags, keeps offline metadata and respects rate limit backoff", async () => {
+test("release cache uses ETags, keeps offline metadata and respects rate limit backoff", async () => {
   const dir = temporary();
   await run(
     Effect.gen(function* () {
@@ -328,6 +328,39 @@ test("daily cache uses ETags, keeps offline metadata and respects rate limit bac
       expect(result.error).toContain("429");
       yield* discovery.check(true);
       expect(calls).toBe(2);
+    }),
+  );
+});
+test("idle updater status exposes discovery failures and clears them after recovery", async () => {
+  await run(
+    Effect.gen(function* () {
+      const dir = temporary(),
+        target = join(dir, "framio");
+      executable(target, "1.0.0");
+      const updater = yield* makeUpdater({
+        directory: join(dir, "updates"),
+        target,
+        development: false,
+        version: "1.0.0",
+        platform: "darwin-arm64",
+      });
+      const cache = {
+        release: null,
+        etag: null,
+        nextCheck: Date.now() + 60000,
+        failures: 1,
+        error: "Release discovery failed: offline",
+      };
+      yield* updater.store.write("discovery:darwin-arm64", cache);
+      const state = yield* updater.status();
+      expect(state.phase).toBe("idle");
+      expect(state.error).toContain("offline");
+      yield* updater.store.write("discovery:darwin-arm64", {
+        ...cache,
+        failures: 0,
+        error: null,
+      });
+      expect((yield* updater.status()).error).toBeNull();
     }),
   );
 });

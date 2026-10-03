@@ -5,6 +5,7 @@ import { Release, Version, UpdateFailure } from "../../contracts/update";
 import { boundedFetch } from "../../platform/update-http";
 import type { UpdateStorage } from "./storage";
 export const REPOSITORY = "C-W-D-Harshit/framio";
+export const CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const Asset = Schema.Struct({
   id: Schema.Int,
   name: Schema.String,
@@ -22,6 +23,7 @@ const Cache = Schema.Struct({
   release: Schema.NullOr(Release),
   etag: Schema.NullOr(Schema.String),
   nextCheck: Schema.Number,
+  checkedAt: Schema.optional(Schema.Number),
   failures: Schema.Int,
   rateLimited: Schema.optional(Schema.Boolean),
   error: Schema.NullOr(Schema.String),
@@ -119,25 +121,27 @@ export const makeDiscovery = (
   platform: string,
   request = boundedFetch,
 ) => {
+  const cachedStatus = () => store.read(`discovery:${platform}`, Cache);
+  const fresh = (cache: typeof Cache.Type, now: number, force: boolean) => {
+    // Older binaries wrote successful caches with a 24-hour lifetime.
+    const nextCheck =
+      cache.failures === 0 && !cache.error
+        ? Math.min(
+            cache.nextCheck,
+            (cache.checkedAt ?? cache.nextCheck - 86400000) + CHECK_INTERVAL_MS,
+          )
+        : cache.nextCheck;
+    return now < nextCheck && (!force || cache.rateLimited === true);
+  };
   const check = Effect.fn("ReleaseDiscovery.check")(function* (force = false) {
     const now = yield* Clock.currentTimeMillis;
-    const cached = yield* store.read(`discovery:${platform}`, Cache);
-    if (
-      cached &&
-      now < cached.nextCheck &&
-      (!force || cached.rateLimited === true)
-    )
-      return cached;
+    const cached = yield* cachedStatus();
+    if (cached && fresh(cached, now, force)) return cached;
     return yield* store.lock(
       "discovery",
       Effect.gen(function* () {
-        const current = yield* store.read(`discovery:${platform}`, Cache);
-        if (
-          current &&
-          current.nextCheck > now &&
-          (!force || current.rateLimited === true)
-        )
-          return current;
+        const current = yield* cachedStatus();
+        if (current && fresh(current, now, force)) return current;
         const result = yield* Effect.gen(function* () {
           const response = yield* request(
             `https://api.github.com/repos/${REPOSITORY}/releases/latest`,
@@ -146,7 +150,8 @@ export const makeDiscovery = (
           if (response.status === 304 && current)
             return {
               ...current,
-              nextCheck: now + 86400000,
+              nextCheck: now + CHECK_INTERVAL_MS,
+              checkedAt: now,
               failures: 0,
               rateLimited: false,
               error: null,
@@ -186,7 +191,8 @@ export const makeDiscovery = (
           return {
             release,
             etag: response.etag,
-            nextCheck: now + 86400000,
+            nextCheck: now + CHECK_INTERVAL_MS,
+            checkedAt: now,
             failures: 0,
             rateLimited: false,
             error: null,
@@ -213,5 +219,5 @@ export const makeDiscovery = (
       }),
     );
   });
-  return { check };
+  return { check, cachedStatus };
 };
