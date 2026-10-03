@@ -131,7 +131,7 @@ export const supervise = Effect.fn("SessionSupervisor.run")(function* (
         ...restarting,
         phase: "failed",
         error:
-          "The replacement and recovery server could not start. Run framio start for this project, or framio upgrade --rollback, then framio start.",
+          "The replacement and recovery server could not start. Run framio start for this project, or framio update --rollback, then framio start.",
       });
       return 1;
     }

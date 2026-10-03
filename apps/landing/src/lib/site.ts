@@ -1,5 +1,5 @@
 export const SITE_URL = "https://framio.design";
-export const RELEASE_VERSION = "v0.0.11";
+export const RELEASE_VERSION = "v0.0.12";
 export const REPO_URL = "https://github.com/C-W-D-Harshit/framio";
 export const SITE_TITLE = "Design canvas for Claude Code and Codex · Framio";
 export const SITE_DESCRIPTION =
@@ -55,7 +55,7 @@ export const faqs = [
   },
   {
     q: "How do I update Framio?",
-    a: "Use the update control in the canvas or run framio upgrade. The canvas and CLI share downloads and progress. Download first, then install when you are ready and restart the project to use the new binary. Rollback is available with framio upgrade --rollback. Binary updates do not change your project's skills, dependencies, themes, or designs.",
+    a: "Run framio update to check, download, verify, and install in one command. Framio upgrade is an alias. The canvas offers separate download and install controls, sharing progress with the CLI. Save your work and restart running projects to use the installed version. Rollback is available with framio update --rollback. Binary updates do not change your project's skills, dependencies, themes, or designs.",
   },
   {
     q: "Is Framio free?",

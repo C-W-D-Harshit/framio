@@ -70,9 +70,10 @@ with tempfile.TemporaryDirectory(prefix="framio-updater-smoke-") as temporary:
         assert info and request(info["url"] + "/api/health")["version"] == current
         before = request(info["url"] + "/api/update")
         assert before["phase"] == "ready" and before["release"]["version"] == selected
-        status = subprocess.check_output([str(target), "upgrade"], env=environment, text=True, encoding="utf-8", timeout=20)
+        status = subprocess.check_output([str(target), "update", "--status"], env=environment, text=True, encoding="utf-8", timeout=20)
         assert "ready" in status and selected in status
-        installed = subprocess.check_output([str(target), "upgrade", "--install"], env=environment, text=True, encoding="utf-8", timeout=30)
+        installed = subprocess.check_output([str(target), "update"], env=environment, text=True, encoding="utf-8", timeout=30)
+        assert f"Installed Framio {selected}." in installed
         assert "Restart needed:" in installed and str(project) in installed
         after = request(info["url"] + "/api/update")
         assert after["installedVersion"] == selected and after["runningVersion"] == current and after["restartNeeded"]
@@ -81,6 +82,13 @@ with tempfile.TemporaryDirectory(prefix="framio-updater-smoke-") as temporary:
         backup = files / ("previous.exe" if os.name == "nt" else "previous")
         subprocess.check_call([str(backup), "upgrade", "--rollback"], env={**environment, "FRAMIO_INSTALLATION_TARGET": str(target)}, stdout=subprocess.DEVNULL, timeout=30)
         assert request(info["url"] + "/api/update")["installedVersion"] == current
+        assert subprocess.check_output([str(target), "--version"], env=environment, text=True).strip() == version_output
+        with sqlite3.connect(data / "updates.sqlite") as database:
+            database.execute("UPDATE state SET value = ? WHERE key = ?", (json.dumps(record), "installation:" + identity))
+        database.close()
+        alias = subprocess.check_output([str(target), "upgrade"], env=environment, text=True, encoding="utf-8", timeout=30)
+        assert f"Installed Framio {selected}." in alias
+        subprocess.check_call([str(backup), "update", "--rollback"], env={**environment, "FRAMIO_INSTALLATION_TARGET": str(target)}, stdout=subprocess.DEVNULL, timeout=30)
         assert subprocess.check_output([str(target), "--version"], env=environment, text=True).strip() == version_output
         print("Verified compiled CLI/canvas shared state, custom target installation, retained foreground ownership and rollback")
     finally:

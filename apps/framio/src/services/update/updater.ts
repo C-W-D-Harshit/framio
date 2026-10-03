@@ -291,7 +291,7 @@ export const makeUpdater = Effect.fn("Updater.make")(function* (
         )
           return yield* new UpdateFailure({
             message:
-              "No verified download is ready. Run framio upgrade --download first.",
+              "No verified download is ready. Run framio update --download first.",
           });
         const source = rollback ? backup : staged;
         const expected = rollback
@@ -387,7 +387,7 @@ export const makeUpdater = Effect.fn("Updater.make")(function* (
                 state.release &&
                 ["available", "ready", "download-failed"].includes(state.phase)
                   ? Console.log(
-                      `Framio ${state.release.version}: ${state.phase === "ready" ? "ready to install" : "update available"}. Run framio upgrade.`,
+                      `Framio ${state.release.version}: ${state.phase === "ready" ? "ready to install" : "update available"}. Run framio update.`,
                     )
                   : Effect.void,
               ),
