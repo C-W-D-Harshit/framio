@@ -1,4 +1,4 @@
-import { upgrade } from "./upgrade";
+import { update } from "./update";
 import { inspect } from "./inspect";
 import * as Effect from "effect/Effect";
 import * as References from "effect/References";
@@ -46,14 +46,41 @@ const makeRoot = () =>
         Command.withDescription("Open the canvas and watch your designs"),
       ),
       Command.make(
-        "upgrade",
+        "update",
         {
-          check: Flag.Boolean("check").pipe(Flag.withDefault(false)),
-          download: Flag.Boolean("download").pipe(Flag.withDefault(false)),
-          install: Flag.Boolean("install").pipe(Flag.withDefault(false)),
-          rollback: Flag.Boolean("rollback").pipe(Flag.withDefault(false)),
+          check: Flag.Boolean("check").pipe(
+            Flag.withDefault(false),
+            Flag.withDescription(
+              "Check for a release without downloading or installing",
+            ),
+          ),
+          download: Flag.Boolean("download").pipe(
+            Flag.withDefault(false),
+            Flag.withDescription(
+              "Download and verify an update without installing",
+            ),
+          ),
+          install: Flag.Boolean("install").pipe(
+            Flag.withDefault(false),
+            Flag.withDescription("Install an already verified download"),
+          ),
+          rollback: Flag.Boolean("rollback").pipe(
+            Flag.withDefault(false),
+            Flag.withDescription("Restore the previous installed binary"),
+          ),
+          status: Flag.Boolean("status").pipe(
+            Flag.withDefault(false),
+            Flag.withDescription(
+              "Show update state without checking or installing",
+            ),
+          ),
         },
-        upgrade,
+        update,
+      ).pipe(
+        Command.withAlias("upgrade"),
+        Command.withDescription(
+          "Check, download and install the latest Framio release",
+        ),
       ),
       Command.make(
         "init",

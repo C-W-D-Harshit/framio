@@ -79,22 +79,26 @@ Studio checks for releases every 30 minutes. Use **Check for updates** in the si
 From the terminal:
 
 ```sh
-framio upgrade --check
-framio upgrade --download
-framio upgrade --install
+framio update
+
+# Optional separate steps
+framio update --status
+framio update --check
+framio update --download
+framio update --install
 ```
 
-Downloads are checksum-verified before installation. CLI installation leaves running projects on their current version and prints which ones need a restart. Save your work, then run `framio stop` and `framio start` in each project. If you used a custom `--host`, pass the same address when starting again.
+Run `framio update` to check, download, verify, and install the latest release in one command. `framio upgrade` is an alias. `--status` only inspects shared state, `--check` only checks, `--download` never installs, and `--install` requires a verified download. Downloads are checksum-verified before installation. CLI installation leaves running projects on their current version and prints which ones need a restart. Save your work, then run `framio stop` and `framio start` in each project. If you used a custom `--host`, pass the same address when starting again.
 
 To restore the previous installed binary:
 
 ```sh
-framio upgrade --rollback
+framio update --rollback
 ```
 
 Restart running projects to use the restored version. If a replacement server cannot start during a supervised restart, Framio attempts recovery with the previous executable and reports the result.
 
-Binary updates do not change your project's skills, dependencies, themes, or designs. If your older version does not have `framio upgrade`, rerun the install command above to get v0.0.8 or later.
+Binary updates do not change your project's skills, dependencies, themes, or designs. On versions before v0.0.12, run `framio upgrade --download` and `framio upgrade --install` to get the new CLI. If your version has no `upgrade` command, rerun the install command above.
 
 ## Use Framio with Claude Code or Codex
 
@@ -192,11 +196,13 @@ Replace the URL and frame path with your own. Framio captures the running page a
 | `framio start --background`        | Run the canvas in the background                            |
 | `framio start --host 127.0.0.1`    | Limit canvas access to this machine                         |
 | `framio start --no-open`           | Run the canvas without opening a browser                    |
-| `framio upgrade`                   | Show shared update state and offer the next action          |
-| `framio upgrade --check`           | Check for a release                                         |
-| `framio upgrade --download`        | Download and verify an update                               |
-| `framio upgrade --install`         | Install a verified update                                   |
-| `framio upgrade --rollback`        | Restore the previous installed binary                       |
+| `framio update`                    | Check, download, verify, and install the latest release     |
+| `framio upgrade`                   | Alias for `framio update`                                   |
+| `framio update --status`           | Show shared update state without checking or installing     |
+| `framio update --check`            | Check for a release                                         |
+| `framio update --download`         | Download and verify an update                               |
+| `framio update --install`          | Install a verified update                                   |
+| `framio update --rollback`         | Restore the previous installed binary                       |
 | `framio status`                    | Show the current project's server status                    |
 | `framio list`                      | List running Framio servers                                 |
 | `framio stop`                      | Stop this project's canvas                                  |

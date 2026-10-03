@@ -77,7 +77,12 @@ test("CLI status directs a failed installation back to installation", async () =
   });
   store.close();
   const child = Bun.spawn(
-    [process.execPath, resolve(import.meta.dir, "../../src/cli.ts"), "upgrade"],
+    [
+      process.execPath,
+      resolve(import.meta.dir, "../../src/cli.ts"),
+      "update",
+      "--status",
+    ],
     {
       env: { ...process.env, HOME: dir, FRAMIO_INSTALLATION_TARGET: target },
       stdout: "pipe",
@@ -90,7 +95,7 @@ test("CLI status directs a failed installation back to installation", async () =
     new Response(child.stderr).text(),
   ]);
   expect(code).toBe(0);
-  expect(output + error).toContain("Next action: framio upgrade --install");
+  expect(output + error).toContain("Next action: framio update --install");
   expect(readFileSync(target, "utf8")).toContain("framio 1.0.0");
 });
 test("cancelled native work retains its claim until asynchronous cleanup finishes", async () => {
