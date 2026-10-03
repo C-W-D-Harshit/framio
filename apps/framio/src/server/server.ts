@@ -452,8 +452,14 @@ export const runServer = Effect.fn("Server.start")(function* (
           const frames = state.pages
             .flatMap((page) => page.frames)
             .filter((frame) => selected.has(frame.id));
+          const temporary = `${p.selectionFile}.${randomUUID()}.tmp`;
+          yield* Effect.addFinalizer(() =>
+            fs
+              .remove(temporary, { force: true })
+              .pipe(Effect.catch((error) => Effect.logWarning(error.message))),
+          );
           yield* fs.writeFileString(
-            p.selectionFile,
+            temporary,
             JSON.stringify(
               {
                 frames: frames.map((frame) => ({
@@ -477,8 +483,9 @@ export const runServer = Effect.fn("Server.start")(function* (
               2,
             ) + "\n",
           );
+          yield* fs.rename(temporary, p.selectionFile);
           return { ok: true as const };
-        }).pipe(Effect.orDie),
+        }).pipe(Effect.scoped, Effect.orDie),
       canvas: ({ payload }) =>
         project.withStableState((state) =>
           Effect.gen(function* () {
