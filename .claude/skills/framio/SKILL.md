@@ -23,27 +23,20 @@ Keep these rules active while designing:
   capability, or testimonial is not marketing proof. Omit unsupported claims or mark proposed
   copy for the user's review in the evidence record.
 - Write concrete copy for the actual product. Keep controls concise. Remove filler and apply
-  [references/copy.md](references/copy.md) to every text-bearing component, including templates.
+  [references/copy.md](references/copy.md) to every text-bearing component.
   Never use em dashes. Use a middle dot in titles, for example `my-app · Framio`.
 - Give the buyer one clear promise and show how the product supports it. A chart must show the
   comparison its caption claims. A shared-data promise needs a coherent cross-module example.
 - Choose composition, density, typography, and imagery for this audience and job. Centered
   heroes, cards, grids, gradients, and serif type can all be appropriate. Judge their effect
   on hierarchy and product understanding rather than banning a style.
-- Study rendered references and reuse suitable components. Record the exact reference or
-  registry ID, the useful decision, and why it fits. A registry listing or code view alone is
-  not a visual comparison.
-
-This skill is the authoritative design process. No external skill bundle is required.
-Read [references/skills.md](references/skills.md) only when a specific problem needs extra
-guidance. Load that resource completely, once, and use it for the current decision.
 
 ## Choose the work you need
 
 | Task | Work |
 | --- | --- |
-| New website or product, substantial redesign | Brief, rendered references, meaningful direction fragments, user choice, DESIGN.md, screens, review |
-| New screen in an existing project | Existing brief and tokens, reference for unfamiliar behavior, structure, screen, review |
+| New website or product, substantial redesign | Brief, meaningful direction fragments, user choice, DESIGN.md, screens, review |
+| New screen in an existing project | Existing brief and tokens, structure, screen, review |
 | Change to a frame | Read the selection and relevant evidence, edit, review the affected crop and frame |
 | Implement a design in the real app | Read [references/handoff.md](references/handoff.md) |
 | Address comments | Read [references/comments.md](references/comments.md), preserve every user comment |
@@ -55,28 +48,20 @@ with that response's revision to save a validated whole document. Use `--expect 
 when the record is missing. The canvas Evidence panel exposes the same record. Store decisions and
 artifact paths, not checkmarks claiming work happened.
 
-For a new landing page, compare the actual hero and product demonstration with rendered
-references before expanding the rest of the page. Explore different ways to explain the
-product within the user's constraints. A palette choice does not approve a different layout.
+For a new landing page, review the actual hero and product demonstration before expanding
+the rest of the page. Explore different ways to explain the product within the user's constraints. A palette choice does not approve a different layout.
 Finish and visually review one direction fragment before making the next, then show the
 directions and wait for the user's choice. When the user has already chosen a direction,
 continue within it without asking again.
 
-## Reuse and design system
-
-Landing pages use Tailark's free components. Compare suitable Tailark blocks and consider
-Axis or Notio when their composition fits. Use the rendered reference shortlist workflow in
-[references/libraries.md](references/libraries.md). Import only selected items with `framio add`.
-Adapt Next.js imports and assets into React frames. Confirm the files landed and imports
-resolve before expanding the page. Search other React + Tailwind libraries for missing pieces
-before custom-building, unless the user has requested a custom component.
+## Design system
 
 Write the selected direction to `.framio/DESIGN.md` and run
 `npx @google/design.md lint .framio/DESIGN.md`. Fix invalid tokens and contrast findings.
 Framio applies the tokens and fonts automatically. Follow
 [references/design-md.md](references/design-md.md); keep `theme.css` as the base theme.
-Use shadcn/ui for controls, one icon set, and shared components for repeated product chrome.
-Record sources, adaptations, and imagery choices in DESIGN.md. A product demonstration can
+The scaffold includes shadcn/ui controls. Keep repeated product chrome in shared components.
+Record imagery choices in DESIGN.md. A product demonstration can
 be the visual centerpiece; photography or decorative illustration is not mandatory.
 
 ## Review one frame at a time
@@ -86,7 +71,7 @@ be the visual centerpiece; photography or decorative illustration is not mandato
 2. Run `framio inspect <page>/<frame>`, check `.framio/.state/errors.json`, and fix known errors.
    Capture one or two useful crops with `framio screenshot <page>/<frame> --layer "Content/Hero"`
    and open the returned `archivePath` PNGs at a readable size.
-3. Compare the fragment with the selected rendered references. Record what the buyer learns,
+3. Review the fragment against the brief. Record what the buyer learns,
    what changed, why the composition fits, and any unresolved assumption in the evidence.
 4. After corrections, recheck the affected crop. Complete each frame with a full-frame review
    at the primary and smallest requested width. Review hierarchy, copy truth, demo consistency,
@@ -110,13 +95,11 @@ Report the decisions, frames reviewed, and remaining limitations before claiming
 | `framio inspect <page>/<frame> --width 390` | Read geometry, styles, and automatic checks at a viewport |
 | `framio screenshot --page <page>` | Capture the canvas arrangement and notes |
 | `framio evidence` / `framio evidence --write <file> --expect <revision>` | Read or replace evidence using the revision you read |
-| `framio references <query>` / `framio references --capture <id>` | Shortlist rendered template candidates and capture one into the moodboard |
 | `framio install <package>` / `framio add <registry-item>` | Install packages or reusable components |
 
-Never run npm, pnpm, or yarn installs in `.framio`. Discovery with `npx shadcn` is documented
-in the library reference. Never edit `canvas.json` or `.state/`. Delete `pages/00-example`
-once real work starts. Reference images live in `pages/01-moodboard/` with source and borrowing
-notes in sidecar JSON. Design assets live in `assets/` and use `/assets/<name>` URLs.
+Never run npm, pnpm, or yarn installs in `.framio`. Never edit `canvas.json` or `.state/`.
+Delete `pages/00-example` once real work starts. Drop your images into a page folder to make
+a moodboard, with optional source and note sidecar JSON. Design assets live in `assets/` and use `/assets/<name>` URLs.
 Preserve existing work and comments. User instructions and existing authorization take priority.
 
 ## Frames, layers, and selection

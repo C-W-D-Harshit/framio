@@ -1,6 +1,6 @@
 # Design evidence
 
-`.framio/evidence.json` stores the brief, reference shortlist, selected composition, and
+`.framio/evidence.json` stores the brief, selected composition, and
 reviews. The canvas Evidence panel displays it. This record links decisions to source
 material and actual captures. It does not grade taste or turn a written 'pass' into proof.
 
@@ -23,19 +23,20 @@ already include evidence.json, so read its revision even when its arrays are sti
 The write replaces the whole evidence document after schema validation. It uses that expected
 revision and an atomic write. If another edit causes a conflict, reread and incorporate that
 edit rather than replacing it with your older document. Unknown document fields can carry
-project-specific notes at the document root; preserve them. Do not edit capture history in `.state/`.
+project-specific notes at the document root and in the direction; preserve them.
+Older reference metadata also round-trips as unknown fields, but does not affect review status.
+Do not edit capture history in `.state/`.
 
 The initial document is:
 
 ```json
 {
   "version": 1,
-  "references": [],
   "reviews": []
 }
 ```
 
-## Brief and reference fields
+## Brief fields
 
 `brief`, when present, contains these fields:
 
@@ -52,20 +53,10 @@ Do not put an unconfirmed assertion in `facts`. Demo ledger amounts can be synth
 note in `assumptions`. Marketing results, customer names, prices, certifications, and offers
 need actual sources before appearing as factual copy. The UI frame can omit missing proof.
 
-Each `references` entry has a unique `id`, `name`, public `url`, and `borrow` note. Add
-`registryItem` for the exact Tailark ID or template registry URL, `previewFrame` for the saved
-rendered frame such as `01-moodboard/<slug>`, and an optional `avoid` note. Name a concrete
-decision and its relevance. 'Premium' or 'looks good' is not a borrowing reason. A missing
-`previewFrame` means the reference has not been linked to a rendered artifact in the canvas.
-
-See [libraries.md](libraries.md) for reference discovery and capture. Imported copy and a
-template's proof claims still need factual review. A source can be useful for composition
-without being a source of truth about your product.
-
 ## Direction fields
 
-`direction`, when present, contains `frame`, `referenceIds`, `composition`, `why`, and
-`alternatives`. Use the actual chosen frame path and IDs from the reference shortlist.
+`direction`, when present, contains `frame`, `composition`, `why`, and
+`alternatives`. Use the actual chosen frame path.
 Describe where the promise, CTA, and product artifact sit and how that helps the audience.
 Each alternative has its actual `frame` and a `reason` explaining the fit decision.
 
@@ -96,12 +87,12 @@ Each `reviews` entry contains:
 | `createdAt` | Current UTC ISO timestamp, for example `2026-10-02T14:35:00Z` |
 
 A technical review can address clipping, contrast, geometry, font loading, or diagnostics.
-A composition review explains what the product view demonstrates, how its hierarchy compares
-with the rendered references, and whether the copy has support. Record both before treating
+A composition review explains what the product view demonstrates, how its hierarchy supports
+the brief, and whether the copy has support. Record both before treating
 a new landing hero as ready for expansion. Do not write a composition pass based only on
 `framio inspect`, or a technical pass for an image you did not inspect.
 
 When a correction changes the frame, capture and review the result with a new ID. Reviews
-can become stale when source, theme, assets, viewport metadata, brief, references, or direction
+can become stale when source, theme, assets, viewport metadata, brief or direction
 change. The Evidence panel shows that state. Recheck the affected decision against a current
 capture. Preserve old reviews instead of rewriting them to claim they saw the latest frame.

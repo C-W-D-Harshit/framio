@@ -1,4 +1,4 @@
-import { ArrowUpRight, BookOpen, Camera, Check, X } from "lucide-react";
+import { ArrowUpRight, BookOpen, Camera, X } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   emptyEvidence,
@@ -13,7 +13,6 @@ import {
   SidebarContent,
   SidebarHeader,
 } from "./components/ui/sidebar";
-import { imageUrl } from "./frame-node";
 
 function identified<T>(values: readonly T[], identity: (value: T) => string) {
   const counts = new Map<string, number>();
@@ -101,7 +100,6 @@ type EvidenceContext = {
   captures: readonly CaptureEvidence[];
   captureById: ReadonlyMap<string, CaptureEvidence>;
   contextRevision: string;
-  cssVersion: number;
   onFrame(frame: SnapshotFrame): void;
 };
 
@@ -176,92 +174,6 @@ function BriefSection({ evidence }: EvidenceContext) {
   );
 }
 
-function ReferencesSection({
-  evidence,
-  frameById,
-  onFrame,
-  cssVersion,
-}: EvidenceContext) {
-  const selectedIds = new Set(evidence.direction?.referenceIds ?? []);
-  return (
-    <Section title="Rendered references">
-      {evidence.references.length ? (
-        <div className="space-y-4">
-          {evidence.references.map((reference) => {
-            const frame = reference.previewFrame
-              ? frameById.get(reference.previewFrame)
-              : undefined;
-            const selected = selectedIds.has(reference.id);
-            return (
-              <article
-                key={reference.id}
-                className="space-y-2 text-xs leading-5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <a
-                    href={reference.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex min-w-0 items-center gap-1 text-signal underline underline-offset-4"
-                  >
-                    <span className="truncate">{reference.name}</span>
-                    <ArrowUpRight className="size-3 shrink-0" />
-                  </a>
-                  {selected && (
-                    <span className="flex shrink-0 items-center gap-1 text-[11px] text-live">
-                      <Check className="size-3" />
-                      Selected
-                    </span>
-                  )}
-                </div>
-                {frame && (
-                  <button
-                    onClick={() => onFrame(frame)}
-                    aria-label={`View reference ${reference.name}`}
-                    className="block w-full overflow-hidden rounded-md border focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <img
-                      src={
-                        frame.kind === "image"
-                          ? imageUrl(frame)
-                          : `/thumb/${encodeURIComponent(frame.page)}/${encodeURIComponent(frame.slug)}.png?v=${frame.version}-${cssVersion}&width=${frame.meta.width}`
-                      }
-                      alt={`Rendered ${reference.name} reference`}
-                      className="h-24 w-full bg-card object-cover object-top"
-                      loading="lazy"
-                    />
-                  </button>
-                )}
-                {!frame && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Rendered preview has not been saved to the canvas.
-                  </p>
-                )}
-                <p>{reference.borrow}</p>
-                {reference.avoid && (
-                  <p className="text-muted-foreground">
-                    Adapt: {reference.avoid}
-                  </p>
-                )}
-                {reference.registryItem && (
-                  <p className="font-mono text-[10px] break-all text-muted-foreground">
-                    {reference.registryItem}
-                  </p>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="text-xs leading-5 text-muted-foreground">
-          Compare a few rendered references. Record which composition details
-          fit this product.
-        </p>
-      )}
-    </Section>
-  );
-}
-
 function DirectionSection({ evidence, frameById, onFrame }: EvidenceContext) {
   return (
     <Section title="Selected composition">
@@ -324,7 +236,7 @@ function ReviewSection({
       <p className="mb-3 text-[11px] leading-5 text-muted-foreground">
         {kind === "technical"
           ? "Geometry, clipping, contrast, and build findings."
-          : "Hierarchy, product clarity, reference comparison, and copy."}
+          : "Hierarchy, product clarity, and copy."}
       </p>
       {evidence.reviews.some((review) => review.kind === kind) ? (
         <div className="space-y-4">
@@ -444,7 +356,6 @@ export function EvidencePanel({
     captures,
     captureById,
     contextRevision,
-    cssVersion: snapshot.cssVersion,
     onFrame,
   };
   return (
@@ -478,7 +389,6 @@ export function EvidencePanel({
           </p>
         )}
         <BriefSection {...context} />
-        <ReferencesSection {...context} />
         <DirectionSection {...context} />
         <Section title="Recent screenshots">
           {recent.length ? (

@@ -1,8 +1,4 @@
-import type {
-  CaptureEvidence,
-  DesignReview,
-  EvidenceFile,
-} from "../contracts/evidence";
+import type { CaptureEvidence, DesignReview } from "../contracts/evidence";
 import type { SnapshotFrame } from "../contracts/snapshot";
 
 export function reviewStatus(
@@ -31,18 +27,10 @@ export function reviewStatus(
   if (capture.contextRevision !== contextRevision)
     return {
       status: "outdated",
-      reason:
-        "The brief, references, or direction changed after this screenshot.",
+      reason: "The brief or direction changed after this screenshot.",
     };
   return {
     status: "current",
     reason: `Reviewed at ${capture.viewportWidth}px${capture.layer ? `, ${capture.layer}` : ""}.`,
   };
-}
-
-export function evidenceLinkErrors(file: EvidenceFile): string[] {
-  const references = new Set(file.references.map((value) => value.id));
-  return (file.direction?.referenceIds ?? [])
-    .filter((id) => !references.has(id))
-    .map((id) => `Direction references unknown reference ${id}.`);
 }

@@ -395,7 +395,7 @@ export function HowItWorks() {
               body="Your agent reads your repo first, asks only what it can't find there, and writes each screen as a .tsx file."
               items={[
                 { icon: FileSearch, label: "Reads your repo before it asks" },
-                { icon: Images, label: "Collects references on a moodboard" },
+                { icon: Images, label: "Renders your frames on the canvas" },
                 {
                   icon: Palette,
                   label: "Shows two or three directions to pick from",

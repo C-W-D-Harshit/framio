@@ -96,7 +96,7 @@ Binary updates do not change your project's skills, dependencies, themes, or des
 
 ## Use Framio with Claude Code or Codex
 
-`framio init` installs the design skill into `.claude/skills` for Claude Code and `.agents/skills` for Codex. An agent that reads either skill directory can follow the same workflow. Open or restart your coding-agent session after initializing the project so it can discover the installed skill.
+`framio init` installs the canvas workflow skill into `.claude/skills` for Claude Code and `.agents/skills` for Codex. An agent that reads either skill directory can follow the same workflow. Open or restart your coding-agent session after initializing the project so it can discover the installed skill.
 
 Ask your agent:
 

@@ -39,13 +39,17 @@ const scenarios: {
 }[] = [
   {
     label: "New product",
-    summary: "Questions, references, and directions first.",
+    summary: "Questions, a brief, and directions first.",
     prompt: "Use Framio to design the onboarding for my invoicing app.",
     lines: [
       { kind: "read", text: "Read", path: "README.md" },
       { kind: "read", text: "Read", path: "package.json" },
       { kind: "ask", text: "Asked 4 questions about users and tone" },
-      { kind: "run", text: "Saved 8 references to", path: "01-moodboard/" },
+      {
+        kind: "write",
+        text: "Recorded product facts in",
+        path: ".framio/evidence.json",
+      },
       { kind: "write", text: "Wrote", path: ".framio/BRIEF.md" },
       { kind: "write", text: "Made 3 directions in", path: "02-directions/" },
     ],
@@ -56,7 +60,7 @@ const scenarios: {
       { path: "src/", depth: 0 },
       { path: ".framio/", depth: 0 },
       { path: "BRIEF.md", depth: 1, at: 4, kind: "new" },
-      { path: "pages/01-moodboard/", depth: 1, at: 3, kind: "new" },
+      { path: "evidence.json", depth: 1, at: 3, kind: "new" },
       { path: "pages/02-directions/", depth: 1, at: 5, kind: "new" },
     ],
   },

@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -59,6 +60,32 @@ test("setup explains skipped dependencies and package output is quiet unless req
   expect(init.stdout).toContain("Package installation was skipped");
   expect(init.stdout).toContain("framio install");
   expect(init.stdout).not.toContain("\x1b");
+  for (const owner of [".agents", ".claude"]) {
+    expect(readdirSync(join(root, owner, "skills")).sort()).toEqual(["framio"]);
+    const shipped = join(root, owner, "skills/framio/references");
+    expect(readdirSync(shipped).sort()).toEqual([
+      "comments.md",
+      "copy.md",
+      "design-md.md",
+      "evidence.md",
+      "handoff.md",
+      "process.md",
+    ]);
+  }
+  expect(
+    JSON.parse(readFileSync(join(root, ".framio/components.json"), "utf8"))
+      .registries,
+  ).toEqual({
+    "@rareui": "https://rareui.com/r/{name}.json",
+  });
+  expect(
+    JSON.parse(readFileSync(join(root, ".framio/evidence.json"), "utf8")),
+  ).toEqual({ version: 1, reviews: [] });
+  const help = await run(root, [process.execPath, cli, "--help"]);
+  expect(help.code).toBe(0);
+  expect(help.output).not.toMatch(/references/);
+  const removed = await run(root, [process.execPath, cli, "references"]);
+  expect(removed.code).not.toBe(0);
   writeFileSync(
     join(root, ".framio/package.json"),
     '{"name":"terminal-fixture","private":true}',

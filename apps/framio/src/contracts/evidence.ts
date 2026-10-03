@@ -20,22 +20,15 @@ export const DesignBrief = Schema.Struct({
   assumptions: Schema.Array(Text),
   constraints: Schema.optional(Schema.Array(Text)),
 });
-export const DesignReference = Schema.Struct({
-  id: Text,
-  name: Text,
-  url: Schema.String.pipe(Schema.check(Schema.isPattern(/^https?:\/\//))),
-  previewFrame: Schema.optional(Text),
-  registryItem: Schema.optional(Text),
-  borrow: Text,
-  avoid: Schema.optional(Text),
-});
-export const DesignDirection = Schema.Struct({
-  frame: Text,
-  referenceIds: Schema.Array(Text),
-  composition: Text,
-  why: Text,
-  alternatives: Schema.Array(Schema.Struct({ frame: Text, reason: Text })),
-});
+export const DesignDirection = Schema.StructWithRest(
+  Schema.Struct({
+    frame: Text,
+    composition: Text,
+    why: Text,
+    alternatives: Schema.Array(Schema.Struct({ frame: Text, reason: Text })),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
 export const DesignReview = Schema.Struct({
   id: Text,
   frame: Text,
@@ -51,13 +44,6 @@ export const EvidenceFile = Schema.StructWithRest(
   Schema.Struct({
     version: Schema.Literal(1),
     brief: Schema.optional(DesignBrief),
-    references: Schema.Array(DesignReference).pipe(
-      Schema.check(
-        Schema.makeFilter(uniqueIds, {
-          message: "Reference IDs must be unique",
-        }),
-      ),
-    ),
     direction: Schema.optional(DesignDirection),
     reviews: Schema.Array(DesignReview).pipe(
       Schema.check(
@@ -70,7 +56,6 @@ export const EvidenceFile = Schema.StructWithRest(
 export type EvidenceFile = typeof EvidenceFile.Type;
 export const emptyEvidence: EvidenceFile = {
   version: 1,
-  references: [],
   reviews: [],
 };
 export const CaptureEvidence = Schema.Struct({

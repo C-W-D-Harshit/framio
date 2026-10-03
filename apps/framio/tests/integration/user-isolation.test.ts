@@ -14,15 +14,22 @@ test("scaffold changes are limited to registry configuration, layer examples and
       const config = JSON.parse(
         readFileSync(resolve(import.meta.dir, "../..", file), "utf8"),
       );
-      expect(config.registries["@tailark-oss"]).toBe(
-        "https://oss.tailark.com/r/{name}",
-      );
-      delete config.registries["@tailark-oss"];
+      expect(config.registries).toEqual({
+        "@rareui": "https://rareui.com/r/{name}.json",
+      });
       expect(
         createHash("sha256")
           .update(`${JSON.stringify(config, null, 2)}\n`)
           .digest("hex"),
       ).toBe(hash);
+      continue;
+    }
+    if (file === "src/scaffold/evidence.json") {
+      expect(
+        JSON.parse(
+          readFileSync(resolve(import.meta.dir, "../..", file), "utf8"),
+        ),
+      ).toEqual({ version: 1, reviews: [] });
       continue;
     }
     if (file.startsWith("src/scaffold/skill/")) {

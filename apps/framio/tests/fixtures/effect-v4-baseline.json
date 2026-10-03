@@ -83,9 +83,7 @@
     "src/scaffold/shadcn.css": "bc7d83425702955b4cb67cb14ede9d603f9d912376d57a2d81d661094d2a782a",
     "src/scaffold/skill/SKILL.md": "e90980b72e7aaee720c70b73b4eba38f4b575f283b394bd135b2f45ff899bcef",
     "src/scaffold/skill/references/design-md.md": "ea921b9b0fa1d9bd11174645dfd0ec363ed7326198e960a96a255327a1c2e8bd",
-    "src/scaffold/skill/references/libraries.md": "04e9c2daa0e583d8c3912bdb711e5a21272b90494e9cdb6c8a977cabbf4c7fcc",
     "src/scaffold/skill/references/process.md": "2077dffe6e8e55a5979ba5100edd4b5fb769e927223932faf6d96dbc5304ecd5",
-    "src/scaffold/skill/references/skills.md": "e0ba1ea545cce1ef3e982485991c4a52625fe02aaca60e0d02e816eda67ca2ce",
     "src/scaffold/theme.css": "1af93588f1674c333f5817fdc309ab7c5d29a321a46687db44c05bfbdc901d15",
     "src/scaffold/tsconfig.json": "abc3e2a2a78a8002f88251adbb00180d63804cbb23cfe2e3b590ce4a70220193"
   },

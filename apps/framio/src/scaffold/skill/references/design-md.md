@@ -118,9 +118,6 @@ Flat. Cards use a 1px border, no shadow; only popovers and dialogs get a soft sh
 ## Components
 Primary buttons: clay fill, white text. Tables: no zebra stripes, hairline row dividers.
 
-## Libraries
-Icons: Lucide, 1.5px stroke, 18px. Showpiece components: none in product UI.
-
 ## Imagery
 Warm paper-texture illustrations with clay and ink accents, used in empty states and onboarding.
 

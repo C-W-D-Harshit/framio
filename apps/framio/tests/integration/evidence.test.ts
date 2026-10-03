@@ -23,7 +23,6 @@ import type { ScreenshotResponse } from "../../src/contracts/requests";
 import { reviewStatus } from "../../src/domain/evidence";
 import { runServer } from "../../src/server/server";
 import { ProjectState } from "../../src/services/project-state";
-import { frameRevision } from "../../src/services/frame-revision";
 import { projectPaths } from "../../src/lib/paths";
 import { evidenceContextRevision } from "../../src/services/evidence";
 
@@ -83,7 +82,6 @@ test("canvas reviews retain immutable mobile captures and expire on source, them
               },
               direction: {
                 frame: "01-test/hero",
-                referenceIds: [],
                 composition: "Promise above the invoice task",
                 why: "The user supplied this starting direction",
                 alternatives: [],
@@ -373,65 +371,6 @@ test("capture retention waits for an evidence save and preserves its reviewed im
               Bun.file(join(p.screenshots, "history/capture-56.png")).exists(),
             ),
           ).toBe(false);
-        }),
-      ).pipe(
-        Effect.provide(ProjectState.layer(p)),
-        Effect.provide(BunServices.layer),
-      ),
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}, 10_000);
-
-test("replacing a linked reference image invalidates comparison evidence without changing the product frame", async () => {
-  const root = mkdtempSync(join(tmpdir(), "framio-reference-revision-"));
-  const p = projectPaths(root);
-  mkdirSync(join(p.pages, "01-test"), { recursive: true });
-  mkdirSync(p.state, { recursive: true });
-  writeFileSync(p.theme, "body { margin:0; }");
-  writeFileSync(
-    join(p.pages, "01-test/hero.tsx"),
-    'export const meta={name:"Hero",width:390,height:844};export default function Frame(){return null}',
-  );
-  const referenceFile = join(p.pages, "01-test/reference.svg");
-  const reference = (fill: string) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844"><rect width="390" height="844" fill="${fill}"/></svg>`;
-  writeFileSync(referenceFile, reference("red"));
-  writeFileSync(
-    join(p.framio, "evidence.json"),
-    JSON.stringify({
-      ...emptyEvidence,
-      references: [
-        {
-          id: "reference",
-          name: "Rendered reference",
-          url: "https://example.com",
-          previewFrame: "01-test/reference.svg",
-          borrow: "Compare the product composition.",
-        },
-      ],
-    }),
-  );
-  try {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const project = yield* ProjectState;
-          const before = yield* project.get;
-          const hero = before.pages[0]!.frames.find(
-            (frame) => frame.slug === "hero",
-          )!;
-          const revision = frameRevision(before, hero);
-          yield* Effect.sync(() =>
-            writeFileSync(referenceFile, reference("blue")),
-          );
-          yield* project.notify("pages/01-test/reference.svg");
-          const after = yield* project.withStableState(Effect.succeed);
-          expect(after.evidenceContextRevision).not.toBe(
-            before.evidenceContextRevision,
-          );
-          expect(frameRevision(after, hero)).toBe(revision);
         }),
       ).pipe(
         Effect.provide(ProjectState.layer(p)),

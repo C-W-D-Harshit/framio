@@ -28,6 +28,7 @@ with TemporaryDirectory(prefix="framio-binary-init-") as directory:
     # Compare intentional registry, layer example and skill updates against checkout sources.
     updated_scaffold = {
         "src/scaffold/components.json",
+        "src/scaffold/evidence.json",
         "src/scaffold/pages/00-example/sign-in.tsx",
         "src/scaffold/pages/00-example/sign-in--split.tsx",
     }

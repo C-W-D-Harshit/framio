@@ -8,26 +8,22 @@ import {
   type CaptureEvidence,
   type EvidenceUpdate,
 } from "../contracts/evidence";
-import { evidenceLinkErrors } from "../domain/evidence";
 import { InvalidInput } from "../domain/errors";
 
 export const evidenceRevision = (text: string | null) =>
   text === null ? null : createHash("sha256").update(text).digest("hex");
 
-export const evidenceContextRevision = (
-  file: EvidenceFile,
-  previews: readonly {
-    readonly frame: string;
-    readonly revision: string;
-  }[] = [],
-) =>
+export const evidenceContextRevision = (file: EvidenceFile) =>
   createHash("sha256")
     .update(
       JSON.stringify({
         brief: file.brief,
-        references: file.references,
-        direction: file.direction,
-        previews,
+        direction: file.direction && {
+          frame: file.direction.frame,
+          composition: file.direction.composition,
+          why: file.direction.why,
+          alternatives: file.direction.alternatives,
+        },
       }),
     )
     .digest("hex")
@@ -69,7 +65,7 @@ export const makeEvidence = <E>(adapter: {
           (error) => new InvalidInput({ message: error.message }),
         ),
       );
-      const linkErrors = evidenceLinkErrors(next);
+      const linkErrors: string[] = [];
       const frames = new Set(yield* adapter.frames);
       for (const frame of next.direction
         ? [

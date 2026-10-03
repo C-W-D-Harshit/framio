@@ -396,20 +396,6 @@ const makeProjectState = Effect.fn("ProjectState.make")(function* (
               : 0),
         },
       };
-      const framesById = new Map(frames.map((frame) => [frame.id, frame]));
-      next.evidenceContextRevision = evidenceContextRevision(
-        evidence,
-        evidence.references.flatMap((reference) => {
-          if (!reference.previewFrame) return [];
-          const preview = framesById.get(reference.previewFrame);
-          return [
-            {
-              frame: reference.previewFrame,
-              revision: preview ? frameRevision(next, preview) : "missing",
-            },
-          ];
-        }),
-      );
       const active = yield* leases.values;
       const referencedImages = new Set(
         [next, ...retained, ...active].flatMap((assets) => [

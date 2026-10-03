@@ -50,8 +50,8 @@ Interactive terminals show an ASCII Framio mark and live task states. `NO_COLOR`
 color. CI, dumb terminals, and redirected output use plain text without cursor animation.
 `framio inspect` keeps its JSON output, and redirected `framio list` keeps tab-separated rows.
 
-The agent grounds the brief in confirmed product facts, compares rendered references, and
-builds the actual hero or key screen before expanding the design. Its chosen composition,
+The agent grounds the brief in confirmed product facts and builds the actual hero or key
+screen before expanding the design. Its chosen composition,
 screenshots, and review changes are visible in the canvas's Design evidence panel.
 
 ### Remote machines and VMs
@@ -113,25 +113,23 @@ them up. Fonts load from Google Fonts. The file follows
 
 ## Commands
 
-| Command                                                   | What it does                                                                           |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `framio init`                                             | Set up `.framio/` in the current folder                                                |
-| `framio start`                                            | Run the canvas (`--background` to detach, `--no-open` to skip the browser)             |
-| `framio stop`                                             | Stop the canvas (`--all` for every project)                                            |
-| `framio status` / `list`                                  | Show this server / all servers                                                         |
-| `framio open`                                             | Open a running canvas in the browser                                                   |
-| `framio screenshot <frame>`                               | Save frames and top-level layer crops (`--page`, `--all`, `--scale=2`)                 |
-| `framio screenshot <frame> --layer "<path>"`              | Capture a named layer with context; repeat for several layers                          |
-| `framio inspect <frame> [--width <n>] [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON                       |
-| `framio screenshot --url <url>`                           | Capture an app or website (`--width=1440`, `--height=900`, `--scale=1`)                |
-| `framio screenshot --url <url> --compare <page>/<frame>`  | Design left, implementation right, plus both single PNGs                               |
-| `framio screenshot --url <url> --into <page>`             | Add the current app to a moodboard with a URL sidecar                                  |
-| `framio add <component>`                                  | Add a shadcn registry component                                                        |
-| `framio install <package>`                                | Add an npm package for designs to use                                                  |
-| `framio references [query]`                               | Find curated Tailark, Axis, and Notio references with preview URLs and borrowing notes |
-| `framio references --capture <id>`                        | Save a rendered reference and notes to the moodboard                                   |
-| `framio evidence`                                         | Read the brief, selected composition, captures, and review status                      |
-| `framio evidence --write <file> --expect <revision>`      | Validate and save an evidence document without replacing a newer edit                  |
+| Command                                                   | What it does                                                               |
+| --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `framio init`                                             | Set up `.framio/` in the current folder                                    |
+| `framio start`                                            | Run the canvas (`--background` to detach, `--no-open` to skip the browser) |
+| `framio stop`                                             | Stop the canvas (`--all` for every project)                                |
+| `framio status` / `list`                                  | Show this server / all servers                                             |
+| `framio open`                                             | Open a running canvas in the browser                                       |
+| `framio screenshot <frame>`                               | Save frames and top-level layer crops (`--page`, `--all`, `--scale=2`)     |
+| `framio screenshot <frame> --layer "<path>"`              | Capture a named layer with context; repeat for several layers              |
+| `framio inspect <frame> [--width <n>] [--layer "<path>"]` | Print layer geometry, styles, spacing, and design checks as JSON           |
+| `framio screenshot --url <url>`                           | Capture an app or website (`--width=1440`, `--height=900`, `--scale=1`)    |
+| `framio screenshot --url <url> --compare <page>/<frame>`  | Design left, implementation right, plus both single PNGs                   |
+| `framio screenshot --url <url> --into <page>`             | Add the current app to a moodboard with a URL sidecar                      |
+| `framio add <component>`                                  | Add a shadcn registry component                                            |
+| `framio install <package>`                                | Add an npm package for designs to use                                      |
+| `framio evidence`                                         | Read the brief, selected composition, captures, and review status          |
+| `framio evidence --write <file> --expect <revision>`      | Validate and save an evidence document without replacing a newer edit      |
 
 `framio add` preserves existing component files by default and reports installed, skipped,
 and failed destinations. Use `--overwrite` only when you intend to replace existing files.
@@ -140,8 +138,8 @@ The installer verifies its completion receipt rather than treating a zero exit a
 ## Design evidence
 
 Open **Design evidence** in the canvas sidebar to see the product brief, confirmed facts,
-assumptions, rendered references, and selected composition. Reference and direction links
-jump to their actual canvas frames. Technical inspection and composition review remain
+assumptions, and selected composition. Direction links jump to their actual canvas frames.
+Technical inspection and composition review remain
 separate, and each review links to the exact screenshot and viewport it examined.
 
 Screenshot receipts print the viewport, build generation, revision, capture ID, and actual

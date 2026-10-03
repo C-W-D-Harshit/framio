@@ -19,7 +19,6 @@
   },
   "iconLibrary": "lucide",
   "registries": {
-    "@rareui": "https://rareui.com/r/{name}.json",
-    "@tailark-oss": "https://oss.tailark.com/r/{name}"
+    "@rareui": "https://rareui.com/r/{name}.json"
   }
 }

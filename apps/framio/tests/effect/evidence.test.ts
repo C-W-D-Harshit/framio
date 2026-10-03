@@ -135,6 +135,67 @@ describe("capture-linked evidence", () => {
   );
 
   it.effect(
+    "round-trips legacy reference metadata without requiring it for new records",
+    () =>
+      Effect.gen(function* () {
+        const direction = {
+          frame: frame.id,
+          composition: "A split hero",
+          why: "Product clarity",
+          alternatives: [],
+        };
+        const legacy = {
+          ...emptyEvidence,
+          references: [
+            {
+              id: "saved-image",
+              name: "Saved image",
+              url: "https://example.com/image",
+              previewFrame: "01-moodboard/saved.png",
+              registryItem: "legacy-item",
+              borrow: "Product scale",
+            },
+          ],
+          direction: { ...direction, referenceIds: ["saved-image"] },
+          projectNotes: "Keep user notes",
+        };
+        const disk = yield* Ref.make<string | null>(JSON.stringify(legacy));
+        const store = yield* makeEvidence({
+          read: Ref.get(disk),
+          captures: Effect.succeed([]),
+          frames: Effect.succeed([frame.id]),
+          commit: (expected, next) =>
+            Ref.modify(disk, (current) =>
+              current === expected ? [true, next] : [false, current],
+            ),
+        });
+        const loaded = yield* readEvidence(yield* Ref.get(disk));
+        assert.deepStrictEqual(loaded, legacy);
+        const current = yield* Ref.get(disk);
+        yield* store.write({
+          evidence: loaded,
+          expectedRevision: evidenceRevision(current),
+        });
+        assert.deepStrictEqual(
+          yield* readEvidence(yield* Ref.get(disk)),
+          legacy,
+        );
+        const fresh = yield* readEvidence(
+          JSON.stringify({ ...emptyEvidence, direction }),
+        );
+        assert.deepStrictEqual(fresh, { ...emptyEvidence, direction });
+        assert.strictEqual(
+          evidenceContextRevision(loaded),
+          evidenceContextRevision(fresh),
+        );
+        assert.strictEqual(
+          evidenceContextRevision({ ...loaded, references: [] }),
+          evidenceContextRevision(fresh),
+        );
+      }),
+  );
+
+  it.effect(
     "refuses fabricated capture evidence and nonexistent selected compositions",
     () =>
       Effect.gen(function* () {
@@ -156,7 +217,6 @@ describe("capture-linked evidence", () => {
             ...emptyEvidence,
             direction: {
               frame: "unbuilt",
-              referenceIds: [],
               composition: "A split hero",
               why: "Product clarity",
               alternatives: [],
@@ -236,14 +296,6 @@ describe("capture-linked evidence", () => {
             capture.contextRevision,
           ).status,
           "outdated",
-        );
-        assert.notStrictEqual(
-          evidenceContextRevision(withReview, [
-            { frame: "01-moodboard/reference.png", revision: "reference-1" },
-          ]),
-          evidenceContextRevision(withReview, [
-            { frame: "01-moodboard/reference.png", revision: "reference-2" },
-          ]),
         );
         const changedBrief: EvidenceFile = {
           ...withReview,
