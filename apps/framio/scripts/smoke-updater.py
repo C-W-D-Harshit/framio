@@ -85,6 +85,7 @@ with tempfile.TemporaryDirectory(prefix="framio-updater-smoke-") as temporary:
         assert subprocess.check_output([str(target), "--version"], env=environment, text=True).strip() == version_output
         with sqlite3.connect(data / "updates.sqlite") as database:
             database.execute("UPDATE state SET value = ? WHERE key = ?", (json.dumps(record), "installation:" + identity))
+        database.close()
         alias = subprocess.check_output([str(target), "upgrade"], env=environment, text=True, encoding="utf-8", timeout=30)
         assert f"Installed Framio {selected}." in alias
         subprocess.check_call([str(backup), "update", "--rollback"], env={**environment, "FRAMIO_INSTALLATION_TARGET": str(target)}, stdout=subprocess.DEVNULL, timeout=30)
