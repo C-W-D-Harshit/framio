@@ -5,137 +5,144 @@ description: Design and review UI in Framio's .framio canvas. Use for screens, f
 
 # Framio
 
-Framio frames are ordinary React + Tailwind mockups in `.framio/pages/<page>/<frame>.tsx`.
-Use realistic static content, with no data fetching, backend logic, or Effect imports.
-Run `framio start` before designing. The printed URL opens the canvas.
-
-## Before making a design
-
-Read the existing UI, `.framio/BRIEF.md`, and `.framio/DESIGN.md` first. For a new product,
-ask only what is missing, at most five questions together. Establish the audience, main job,
-product difference, conversion goal, and taste constraints. Ask for existing product facts or
-proof where the design needs them. Do not turn category assumptions into product facts.
-
-Keep these rules active while designing:
-
-- Separate confirmed facts, proposed assumptions, and demo data. A plausible transaction is
-  useful inside a mock product view. An invented customer result, price, certification, offer,
-  capability, or testimonial is not marketing proof. Omit unsupported claims or mark proposed
-  copy for the user's review in the evidence record.
-- Write concrete copy for the actual product. Keep controls concise. Remove filler and apply
-  [references/copy.md](references/copy.md) to every text-bearing component.
-  Never use em dashes. Use a middle dot in titles, for example `my-app · Framio`.
-- Give the buyer one clear promise and show how the product supports it. A chart must show the
-  comparison its caption claims. A shared-data promise needs a coherent cross-module example.
-- Choose composition, density, typography, and imagery for this audience and job. Centered
-  heroes, cards, grids, gradients, and serif type can all be appropriate. Judge their effect
-  on hierarchy and product understanding rather than banning a style.
-
-## Choose the work you need
-
-| Task | Work |
-| --- | --- |
-| New website or product, substantial redesign | Brief, meaningful direction fragments, user choice, DESIGN.md, screens, review |
-| New screen in an existing project | Existing brief and tokens, structure, screen, review |
-| Change to a frame | Read the selection and relevant evidence, edit, review the affected crop and frame |
-| Implement a design in the real app | Read [references/handoff.md](references/handoff.md) |
-| Address comments | Read [references/comments.md](references/comments.md), preserve every user comment |
-
-Read [references/process.md](references/process.md) for the workflow and
-[references/evidence.md](references/evidence.md) for the persistent decision record.
-Use `framio evidence` to read it, then `framio evidence --write <file> --expect <revision>`
-with that response's revision to save a validated whole document. Use `--expect new` only
-when the record is missing. The canvas Evidence panel exposes the same record. Store decisions and
-artifact paths, not checkmarks claiming work happened.
-
-For a new landing page, review the actual hero and product demonstration before expanding
-the rest of the page. Explore different ways to explain the product within the user's constraints. A palette choice does not approve a different layout.
-Finish and visually review one direction fragment before making the next, then show the
-directions and wait for the user's choice. When the user has already chosen a direction,
-continue within it without asking again.
-
-## Design system
-
-Write the selected direction to `.framio/DESIGN.md` and run
-`npx @google/design.md lint .framio/DESIGN.md`. Fix invalid tokens and contrast findings.
-Framio applies the tokens and fonts automatically. Follow
-[references/design-md.md](references/design-md.md); keep `theme.css` as the base theme.
-The scaffold includes shadcn/ui controls. Keep repeated product chrome in shared components.
-Record imagery choices in DESIGN.md. A product demonstration can
-be the visual centerpiece; photography or decorative illustration is not mandatory.
-
-## Review one frame at a time
-
-1. Build the smallest meaningful fragment for the current decision. For a landing page this
-   is the hero plus its product demonstration, not the whole page.
-2. Run `framio inspect <page>/<frame>`, check `.framio/.state/errors.json`, and fix known errors.
-   Capture one or two useful crops with `framio screenshot <page>/<frame> --layer "Content/Hero"`
-   and open the returned `archivePath` PNGs at a readable size.
-3. Review the fragment against the brief. Record what the buyer learns,
-   what changed, why the composition fits, and any unresolved assumption in the evidence.
-4. After corrections, recheck the affected crop. Complete each frame with a full-frame review
-   at the primary and smallest requested width. Review hierarchy, copy truth, demo consistency,
-   alignment, spacing, contrast, clipping, imagery, and the intended next action.
-
-A successful screenshot command or empty diagnostic list does not prove design quality.
-Use one focused visual pass and a comparison revision where needed for subjective refinements.
-Keep fixing known correctness and readability issues. Do not repeatedly recapture unaffected
-sections or turn polish into an open-ended search for a different aesthetic. Full-page captures
-check composition; crops check details. A page overview is an additional consistency check.
-Report the decisions, frames reviewed, and remaining limitations before claiming completion.
-
-## Commands and files
-
-| Command | Use |
-| --- | --- |
-| `framio start` / `framio start --background` | Run the canvas, use background mode when a persistent terminal is unavailable |
-| `framio list` / `framio stop --all` | Find or stop project servers |
-| `framio screenshot <page>/<frame> --width 1440` | Capture a viewport, open the actual returned path |
-| `framio screenshot <page>/<frame> --layer "Content/Hero"` | Capture a named layer with context |
-| `framio inspect <page>/<frame> --width 390` | Read geometry, styles, and automatic checks at a viewport |
-| `framio screenshot --page <page>` | Capture the canvas arrangement and notes |
-| `framio evidence` / `framio evidence --write <file> --expect <revision>` | Read or replace evidence using the revision you read |
-| `framio install <package>` / `framio add <registry-item>` | Install packages or reusable components |
-
-Never run npm, pnpm, or yarn installs in `.framio`. Never edit `canvas.json` or `.state/`.
-Delete `pages/00-example` once real work starts. Drop your images into a page folder to make
-a moodboard, with optional source and note sidecar JSON. Design assets live in `assets/` and use `/assets/<name>` URLs.
-Preserve existing work and comments. User instructions and existing authorization take priority.
-
-## Frames, layers, and selection
+Framio is a local canvas for React + Tailwind designs. A frame is a file at
+`.framio/pages/<page>/<frame>.tsx`, with realistic static content and a default React export.
+Frames have no data fetching, backend logic, or Effect imports.
 
 ```tsx
 import { Button } from "@/components/ui/button";
 
 export const meta = {
-  name: "Landing",
+  name: "Welcome",
   width: 1440,
   height: 900,
   widths: [1440, 390],
 };
 
 export default function Frame() {
-  return <div className="min-h-screen bg-background text-foreground">
-    <header data-layer="Header">...</header>
-    <main data-layer="Content">
-      <section data-layer="Hero">...</section>
+  return (
+    <main data-layer="Content" className="min-h-screen bg-background text-foreground">
+      <section data-layer="Hero"><h1 className="type-display">Your invoices</h1><Button>Create invoice</Button></section>
     </main>
-  </div>;
+  );
 }
 ```
 
-`meta` must be a plain object literal. Frames grow with content. Optional `heights` must match
-`widths`; default viewport heights are 900 here at desktop, 1024 for tablet, and 844 for mobile.
-With `widths`, screenshots use `<slug>@<width>.png`, so use the returned path instead of an older
-unsuffixed file. Use theme utilities such as `bg-primary`, `border-border`, `rounded-lg`, and
-`type-display`. Do not hardcode colors covered by tokens.
+| `meta` field | Meaning |
+| --- | --- |
+| `name` | Canvas display name |
+| `width`, `height` | Base dimensions; defaults are 1440 × 900; `widths[0]` overrides `width` |
+| `widths` | Optional unique positive integer viewport widths |
+| `heights` | Optional positive integer heights, one per `widths` entry |
+| `variationOf` | Original frame slug for an alternative, typically `<frame>--<idea>.tsx` |
+| `theme` | Optional `"light"` or `"dark"` |
 
-Name meaningful sections, cards, and rows with `data-layer` by purpose. Paths follow named
-ancestors, for example `Content/Hero`; repeated items use `Transaction Row[2]`. Skip decorative
-spans. Keep `/`, `[` and `]` for path syntax. Read `.framio/.state/selection.json` when the user
-says "this", "here", or "selected". Its frame, width, element, and layer identify the target.
+With `widths`, desktop widths of 1024 or more use `meta.height`, tablet widths of 600 to 1023 use 1024, and mobile widths use 844, unless `heights` overrides them. Without `widths`, `meta.height` applies. Frames grow with content. Responsive screenshot names are `<slug>@<width>.png`.
 
-Explore alternatives as `<frame>--<idea>.tsx` with `variationOf: "<original-slug>"` and a new
-name. Edit in place when the user asks to fix that frame. Mobile frames show product content
-in a plain rectangle, without phone hardware, imitation scrollbars, or OS chrome unless requested.
-For fixed-height screens, give scrollable content `flex-1 min-h-0` so the product navigation fits.
+`data-layer` names identify sections, cards, and rows. Paths follow named ancestors, such as
+`Content/Hero`; repeated names have indexes, such as `Transaction Row[2]`. `/`, `[` and `]` are reserved for path syntax.
+
+## Project files
+
+Paths below are inside `.framio/`, except the installed agent skills.
+
+| Path | Contents |
+| --- | --- |
+| `BRIEF.md` | Product context, audience, facts, and constraints |
+| `DESIGN.md` | Design tokens, fonts, and design intent, applied on save |
+| `theme.css` | Base Tailwind theme beneath DESIGN.md tokens |
+| `components/ui/` | Included UI components, imported through `@/components/ui/<name>` |
+| `components/` | Shared product chrome and reusable design components |
+| `hooks/`, `lib/utils.ts` | Shared hooks and the `cn` class-name helper |
+| `assets/` | Images and other assets served at `/assets/<name>` |
+| `pages/` | Page folders containing React frames and moodboard images |
+| `comments.json` | Live user feedback, anchors, replies, and resolution status |
+| `evidence.json` | Optional brief, direction, and screenshot review record, shown in the Evidence panel |
+| `.state/selection.json` | Selected frame, viewport width, element, and layer; the target of "this" or "selected" |
+| `.state/errors.json` | Current build and file diagnostics |
+| `canvas.json`, `.state/` | Framio-managed canvas positions and runtime state |
+| `.claude/skills/framio/`, `.agents/skills/framio/` | Identical agent skill copies in the project root |
+
+Images in a page folder become moodboard frames. An optional `<image>.json` sidecar has
+`name`, `width`, `note`, `source`, and `variationOf` fields. `pages/00-example` is a removable sample.
+
+## Commands
+
+| Command | Capability and output |
+| --- | --- |
+| `framio init` | Creates `.framio` and both agent skill copies; installs packages and screenshot browser. `--skip-install` creates files only. Existing canvases are protected from overwrite. |
+| `framio start` | Runs the canvas and file watcher, prints URLs, and opens a browser. `--background` detaches; `--no-open` skips browser opening; `--host` sets the listen address. |
+| `framio stop` | Stops this project's server; `--all` stops all project servers. Reports stopped servers. |
+| `framio list` | Lists running canvases with project, PID, and URL; redirected output is tab-separated. |
+| `framio status` | Reports this project's running server or that it is stopped. |
+| `framio open` | Opens an already running canvas and prints its URLs. |
+| `framio install <package>` | Adds design packages to `.framio`; no package argument installs existing dependencies. Reports package installation status. |
+| `framio add <registry-item>` | Adds shadcn registry components and dependencies. `--overwrite` replaces existing component files. Reports component installation status. |
+| `framio evidence` | Returns JSON with evidence, revision, context revision, captures, and computed review status. `--write <file> --expect <revision>` validates and replaces the record, then prints the saved path. |
+| `framio inspect <page>/<frame>` | Returns JSON geometry, styles, layers, and automatic checks. `--width` selects a viewport; `--layer` scopes inspection. |
+| `framio screenshot [<page>/<frame> ...]` | Captures frames with managed Chromium. Receipts include paths, dimensions, viewport, revision, and generation. Frame and layer captures return `captureId` and `archivePath`. |
+
+Screenshot options: repeated `--layer <path>` captures named layers; `--page <page>` captures
+canvas arrangement and notes; `--all` captures all frames. `--width` selects viewport width,
+`--height` sets initial viewport height, and `--scale` sets pixel density. `--url <url>` captures
+a website; `--compare <page>/<frame>` creates a labeled design/website comparison;
+`--into <page>` adds the website capture to a moodboard with a source sidecar.
+
+## Components and packages
+
+`components/ui/` contains shadcn/Base UI components in the `base-vega` style, with Lucide icons.
+Components restyle through DESIGN.md tokens. Names below are exports, grouped by purpose.
+
+| Group | Component exports and uses |
+| --- | --- |
+| Actions | `Button`: actions; `ButtonGroup`: related actions; `Toggle`, `ToggleGroup`: pressed choices |
+| Text inputs | `Input`: single-line text; `Textarea`: multiline text; `InputGroup`: inputs with addons; `InputOTP`: segmented codes |
+| Form structure | `Field`: labels, help, errors, and groups; `Label`: control labels |
+| Choices | `Checkbox`: independent choices; `RadioGroup`: one choice; `Switch`: on/off settings; `Slider`: numeric ranges |
+| Selection | `Select`: styled options; `NativeSelect`: native options; `Combobox`: searchable options and chips; `Calendar`: dates |
+| Dialogs | `Dialog`: modal content; `AlertDialog`: confirmation; `Sheet`: side panels; `Drawer`: draggable panels |
+| Overlays | `Popover`: anchored content; `HoverCard`: hover details; `Tooltip`: short hints |
+| Menus | `DropdownMenu`: action menus; `ContextMenu`: context actions; `Menubar`: application menus; `Command`: searchable command lists |
+| Navigation | `NavigationMenu`: site navigation; `Breadcrumb`: location trail; `Pagination`: page links; `Tabs`: switching views; `Sidebar`: shared application navigation |
+| Data display | `Table`: tabular records; `ChartContainer`, `ChartTooltip`, `ChartLegend`: Recharts styling and annotations; `Avatar`: people and groups; `Badge`: labels; `Kbd`: shortcuts |
+| Content | `Card`: grouped content; `Item`: list rows with media and actions; `Carousel`: sliding content |
+| Feedback | `Alert`: notices; `Empty`: empty states; `Progress`: completion; `Skeleton`: loading placeholders; `Spinner`: pending activity; `Toaster`: Sonner notifications |
+| Layout | `Accordion`: expandable sections; `Collapsible`: disclosure; `AspectRatio`: media proportions; `ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle`: split panes; `ScrollArea`: scroll regions; `Separator`: dividers; `DirectionProvider`: text direction |
+| Messaging | `Message`, `MessageGroup`: author/content layout; `Bubble`, `BubbleGroup`: message bubbles and reactions; `Attachment`: media/files and actions; `Marker`: timeline or conversation separators |
+
+| Installed package | Available for |
+| --- | --- |
+| `lucide-react`, `recharts` | Icons and charts |
+| `date-fns`, `react-day-picker` | Date formatting and calendar interaction |
+| `embla-carousel-react`, `react-resizable-panels` | Carousels and resizable layouts |
+| `sonner`, `next-themes`, `tw-animate-css` | Toasts, theme switching, and animation utilities |
+| `@base-ui/react`, `cmdk`, `input-otp` | Component primitives, command search, and code inputs |
+| `class-variance-authority`, `clsx`, `tailwind-merge` | Component variants and class composition |
+| `react`, `react-dom`, `tailwindcss` | Frame rendering and styling |
+
+## System contracts
+
+- `meta` is parsed statically and must be a plain object literal. `heights` requires `widths` with the same length.
+- Framio owns `canvas.json` and `.state/`; hand edits can conflict with runtime state.
+- `framio install` and `framio add` manage design dependencies. npm, pnpm, and yarn installs inside `.framio` bypass that integration.
+- Token-covered colors belong to theme utilities such as `bg-primary` and `border-border`; hardcoded values bypass theming. Typography utilities include `type-display`.
+- Comments are read live. Broken JSON or invalid fields appear in `.state/errors.json`. Saving feedback preserves every comment, reply, and unrelated field.
+- Evidence is optional. Writes replace the whole document and require the current revision when it exists. `--expect new` applies only to a missing record. Unknown root and direction fields are preserved in replacements.
+- Real applications never import `.framio` files at runtime. Frames and generated design projects have no Effect dependencies or imports.
+
+## User preferences
+
+The user wants confirmed facts separated from assumptions. Marketing proof has no invented
+testimonials, customer names, counts, measured results, prices, certifications, offers, or capabilities.
+Synthetic demo data inside a product view is fine. Existing work and every user comment are preserved.
+UI copy has no em dashes. Titles use a middle dot, such as `my-app · Framio`.
+Mobile frames show content in a plain rectangle, without phone hardware or OS chrome unless requested.
+User instructions take priority. The model decides when a direction or other decision needs a user check-in.
+
+## References
+
+- [DESIGN.md](references/design-md.md): token mapping, font loading, shadcn variables, validator, and a token document example.
+- [Evidence](references/evidence.md): optional record schema, capture fields, review status, and revision-safe write contract.
+- [Comments](references/comments.md): feedback anchors, reply format, and resolution status.
+- [Copy](references/copy.md): truthfulness, product tone, controls, and errors.
+- [Handoff](references/handoff.md): website captures, design comparisons, and runtime boundaries.

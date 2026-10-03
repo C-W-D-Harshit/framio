@@ -40,8 +40,8 @@ test("local guidance links resolve in the generated skill", () => {
   }
 });
 
-test("default workflow command recipes do not fetch external skills", () => {
-  for (const path of ["SKILL.md", "references/process.md"]) {
+test("catalog command recipes do not fetch external skills", () => {
+  for (const path of files(skill).filter((path) => path.endsWith(".md"))) {
     const content = readFileSync(join(skill, path), "utf8");
     const recipes = Array.from(
       content.matchAll(/```(?:sh|bash)[^\n]*\n([\s\S]*?)```|`([^`\n]+)`/g),

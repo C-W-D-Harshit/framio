@@ -398,7 +398,7 @@ export function HowItWorks() {
                 { icon: Images, label: "Renders your frames on the canvas" },
                 {
                   icon: Palette,
-                  label: "Shows two or three directions to pick from",
+                  label: "Supports variations alongside the original",
                 },
               ]}
               visual={<FileAndFrameVisual />}

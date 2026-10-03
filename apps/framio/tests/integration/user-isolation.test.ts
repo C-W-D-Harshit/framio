@@ -14,9 +14,7 @@ test("scaffold changes are limited to registry configuration, layer examples and
       const config = JSON.parse(
         readFileSync(resolve(import.meta.dir, "../..", file), "utf8"),
       );
-      expect(config.registries).toEqual({
-        "@rareui": "https://rareui.com/r/{name}.json",
-      });
+      expect(config.registries).toBeUndefined();
       expect(
         createHash("sha256")
           .update(`${JSON.stringify(config, null, 2)}\n`)

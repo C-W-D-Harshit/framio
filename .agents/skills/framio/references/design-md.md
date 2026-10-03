@@ -4,8 +4,8 @@
 matter (exact values) plus markdown prose (why, and how to apply them). Framio reads the tokens
 and applies them to every frame on save. Prose sections are for you and the user.
 
-Validate with `npx @google/design.md lint .framio/DESIGN.md` (catches broken references and
-contrast failures). `orphaned-tokens` warnings are expected: shadcn components use those colors.
+`npx @google/design.md lint .framio/DESIGN.md` is an available validator for broken references and
+contrast failures. `orphaned-tokens` warnings are expected: shadcn components use those colors.
 
 ## How Framio applies the tokens
 
@@ -17,16 +17,15 @@ contrast failures). `orphaned-tokens` warnings are expected: shadcn components u
 | first `body*` typography | `font-sans` (the default font) | automatic |
 | first `display*` / `h1*` / `heading*` / `title*` typography | `font-heading` | `font-heading` |
 | `rounded.<name>` | `--radius-<name>` | `rounded-<name>` |
-| `spacing`, `components` | not converted; guidance for you | follow them when building |
+| `spacing`, `components` | not converted; guidance for you | prose guidance |
 
 Fonts named in `typography` load from Google Fonts automatically with the weights you list.
 
-**Name colors after shadcn's variables so every component restyles:** `background`, `foreground`,
+Shadcn components restyle through these variable names: `background`, `foreground`,
 `card`, `card-foreground`, `popover`, `popover-foreground`, `primary`, `primary-foreground`,
 `secondary`, `secondary-foreground`, `muted`, `muted-foreground`, `accent`, `accent-foreground`,
 `destructive`, `border`, `input`, `ring`, `chart-1`…`chart-5`, `sidebar`, `sidebar-foreground`,
-`sidebar-primary`, `sidebar-accent`, `sidebar-border`. Add brand colors with your own names
-(`brand`, `highlight`).
+`sidebar-primary`, `sidebar-accent`, `sidebar-border`. Custom names such as `brand` and `highlight` are also supported.
 
 ## Template
 

@@ -50,9 +50,9 @@ Interactive terminals show an ASCII Framio mark and live task states. `NO_COLOR`
 color. CI, dumb terminals, and redirected output use plain text without cursor animation.
 `framio inspect` keeps its JSON output, and redirected `framio list` keeps tab-separated rows.
 
-The agent grounds the brief in confirmed product facts and builds the actual hero or key
-screen before expanding the design. Its chosen composition,
-screenshots, and review changes are visible in the canvas's Design evidence panel.
+The agent skill catalogs the canvas, commands, components, and project contracts.
+An optional evidence record shows product facts, design decisions, screenshots, and reviews
+in the canvas's Design evidence panel.
 
 ### Remote machines and VMs
 
@@ -147,10 +147,11 @@ image paths. Framio also archives each image so a later capture cannot change an
 review's evidence. Reviews become outdated after frame, theme, asset, metadata, or design
 decision changes. A recorded pass covers its screenshot and scope, not every viewport.
 
-The agent maintains `.framio/evidence.json`. Run `framio evidence` before preparing an update,
-preserve existing entries, and pass its returned revision to `--expect`. For a missing file,
-use `--expect new`. Framio refuses malformed records and conflicting writes. It keeps recent
-captures and any capture referenced by a review across server restarts.
+`.framio/evidence.json` is optional. `framio evidence` returns the record and its revision.
+`framio evidence --write <file> --expect <revision>` validates and replaces the whole document;
+replacement documents retain existing entries and unknown fields. `--expect new` applies only to a
+missing file. Framio refuses malformed records and conflicting writes. It keeps recent captures
+and any capture referenced by a review across server restarts.
 
 ## Layers
 

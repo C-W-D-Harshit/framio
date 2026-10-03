@@ -69,15 +69,12 @@ test("setup explains skipped dependencies and package output is quiet unless req
       "design-md.md",
       "evidence.md",
       "handoff.md",
-      "process.md",
     ]);
   }
   expect(
     JSON.parse(readFileSync(join(root, ".framio/components.json"), "utf8"))
       .registries,
-  ).toEqual({
-    "@rareui": "https://rareui.com/r/{name}.json",
-  });
+  ).toBeUndefined();
   expect(
     JSON.parse(readFileSync(join(root, ".framio/evidence.json"), "utf8")),
   ).toEqual({ version: 1, reviews: [] });

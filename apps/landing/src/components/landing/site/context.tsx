@@ -39,21 +39,21 @@ const scenarios: {
 }[] = [
   {
     label: "New product",
-    summary: "Questions, a brief, and directions first.",
+    summary: "Product context and designs in your repo.",
     prompt: "Use Framio to design the onboarding for my invoicing app.",
     lines: [
       { kind: "read", text: "Read", path: "README.md" },
       { kind: "read", text: "Read", path: "package.json" },
-      { kind: "ask", text: "Asked 4 questions about users and tone" },
+      { kind: "ask", text: "Clarified the audience and product tone" },
       {
         kind: "write",
         text: "Recorded product facts in",
         path: ".framio/evidence.json",
       },
       { kind: "write", text: "Wrote", path: ".framio/BRIEF.md" },
-      { kind: "write", text: "Made 3 directions in", path: "02-directions/" },
+      { kind: "write", text: "Made variations in", path: "02-directions/" },
     ],
-    done: "Waiting for you to pick a direction.",
+    done: "Variations are available on the canvas.",
     files: [
       { path: "README.md", depth: 0, at: 0, kind: "read" },
       { path: "package.json", depth: 0, at: 1, kind: "read" },

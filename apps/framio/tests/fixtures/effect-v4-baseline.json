@@ -74,18 +74,21 @@
     "src/scaffold/components/ui/toggle-group.tsx": "643bd83048368e9b18e4b7f25e6f4f64fb5bd066b8188e9c7dcda8e6b34f9a9e",
     "src/scaffold/components/ui/toggle.tsx": "de6873965a2ad3146bd72636954fdd969a4b400b6a00767c55b0950b25653c06",
     "src/scaffold/components/ui/tooltip.tsx": "10753a6a2f3770cc9f191d50ec13717fc71150fa7c9af4718548c46509e7963e",
-    "src/scaffold/components.json": "8e3950cf94afb89c54211701a3f73cf162b00dd233d34225e1ea8bdbb6e763f6",
+    "src/scaffold/components.json": "6df6960106ba7ae256d768d1d174f816690c763280e9b1e716f78606cef566b9",
     "src/scaffold/hooks/use-mobile.ts": "ad0936f84f1df79d3697bfbff9c18f8ad58431c1cbaf2359c6a853b0fcc9f28b",
     "src/scaffold/lib/utils.ts": "7c8c3dfc0cdd370d44932828eb067ef771c8fe7996693221d5d4b90af6d54f2d",
     "src/scaffold/package.json": "46d836e80843f87bc30f848581bb870dc50b9fbb270ef049ecd348db400bc370",
     "src/scaffold/pages/00-example/sign-in--split.tsx": "f77813ed1f7f3e1c0a77320e0d3f288283f224550de945b2a8f7913fa27e00cd",
     "src/scaffold/pages/00-example/sign-in.tsx": "b47ae5ec73f0d002bf6b06d2c191d6ea251c4978ca09b6c9e25920ed1af76356",
     "src/scaffold/shadcn.css": "bc7d83425702955b4cb67cb14ede9d603f9d912376d57a2d81d661094d2a782a",
-    "src/scaffold/skill/SKILL.md": "e90980b72e7aaee720c70b73b4eba38f4b575f283b394bd135b2f45ff899bcef",
-    "src/scaffold/skill/references/design-md.md": "ea921b9b0fa1d9bd11174645dfd0ec363ed7326198e960a96a255327a1c2e8bd",
-    "src/scaffold/skill/references/process.md": "2077dffe6e8e55a5979ba5100edd4b5fb769e927223932faf6d96dbc5304ecd5",
+    "src/scaffold/skill/SKILL.md": "5a95e3edcda886780ac82f0d1c00745c258d5969de16fa805bfb83298abc913b",
+    "src/scaffold/skill/references/design-md.md": "f7ad15d5871b31abe60fda27c8692f78fdc9c03f93c48b463f0823b2dc4b56ee",
     "src/scaffold/theme.css": "1af93588f1674c333f5817fdc309ab7c5d29a321a46687db44c05bfbdc901d15",
-    "src/scaffold/tsconfig.json": "abc3e2a2a78a8002f88251adbb00180d63804cbb23cfe2e3b590ce4a70220193"
+    "src/scaffold/tsconfig.json": "abc3e2a2a78a8002f88251adbb00180d63804cbb23cfe2e3b590ce4a70220193",
+    "src/scaffold/skill/references/comments.md": "d158c685e0a207f89cc70f525cab13f0633c113e46aa838b1b557ce03a94ab44",
+    "src/scaffold/skill/references/copy.md": "08ab9e4ce3ceba7c78d2c9cf821a0c38ed33f9bd6bac259a961c741122f62bc8",
+    "src/scaffold/skill/references/evidence.md": "e66ed2477c520b1806c1e14e8aef12f98b04a7366935dcf94c0c4958a0e15ef1",
+    "src/scaffold/skill/references/handoff.md": "20c25c197c6a5a587bedc5566bc699f17d3e51bfd7b3884974d5e8c989e2ef9a"
   },
   "assets": {
     "dist/runtime.js": {

@@ -108,7 +108,7 @@ Ask your agent:
 
 > Use Framio to design the onboarding for my invoicing app. Show desktop and mobile layouts. Ask me about the product before choosing a direction.
 
-The agent gathers context, proposes visual directions, and creates each screen as a `.tsx` file. It screenshots and reviews the frame before continuing. Review the designs on the canvas, then ask for changes using selections or comments.
+The agent reads your project and creates each screen as a `.tsx` file. It can screenshot frames, try variations, and record its decisions in the evidence panel. Review the designs on the canvas, then ask for changes using selections or comments.
 
 Framio provides the canvas and design workflow. You still use your own coding agent and its model provider. Framio does not include a model subscription.
 
