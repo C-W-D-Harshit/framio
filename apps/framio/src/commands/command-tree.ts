@@ -1,3 +1,4 @@
+import { telemetry } from "./telemetry";
 import { update } from "./update";
 import { inspect } from "./inspect";
 import * as Effect from "effect/Effect";
@@ -40,8 +41,19 @@ const verbose = Flag.Boolean("verbose").pipe(
 );
 const makeRoot = () =>
   Command.make("framio", startFlags, start).pipe(
-    Command.withDescription("A design canvas for coding agents"),
+    Command.withDescription(
+      "A design canvas for coding agents, currently in alpha",
+    ),
     Command.withSubcommands([
+      Command.make(
+        "telemetry",
+        {
+          action: Argument.Literals("action", ["status", "on", "off"]).pipe(
+            Argument.withDefault("status"),
+          ),
+        },
+        ({ action }) => telemetry(action),
+      ).pipe(Command.withDescription("View or change anonymous telemetry")),
       Command.make("start", startFlags, start).pipe(
         Command.withDescription("Open the canvas and watch your designs"),
       ),

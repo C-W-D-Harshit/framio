@@ -22,6 +22,8 @@ Effect.scoped(
       Bun.build({
         entrypoints: [join(root, "src/cli.ts")],
         compile: { outfile },
+        sourcemap:
+          process.env.FRAMIO_BINARY_SOURCEMAPS === "0" ? "none" : "linked",
         minify: true,
         define: { FRAMIO_VERSION: JSON.stringify(pkg.version) },
         plugins: [

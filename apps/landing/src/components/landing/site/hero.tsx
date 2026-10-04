@@ -1,4 +1,5 @@
 import { RELEASE_VERSION } from "@/lib/site";
+import Brand from "@/components/Brand";
 /* Adapted from Tailark Mist hero-section-5 and the Mist header (MIT, Copyright (c) Tailark). */
 import { ArrowRight } from "lucide-react";
 import { CanvasDots } from "./texture";
@@ -26,14 +27,8 @@ export function SiteNav() {
       className="relative z-20"
     >
       <Container className="flex h-16 items-center justify-between">
-        <a href="/" aria-label="Framio home">
-          <img
-            src="/assets/brand/framio-wordmark-on-dark.png"
-            alt="Framio"
-            width={797}
-            height={244}
-            className="h-5 w-auto md:h-[22px]"
-          />
+        <a href="/" aria-label="Framio Alpha home">
+          <Brand />
         </a>
         <ul className="absolute inset-x-0 mx-auto hidden w-fit gap-8 text-[14px] text-landing-muted md:flex">
           {navItems.map((item) => (
@@ -82,7 +77,7 @@ export function Hero() {
           className="hero-in group press flex w-fit items-center gap-3 rounded-full border border-landing-line bg-landing-raised transition-[border-color,transform] duration-150 hover:border-[#3F3F46] py-1 pr-4 pl-1 text-[14px] md:gap-3.5 md:text-[15px]"
         >
           <span className="rounded-full bg-corner-blue px-3 py-1 text-[13px] font-semibold text-on-corner-blue">
-            MIT
+            Alpha
           </span>
           <span className="text-landing-ink">{RELEASE_VERSION}</span>
           <span aria-hidden className="text-landing-muted">

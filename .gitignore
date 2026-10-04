@@ -9,3 +9,4 @@ __pycache__/
 .dev.vars*
 .env*
 apps/framio/benchmarks/effect-v4-performance.json
+.env

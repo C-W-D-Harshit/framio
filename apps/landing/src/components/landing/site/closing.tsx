@@ -1,4 +1,5 @@
 import { RELEASE_VERSION } from "@/lib/site";
+import Brand from "@/components/Brand";
 /*
  * FAQ adapted from Tailark Dusk faqs-1, closing call to action from Dusk call-to-action-1,
  * footer from Dusk footer-1 (MIT, Copyright (c) Tailark). The first answer is open on initial load.
@@ -18,6 +19,7 @@ import {
 } from "./primitives";
 import { Grain, PanelDots } from "./texture";
 
+import { landingLogger } from "@/lib/posthog-logs";
 import { faqs } from "@/lib/site";
 
 export function FAQ() {
@@ -46,6 +48,15 @@ export function FAQ() {
               <summary
                 onClick={(event) => {
                   event.preventDefault();
+                  if (!openQuestions.has(f.q)) {
+                    const faqIndex = faqs.indexOf(f) + 1;
+                    window.posthog?.capture("faq_answer_opened", {
+                      faq_index: faqIndex,
+                    });
+                    landingLogger.info("faq answer opened", {
+                      faq_index: faqIndex,
+                    });
+                  }
                   setOpenQuestions((current) => {
                     const next = new Set(current);
                     if (next.has(f.q)) next.delete(f.q);
@@ -115,13 +126,7 @@ export function Footer() {
     >
       <Container className="flex flex-col gap-12 md:flex-row md:justify-between">
         <div className="flex flex-col gap-4">
-          <img
-            src="/assets/brand/framio-wordmark-on-dark.png"
-            width={797}
-            height={244}
-            alt="Framio"
-            className="h-5 w-fit"
-          />
+          <Brand />
           <p className="max-w-[260px] text-[14px] leading-[1.55] text-landing-muted">
             A free, open-source design canvas for coding agents.
           </p>

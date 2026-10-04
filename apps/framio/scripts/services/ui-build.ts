@@ -1,6 +1,7 @@
 import { gzipSync } from "node:zlib";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import tailwind from "bun-plugin-tailwind";
 import { join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -44,6 +45,8 @@ export const buildUi = Effect.fn("Build.ui")(function* (root: string) {
         outdir: join(candidate, "ui"),
         plugins: [tailwind],
         minify: true,
+        splitting: true,
+        sourcemap: "linked",
         target: "browser",
         define: { "process.env.NODE_ENV": JSON.stringify("production") },
         throw: false,
@@ -93,6 +96,44 @@ export const buildUi = Effect.fn("Build.ui")(function* (root: string) {
       join(uiDirectory, "font-license.txt"),
       yield* fs.readFileString(fontLicense),
     );
+  // Inject the actual candidate that will be embedded, never a separate rebuild.
+  if (process.env.FRAMIO_POSTHOG_SOURCEMAPS === "1") {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const injection = yield* spawner.spawn(
+      ChildProcess.make(
+        process.execPath,
+        [
+          "x",
+          "--package",
+          "@posthog/cli@0.18.9",
+          "posthog-cli",
+          "sourcemap",
+          "inject",
+          "--directory",
+          uiDirectory,
+          "--release-name",
+          "framio",
+          "--release-version",
+          process.env.GITHUB_REF_NAME ?? "local",
+        ],
+        { stdout: "inherit", stderr: "inherit", env: { ...process.env } },
+      ),
+    );
+    if ((yield* injection.exitCode) !== 0)
+      return yield* new InvalidInput({
+        message: "PostHog sourcemap injection failed",
+      });
+  }
+  const maps = join(dist, "sourcemaps");
+  yield* fs.remove(maps, { recursive: true, force: true });
+  yield* fs.makeDirectory(maps, { recursive: true });
+  for (const name of yield* fs.readDirectory(uiDirectory)) {
+    if (!name.endsWith(".js") && !name.endsWith(".js.map")) continue;
+    yield* fs.writeFile(
+      join(maps, name),
+      yield* fs.readFile(join(uiDirectory, name)),
+    );
+  }
   const imports: string[] = [];
   const entry = (file: string) => {
     const name = `f${imports.length}`;
@@ -107,7 +148,9 @@ export const buildUi = Effect.fn("Build.ui")(function* (root: string) {
     compressed = false,
   ) {
     const files = yield* Effect.tryPromise(() =>
-      Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dir, dot: true })),
+      Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dir, dot: true })).then(
+        (files) => files.filter((file) => !file.endsWith(".map")),
+      ),
     );
     const entries = yield* Effect.forEach(files.sort(), (file) =>
       Effect.gen(function* () {

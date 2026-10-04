@@ -1,3 +1,4 @@
+import { recordIfAvailable } from "./analytics";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { ServerRegistry } from "./server-registry";
@@ -32,6 +33,12 @@ export const serve = Effect.fn("serve")(function* (
   const { runServer } = yield* Effect.promise(() => import("../server/server"));
   const server = yield* runServer(root, host);
   yield* registry.register(p, server.info);
+  yield* recordIfAvailable("server started", {});
+  yield* Effect.sleep("12 hours").pipe(
+    Effect.andThen(recordIfAvailable("server heartbeat", {})),
+    Effect.forever,
+    Effect.forkScoped,
+  );
   if (ui) {
     yield* printServerUrls(server.info);
     yield* ui.row("Files", displayPath(p.framio));

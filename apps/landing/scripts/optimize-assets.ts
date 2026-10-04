@@ -16,7 +16,7 @@ for (const name of [
     .toFile(join(assets, "landing", `${name}.webp`));
 }
 const background = Buffer.from(
-  `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="630" fill="#0A0A0B"/><rect x="50" y="125" width="1100" height="455" rx="22" fill="#0C64FF"/></svg>`,
+  `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="630" fill="#0A0A0B"/><rect x="248" y="50" width="80" height="30" rx="6" fill="#18181B" stroke="#3F3F46"/><text x="288" y="71" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#A1A1AA">Alpha</text><rect x="50" y="125" width="1100" height="455" rx="22" fill="#0C64FF"/></svg>`,
 );
 const wordmark = await sharp(
   join(assets, "brand", "framio-wordmark-on-dark.png"),
@@ -33,3 +33,19 @@ await sharp(background)
   ])
   .png()
   .toFile(join(assets, "brand", "framio-social.png"));
+
+const githubAssets = fileURLToPath(
+  new URL("../../../.github/assets/", import.meta.url),
+);
+const githubBackground = Buffer.from(
+  `<svg width="1280" height="640" xmlns="http://www.w3.org/2000/svg"><rect width="1280" height="640" fill="#141416"/><rect x="575" y="444" width="130" height="44" rx="8" fill="#18181B" stroke="#3F3F46"/><text x="640" y="473" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="24" fill="#A1A1AA">Alpha</text></svg>`,
+);
+const githubWordmark = await sharp(
+  join(githubAssets, "framio-wordmark-on-dark.png"),
+)
+  .resize({ width: 600 })
+  .toBuffer();
+await sharp(githubBackground)
+  .composite([{ input: githubWordmark, left: 340, top: 228 }])
+  .png()
+  .toFile(join(githubAssets, "social-preview.png"));

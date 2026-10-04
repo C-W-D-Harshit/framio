@@ -14,6 +14,7 @@ import {
 import LogoLoop from "@/components/LogoLoop";
 import { ArrowUpRight, Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { landingLogger } from "@/lib/posthog-logs";
 import { Grain } from "./texture";
 import { ClaudeMark, GitHubMark, INSTALL } from "@/components/landing/kit";
 import { Openai } from "@/components/ui/svgs/openai";
@@ -218,6 +219,8 @@ export function InstallCTA({
     setSwapped(true);
     try {
       await navigator.clipboard.writeText(INSTALL);
+      window.posthog?.capture("install_command_copied");
+      landingLogger.info("install command copied");
       setStatus("copied");
       const el = code.current;
       if (el) {

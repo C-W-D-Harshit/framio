@@ -3,6 +3,9 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { Analytics, analyticsLogger } from "./services/analytics";
+import { telemetryLayer } from "./services/telemetry-platform";
+import { Cause, Clock, Exit } from "effect";
 import * as Runtime from "effect/Runtime";
 import { FetchHttpClient } from "effect/http";
 import { ServerRegistry } from "./services/server-registry";
@@ -16,7 +19,13 @@ const Registry = ServerRegistry.layer.pipe(Layer.provideMerge(Platform));
 let args = process.argv.slice(2);
 if (args[0] === "help") args = ["--help", ...args.slice(1)];
 if (args[0] === "-v") args = ["--version", ...args.slice(1)];
-Effect.gen(function* () {
+const internal = args[0] === "__serve" || args[0] === "__supervise";
+const Telemetry = telemetryLayer(
+  internal ? "server" : "cli",
+  args[0] === "telemetry",
+).pipe(Layer.provideMerge(Platform));
+const LoggedTelemetry = analyticsLogger.pipe(Layer.provideMerge(Telemetry));
+const commands = Effect.gen(function* () {
   if (!Bun.semver.satisfies(Bun.version, ">=1.4.2"))
     return yield* new InvalidInput({
       message:
@@ -46,17 +55,67 @@ Effect.gen(function* () {
       Effect.provide(ServerLauncher.layer),
     );
   }
+});
+Effect.gen(function* () {
+  const analytics = yield* Analytics;
+  const started = yield* Clock.currentTimeMillis;
+  const exit = yield* Effect.exit(Effect.scoped(commands));
+  const interrupted =
+    Exit.isFailure(exit) && exit.cause.reasons.every(Cause.isInterruptReason);
+  if (!internal && args[0] !== "telemetry") {
+    const allowed = [
+      "start",
+      "init",
+      "stop",
+      "list",
+      "status",
+      "open",
+      "install",
+      "add",
+      "evidence",
+      "inspect",
+      "screenshot",
+      "update",
+      "upgrade",
+    ];
+    const command = !args[0]
+      ? "start"
+      : args[0] === "--help"
+        ? "help"
+        : args[0] === "--version"
+          ? "version"
+          : allowed.includes(args[0])
+            ? args[0] === "upgrade"
+              ? "update"
+              : args[0]
+            : "unknown";
+    yield* analytics.record("cli command", {
+      command,
+      outcome: interrupted
+        ? "interrupted"
+        : Exit.isFailure(exit) || (process.exitCode ?? 0) !== 0
+          ? "failure"
+          : "success",
+      duration_ms: (yield* Clock.currentTimeMillis) - started,
+    });
+  }
+  if (Exit.isFailure(exit)) {
+    if (interrupted) return yield* Effect.failCause(exit.cause);
+    for (const reason of exit.cause.reasons) {
+      if (Cause.isInterruptReason(reason)) continue;
+      const error = Cause.isFailReason(reason) ? reason.error : reason.defect;
+      yield* analytics.exception(error, "cli_top_level");
+      yield* (yield* TerminalUI).message(
+        "error",
+        error instanceof Error
+          ? error.message
+          : "Unexpected application failure",
+      );
+    }
+    process.exitCode = 1;
+  }
 }).pipe(
-  Effect.scoped,
-  Effect.catch((error) =>
-    Effect.flatMap(TerminalUI, (ui) => ui.message("error", error.message)).pipe(
-      Effect.andThen(
-        Effect.sync(() => {
-          process.exitCode = 1;
-        }),
-      ),
-    ),
-  ),
+  Effect.provide(LoggedTelemetry),
   Effect.provide(Registry),
   Effect.provide(TerminalUI.layer(VERSION)),
   BunRuntime.runMain({

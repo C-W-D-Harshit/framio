@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { ArrowDownToLine, RotateCw, LoaderCircle } from "lucide-react";
@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import { updateActionAtom, updateAtom } from "./state";
+import { reportError, track } from "./services/analytics";
 import type { UpdateAction, UpdateStatus } from "../contracts/update";
 export function updatePresentation(state: UpdateStatus) {
   if (state.restartPhase === "restarting")
@@ -42,6 +43,10 @@ export function UpdateControl() {
   const invoke = useAtomSet(updateActionAtom, { mode: "promise" });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const stateError = AsyncResult.isSuccess(result) ? result.value?.error : null;
+  useEffect(() => {
+    if (stateError) reportError("update_state");
+  }, [stateError]);
   if (!AsyncResult.isSuccess(result) || !result.value) return null;
   const state = result.value;
   const presentation = updatePresentation(state);
@@ -51,9 +56,14 @@ export function UpdateControl() {
     if (busy) return;
     setError(null);
     setBusy(next);
+    track("update action", {
+      action: next,
+      to: state.release?.version ?? null,
+    });
     try {
       await invoke(next);
     } catch (cause) {
+      reportError("update_action", { action: next });
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(null);
@@ -63,7 +73,7 @@ export function UpdateControl() {
   const loading = !!busy || !action;
   const description =
     action === "check"
-      ? "Check GitHub for the latest stable Framio release."
+      ? "Check GitHub for the latest Framio release."
       : (release?.description ??
         "Restart this project to run the installed version of Framio.");
   const version =
@@ -114,12 +124,12 @@ export function UpdateControl() {
           side="right"
           className="max-w-64 flex-col items-start motion-reduce:animate-none"
         >
-          <strong>Framio {version}</strong>
+          <strong>Framio Alpha {version}</strong>
           <span>{description}</span>
         </TooltipContent>
       </Tooltip>
       <span id="framio-update-description" className="sr-only">
-        Framio {version}. {description}
+        Framio Alpha {version}. {description}
       </span>
       <span role="status" className="sr-only">
         {restarting ? "Reconnecting to your project" : presentation.label}

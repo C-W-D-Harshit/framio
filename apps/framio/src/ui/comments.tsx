@@ -1,4 +1,5 @@
 import { projectSession } from "./project-session";
+import { reportError, track } from "./services/analytics";
 import { Kbd } from "./components/ui/kbd";
 import { Avatar, AvatarFallback } from "./components/ui/avatar";
 import { Badge } from "./components/ui/badge";
@@ -143,12 +144,22 @@ export function CommentsPanel({
     try {
       const result = await save(operation);
       if (result.ok) {
+        track("comment saved", {
+          operation: operation.type,
+          ...(operation.type === "status" ? { status: operation.status } : {}),
+        });
         projectSession.removeItem(draftKey);
         setBody("");
         onSaved();
         if (operation.type === "status" && operation.status === "open")
           onResolved(false);
-      } else setSaveError(result.error ?? "Could not save comment");
+      } else {
+        reportError("comment_save", { operation: operation.type });
+        setSaveError(result.error ?? "Could not save comment");
+      }
+    } catch {
+      reportError("comment_save", { operation: operation.type });
+      setSaveError("Could not save comment. Try again.");
     } finally {
       setBusy(false);
     }

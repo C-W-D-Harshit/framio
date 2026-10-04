@@ -1,5 +1,6 @@
 ---
 import Landing from "../components/Landing";
+import PostHog from "../components/PostHog.astro";
 import SEO from "../components/SEO.astro";
 import { homeSchema } from "../lib/site";
 import "../styles/global.css";
@@ -9,6 +10,7 @@ import "../styles/global.css";
 <html lang="en">
   <head>
     <SEO schema={homeSchema()} />
+    <PostHog />
   </head>
   <body>
     <a class="skip-link" href="#main-content">

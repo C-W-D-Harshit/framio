@@ -24,12 +24,9 @@ import { GLOBAL_DIR } from "../../lib/paths";
 import { makeUpdateStorage, io } from "./storage";
 import { CHECK_INTERVAL_MS, makeDiscovery, newer } from "./discovery";
 import { stageRelease } from "./staging";
-declare const FRAMIO_VERSION: string | undefined;
-export const runningVersion =
-  typeof FRAMIO_VERSION === "string" ? FRAMIO_VERSION : "dev";
-export const compiled = () =>
-  Bun.main.startsWith("/$bunfs") ||
-  Bun.main.replaceAll("\\", "/").startsWith("B:/~BUN");
+import { recordIfAvailable } from "../analytics";
+import { compiled, runningVersion } from "../../lib/version";
+export { compiled, runningVersion } from "../../lib/version";
 export const makeUpdater = Effect.fn("Updater.make")(function* (
   options: {
     directory?: string;
@@ -401,8 +398,24 @@ export const makeUpdater = Effect.fn("Updater.make")(function* (
   return {
     status,
     check,
-    download,
-    install,
+    download: () =>
+      download().pipe(
+        Effect.onExit((exit) =>
+          recordIfAvailable("update result", {
+            action: "download",
+            outcome: exit._tag === "Success" ? "success" : "failure",
+          }),
+        ),
+      ),
+    install: (rollback = false) =>
+      install(rollback).pipe(
+        Effect.onExit((exit) =>
+          recordIfAvailable("update result", {
+            action: rollback ? "rollback" : "install",
+            outcome: exit._tag === "Success" ? "success" : "failure",
+          }),
+        ),
+      ),
     target: identity.target,
     backup,
     store,

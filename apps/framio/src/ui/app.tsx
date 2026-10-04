@@ -49,7 +49,8 @@ import { viewportId, viewports } from "../domain/viewports";
 import { InspectPanel } from "./inspect-panel";
 import { flattenLayers } from "../domain/layers";
 import { LayersPanel } from "./layers-panel";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { track } from "./services/analytics";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import {
@@ -68,7 +69,10 @@ function useHashPage() {
   const page = useAtomValue(pageAtom);
   return [
     AsyncResult.isSuccess(page) ? page.value : "",
-    (id: string) => (location.hash = `/${encodeURIComponent(id)}`),
+    (id: string) => {
+      track("page switched");
+      location.hash = `/${encodeURIComponent(id)}`;
+    },
   ] as const;
 }
 
@@ -77,6 +81,7 @@ function useTool() {
   const set = useCallback(
     (t: Tool) => {
       localStorage.setItem("framio:tool", t);
+      track("tool selected", { tool: t });
       setTool(t);
     },
     [setTool],
@@ -107,9 +112,20 @@ export function App() {
     ? live.value
     : { snapshot: null, connected: false, saveError: null };
   const projectName = snapshot?.projectName;
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!snapshot || opened.current) return;
+    opened.current = true;
+    track("studio opened", {
+      pages: snapshot.pages.length,
+      frames: snapshot.pages.reduce((sum, p) => sum + p.frames.length, 0),
+    });
+  }, [snapshot]);
   useEffect(() => {
     // Project first so tabs stay distinguishable when several canvases are open.
-    document.title = projectName ? `${projectName} · Framio` : "Framio";
+    document.title = projectName
+      ? `${projectName} · Framio Alpha`
+      : "Framio Alpha";
   }, [projectName]);
   const [pageId, setPageId] = useHashPage();
   const [tool, setTool] = useTool();
@@ -134,7 +150,11 @@ export function App() {
   });
   useEffect(() => {
     projectSession.setItem("panel", rightPanel ?? "");
+    if (rightPanel) track("panel opened", { panel: rightPanel });
   }, [rightPanel]);
+  useEffect(() => {
+    if (finder) track("finder opened");
+  }, [finder]);
   const [focusFrame, setFocusFrame] = useState<{
     id: string;
     serial: number;
@@ -150,6 +170,7 @@ export function App() {
     return () => window.removeEventListener("keydown", key);
   }, []);
   const jump = (page: string, id: string) => {
+    track("frame focused");
     setPageId(page);
     setFocusFrame((current) => ({ id, serial: (current?.serial ?? 0) + 1 }));
     setFinder(false);
@@ -356,13 +377,19 @@ export function App() {
                 href="https://github.com/C-W-D-Harshit/framio"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
               >
                 Powered by Framio
+                <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                  Alpha
+                </Badge>
               </a>
               <Switch
                 checked={theme === "dark"}
-                onCheckedChange={(dark) => setTheme(dark ? "dark" : "light")}
+                onCheckedChange={(dark) => {
+                  track("theme changed", { theme: dark ? "dark" : "light" });
+                  setTheme(dark ? "dark" : "light");
+                }}
                 aria-label="Dark theme"
                 className="h-5! w-11! data-checked:bg-accent data-unchecked:bg-accent"
                 thumbClassName="flex! size-7! items-center justify-center border border-border bg-sidebar! text-foreground data-checked:translate-x-4! data-unchecked:translate-x-0!"

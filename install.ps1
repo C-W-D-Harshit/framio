@@ -34,7 +34,7 @@ $previous = $null
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 try {
     New-Item -ItemType Directory -Path $temporary | Out-Null
-    Write-Output "Framio installer: Windows x64, $Version"
+    Write-Output "Framio Alpha installer: Windows x64, $Version"
     $archive = Join-Path $temporary $asset
     Invoke-WebRequest -UseBasicParsing "$baseUrl/$asset" -OutFile $archive
     $checksumFile = Join-Path $temporary 'SHA256SUMS'
@@ -61,8 +61,13 @@ try {
     & tar.exe -xzf $archive -C $temporary
     if ($LASTEXITCODE -ne 0) { throw 'Could not extract the release archive.' }
     $downloaded = Join-Path $temporary $executable
-    $actual = & $downloaded --version
-    if ($LASTEXITCODE -ne 0 -or "$actual" -notmatch '(?:^|\s)v?(\d+\.\d+\.\d+)$') { throw 'The downloaded executable could not run.' }
+    $previousDoNotTrack = $env:DO_NOT_TRACK
+    try {
+        $env:DO_NOT_TRACK = '1'
+        $actual = & $downloaded --version
+        $versionExitCode = $LASTEXITCODE
+    } finally { $env:DO_NOT_TRACK = $previousDoNotTrack }
+    if ($versionExitCode -ne 0 -or "$actual" -notmatch '(?:^|\s)v?(\d+\.\d+\.\d+)$') { throw 'The downloaded executable could not run.' }
     if ($Version -ne 'latest' -and $Version -ne "v$($Matches[1])") { throw 'Executable version does not match the requested tag.' }
     New-Item -ItemType Directory -Force -Path $binDirectory | Out-Null
     Get-ChildItem -Path $binDirectory -Filter '.framio.exe.retired-*.exe' | ForEach-Object {

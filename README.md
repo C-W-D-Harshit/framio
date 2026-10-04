@@ -1,8 +1,10 @@
 <a href="https://framio.design">
-  <img src=".github/assets/framio-brand.png" alt="Framio" width="356" />
+  <img src=".github/assets/framio-brand.png" alt="Framio" width="356" /> <sup>Alpha</sup>
 </a>
 
 A design canvas for coding agents.
+
+Framio is in alpha and under active development.
 
 Your agent writes designs as React + Tailwind files. Framio shows them live on an infinite
 canvas, so you can watch the work and point at what to change.
@@ -295,6 +297,16 @@ Before a canvas restart, pending and active canvas saves must succeed. Close oth
 If the updated server fails to start, the supervisor attempts to start the retained previous executable on the same port. The canvas reports recovery and offers a retry. If neither executable starts, run `framio update --rollback`, then `framio start` in your project. Installation recovery inspects the executable's actual version after an interrupted operation. A dead download owner leaves a retryable failure, never an installable partial archive.
 
 Project setup and skill migrations are separate. If a release requires one, the canvas links to the instructions in its release notes.
+
+## Telemetry
+
+Packaged Framio binaries send anonymous CLI, local server and Studio usage and application errors to PostHog. Events include command names from a fixed list, outcomes and durations, first-use installation counts, server starts and heartbeats, tool and panel changes, comment and update actions, and your Framio version, operating system and architecture. Studio events also include browser, device and session metadata. One random installation ID in `~/.framio/telemetry.json` connects these surfaces without creating person profiles.
+
+Framio does not send designs, page or frame names, comment text, raw command arguments, project paths or element text. Error messages and product stack locations are scrubbed. Design failures send a category and count only. Session recording, surveys and generic DOM autocapture are disabled. Delivery is best effort, so offline or opted-out installations are not fully counted. Install counts represent first enabled use, not downloads.
+
+Run `framio telemetry status` to see the setting, `framio telemetry off` to persistently disable collection, or `framio telemetry on` to enable it again. `FRAMIO_TELEMETRY=0` also disables collection, and truthy `DO_NOT_TRACK` always disables it. Environment variables override the saved preference. Restart running servers and reload Studio after changing the setting. Source checkouts send nothing unless you set `FRAMIO_TELEMETRY=1`.
+
+The first enabled run prints a one-time notice. [Telemetry internals](apps/framio/docs/telemetry.md) describe the event catalog, collection limits, PostHog insights and release source map secrets.
 
 ## License
 

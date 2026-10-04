@@ -1,9 +1,10 @@
 export const SITE_URL = "https://framio.design";
 export const RELEASE_VERSION = "v0.0.13";
 export const REPO_URL = "https://github.com/C-W-D-Harshit/framio";
-export const SITE_TITLE = "Design canvas for Claude Code and Codex · Framio";
+export const SITE_TITLE =
+  "Design canvas for Claude Code and Codex · Framio Alpha";
 export const SITE_DESCRIPTION =
-  "Framio is a free, open-source design canvas for Claude Code and Codex. Design new screens or redesign existing ones from your repo, then point at what to fix.";
+  "Framio is a free, open-source design canvas for Claude Code and Codex, currently in alpha. Design screens from your repo, then point at what to fix.";
 export const INSTALL_COMMAND =
   "curl -fsSL https://framio.design/install.sh | sh";
 
@@ -11,7 +12,7 @@ export const INSTALL_COMMAND =
 export const faqs = [
   {
     q: "What is Framio?",
-    a: "Framio is a free, open-source design canvas for coding agents. Your agent writes screens as React and Tailwind files in .framio/, and Framio renders them on a canvas where you select elements and pin comments for the agent to fix.",
+    a: "Framio is a free, open-source design canvas for coding agents, currently in alpha. Your agent writes screens as React and Tailwind files in .framio/, and Framio renders them on a canvas where you select elements and pin comments for the agent to fix.",
   },
   {
     q: "How do I design UI with Claude Code?",

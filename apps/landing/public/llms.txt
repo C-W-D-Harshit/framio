@@ -1,6 +1,6 @@
-# Framio
+# Framio Alpha
 
-> Framio is a free, MIT-licensed design canvas for coding agents. It renders React and Tailwind designs from files in a developer's repository, with element selection, responsive viewports, and pinned comments.
+> Framio is a free, MIT-licensed design canvas for coding agents, currently in alpha. It renders React and Tailwind designs from files in a developer's repository, with element selection, responsive viewports, and pinned comments.
 
 Framio works with Claude Code, Codex, and other agents that read `.claude/skills` or `.agents/skills`, such as OpenCode, Cursor, Grok CLI, and Antigravity. Your agent writes each screen as a React and Tailwind file, and you click elements or pin comments on the canvas to tell it what to fix. Because Framio runs inside the agent's session in the repository, the agent reads the existing code, theme, and copy before designing. It can redesign an existing page (it screenshots the running app onto a moodboard and derives DESIGN.md from the current product), design new pages that match an existing product, and build a chosen design into the app, comparing app screenshots with the design at every width. The canvas runs on your own computer or VM. Measured with v0.0.7 on an Apple M4: framio start serves the canvas in about 0.6 seconds, a saved frame rebuilds in about 100 milliseconds, and the macOS download is 33 MB. It supports macOS on Apple Silicon, Linux x64 and arm64, and Windows x64 on Windows 10 version 1809 or later. On Windows, install in PowerShell with `irm https://framio.design/install.ps1 | iex`. It does not include a coding agent or model subscription.
 

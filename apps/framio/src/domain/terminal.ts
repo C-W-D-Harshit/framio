@@ -103,7 +103,7 @@ export function renderBanner(
   const separator = capabilities.unicode ? " · " : " / ";
   const name = terminalStyle("framio", 1, capabilities);
   const meta = terminalStyle(
-    [version, terminalText(context)].filter(Boolean).join(separator),
+    ["Alpha", version, terminalText(context)].filter(Boolean).join(separator),
     2,
     capabilities,
   );

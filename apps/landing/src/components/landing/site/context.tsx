@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { landingLogger } from "@/lib/posthog-logs";
 import { ClaudeMark, Container, Reveal, useFx } from "./primitives";
 import { PanelDots } from "./texture";
 
@@ -174,6 +175,9 @@ function usePlayback(count: (tab: number) => number) {
   function select(next: number) {
     setManual(true);
     if (next === tab) return;
+    const scenario = scenarios[next].label.toLowerCase().replace(" ", "_");
+    window.posthog?.capture("context_scenario_selected", { scenario });
+    landingLogger.info("context scenario selected", { scenario });
     setSwapped(true);
     setTab(next);
     setStep(playing ? 0 : count(next));

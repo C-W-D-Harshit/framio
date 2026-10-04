@@ -1,5 +1,6 @@
 ---
 import SEO from "../components/SEO.astro";
+import Brand from "../components/Brand";
 import { SITE_URL, REPO_URL } from "../lib/site";
 import "../styles/global.css";
 const { title, description } = Astro.props.frontmatter;
@@ -68,7 +69,7 @@ const body = (await Astro.slots.render("default")).replace(
 <html lang="en">
   <head>
     <SEO
-      title={`${title} · Framio`}
+      title={`${title} · Framio Alpha`}
       description={description}
       path="/docs/"
       schema={schema}
@@ -83,14 +84,8 @@ const body = (await Astro.slots.render("default")).replace(
         aria-label="Main navigation"
         class="mx-auto flex h-20 max-w-[1200px] items-center justify-between px-5 md:px-6"
       >
-        <a href="/" aria-label="Framio home">
-          <img
-            src="/assets/brand/framio-wordmark-on-dark.png"
-            alt="Framio"
-            width="797"
-            height="244"
-            class="h-[22px] w-auto"
-          />
+        <a href="/" aria-label="Framio Alpha home">
+          <Brand />
         </a>
         <div class="flex items-center gap-6 text-sm text-landing-muted">
           <a href="/">Home</a>
@@ -166,7 +161,7 @@ const body = (await Astro.slots.render("default")).replace(
     </div>
     <footer class="border-t border-landing-line px-5 py-10 text-sm text-landing-muted">
       <div class="mx-auto flex max-w-[1200px] flex-wrap justify-between gap-4">
-        <a href="/">Framio, a design canvas for coding agents.</a>
+        <a href="/">Framio Alpha, a design canvas for coding agents.</a>
         <a
           href={`${REPO_URL}/blob/main/LICENSE`}
           target="_blank"

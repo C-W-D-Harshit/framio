@@ -3,9 +3,9 @@ name: framio
 description: Design and review UI in Framio's .framio canvas. Use for screens, flows, landing pages, frames, variations, and changes to selected canvas elements.
 ---
 
-# Framio
+# Framio Alpha
 
-Framio is a local canvas for React + Tailwind designs. A frame is a file at
+Framio is a local canvas for React + Tailwind designs, currently in alpha. A frame is a file at
 `.framio/pages/<page>/<frame>.tsx`, with realistic static content and a default React export.
 Frames have no data fetching, backend logic, or Effect imports.
 

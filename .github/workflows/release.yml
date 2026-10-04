@@ -42,8 +42,29 @@ jobs:
         if: runner.os == 'Windows'
       - run: bun test apps/framio/tests/windows
         if: runner.os == 'Windows'
+      # Only the steps that talk to PostHog receive the personal API key.
+      - name: Enable source map injection when credentials exist
+        shell: bash
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ secrets.POSTHOG_CLI_PROJECT_ID }}
+        run: |
+          if [ -n "$POSTHOG_CLI_API_KEY" ] && [ -n "$POSTHOG_CLI_PROJECT_ID" ]; then
+            echo "FRAMIO_POSTHOG_SOURCEMAPS=1" >> "$GITHUB_ENV"
+          fi
       - run: bun run build:binary
         id: binary
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ secrets.POSTHOG_CLI_PROJECT_ID }}
+          POSTHOG_CLI_HOST: https://us.posthog.com
+      - name: Upload source maps from the shipped binary build
+        if: env.FRAMIO_POSTHOG_SOURCEMAPS == '1'
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ secrets.POSTHOG_CLI_PROJECT_ID }}
+          POSTHOG_CLI_HOST: https://us.posthog.com
+        run: bun x --package @posthog/cli@0.18.9 posthog-cli sourcemap upload --directory apps/framio/dist/sourcemaps --release-name framio --release-version "${{ github.ref_name }}"
       - name: Smoke test
         shell: bash
         run: |

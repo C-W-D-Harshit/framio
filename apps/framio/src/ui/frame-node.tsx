@@ -1,5 +1,6 @@
+import { reportError } from "./services/analytics";
 import { geometryFingerprint } from "./frame-geometry";
-import { registerFrame } from "./frame-bridge";
+import { registerFrame, sourceFrame } from "./frame-bridge";
 import { PreviewImage } from "./preview-image";
 import {
   Monitor,
@@ -67,6 +68,27 @@ export const FrameNode = memo(function FrameNode({
   selected,
 }: NodeProps<FrameNodeType>) {
   const { frame, height, cssVersion } = data;
+  useEffect(() => {
+    if (frame.error) reportError("frame_build", { count: 1 });
+  }, [frame.error, frame.version]);
+  useEffect(() => {
+    const onError = (event: MessageEvent) => {
+      if (
+        event.origin !== location.origin ||
+        !sourceFrame(event.source, frame.id)
+      )
+        return;
+      const decoded = Schema.decodeUnknownResult(FrameMessage)(event.data);
+      if (
+        Result.isSuccess(decoded) &&
+        decoded.success.frame === frame.id &&
+        decoded.success.type === "error"
+      )
+        reportError("frame_runtime", { count: 1 });
+    };
+    window.addEventListener("message", onError);
+    return () => window.removeEventListener("message", onError);
+  }, [frame.id]);
   const layers = useLayerReport(frame.id);
   const { width } = frame.meta;
   const mode = useAtomValue(previewAtom(frame.id));

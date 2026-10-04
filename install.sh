@@ -27,9 +27,9 @@ display_path() {
 }
 
 if [ "$interactive" = 1 ]; then
-  printf '\n  %s+--- []%s\n  %s| +--%s   %sframio%s\n  %s| |%s     %sA design canvas for coding agents%s\n\n' "$accent" "$reset" "$accent" "$reset" "$bold" "$reset" "$accent" "$reset" "$dim" "$reset"
+  printf '\n  %s+--- []%s\n  %s| +--%s   %sframio Alpha%s\n  %s| |%s     %sA design canvas for coding agents%s\n\n' "$accent" "$reset" "$accent" "$reset" "$bold" "$reset" "$accent" "$reset" "$dim" "$reset"
 else
-  printf '\n  framio installer\n\n'
+  printf '\n  framio Alpha installer\n\n'
 fi
 
 case "$(uname -s)" in
@@ -82,7 +82,7 @@ tar -xzf "$tmp/$asset" -C "$tmp" || fail 'Could not extract the release archive.
 downloaded="$tmp/framio-$os-$arch"
 [ -f "$downloaded" ] || fail 'The release archive does not contain the Framio executable.'
 chmod +x "$downloaded" || fail 'Could not make Framio executable.'
-release_version="$("$downloaded" --version)" || fail 'The downloaded Framio executable could not run on this machine.'
+release_version="$(DO_NOT_TRACK=1 "$downloaded" --version)" || fail 'The downloaded Framio executable could not run on this machine.'
 mkdir -p "$BIN_DIR" || fail "Could not create $BIN_DIR. Check directory permissions."
 mv "$downloaded" "$BIN_DIR/framio" || fail "Could not install Framio in $BIN_DIR. Check directory permissions."
 

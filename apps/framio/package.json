@@ -1,7 +1,7 @@
 {
   "name": "framio",
   "version": "0.0.13",
-  "description": "A design canvas for coding agents.",
+  "description": "A design canvas for coding agents, currently in alpha.",
   "license": "MIT",
   "author": "Harshit",
   "homepage": "https://framio.design",
@@ -44,6 +44,7 @@
     "cmdk": "^1.1.1",
     "effect": "4.0.0",
     "lucide-react": "^1.49.0",
+    "posthog-js": "^1.435.8",
     "puppeteer-core": "^25.12.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

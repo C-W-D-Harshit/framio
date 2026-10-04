@@ -1,10 +1,10 @@
 ---
 layout: ../../layouts/Docs.astro
 title: "Framio quick start: design with Claude Code and Codex"
-description: "Install Framio, connect Claude Code or Codex, and review React and Tailwind designs on your computer or VM. Learn commands, comments, and design comparison."
+description: "Install Framio Alpha, connect Claude Code or Codex, and review React and Tailwind designs on your computer or VM. Learn commands, comments, and design comparison."
 ---
 
-Framio is a free, open-source design canvas for coding agents. Claude Code, Codex, or another agent writes React and Tailwind screens into your repository. Framio renders those files on a live canvas, where you can select elements, review mobile and desktop layouts, and pin feedback before implementing a design in your app.
+Framio is a free, open-source design canvas for coding agents, currently in alpha. Claude Code, Codex, or another agent writes React and Tailwind screens into your repository. Framio renders those files on a live canvas, where you can select elements, review mobile and desktop layouts, and pin feedback before implementing a design in your app.
 
 ## Install
 

@@ -1,5 +1,9 @@
+import { exceptionProperties, recordIfAvailable } from "../services/analytics";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
 import * as Deferred from "effect/Deferred";
 import { makeUpdater, runningVersion } from "../services/update/updater";
+import { studioTelemetry } from "../services/telemetry";
 import { RestartJournal } from "../contracts/restart";
 import { UpdateFailure } from "../contracts/update";
 import { isAlive } from "../services/server-registry";
@@ -127,6 +131,9 @@ function frameHtml(
 </head><body><div id="root"></div>${boot.error ? "" : `<script type="module" src="${src}"></script>`}</body></html>`;
 }
 
+const escapeAttribute = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
 export const runServer = Effect.fn("Server.start")(function* (
   root: string,
   host = defaultHost,
@@ -136,12 +143,16 @@ export const runServer = Effect.fn("Server.start")(function* (
   const projectId = createHash("sha256")
     .update(yield* fs.realPath(root))
     .digest("hex");
+  const telemetry = yield* studioTelemetry();
+  const telemetryMeta = telemetry
+    ? `<meta name="framio-telemetry" content="${escapeAttribute(JSON.stringify(telemetry))}">`
+    : "";
   const html = Buffer.from(
     Buffer.from(uiFiles["index.html"]!)
       .toString("utf8")
       .replace(
         "<head>",
-        `<head><meta name="framio-project" content="${projectId}">`,
+        `<head><meta name="framio-project" content="${projectId}">${telemetryMeta}`,
       ),
   );
   const htmlGzip = gzipSync(html);
@@ -953,11 +964,69 @@ export const runServer = Effect.fn("Server.start")(function* (
       });
     }),
   );
+  const TelemetryErrors = HttpRouter.middleware(
+    (effect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const path = request.url.split("?")[0];
+        const operations = [
+          "canvas",
+          "selection",
+          "comments",
+          "update",
+          "evidence",
+          "screenshot",
+          "inspect",
+          "layers",
+          "health",
+          "snapshot",
+        ];
+        const operation =
+          operations.find((name) => path === `/api/${name}`) ?? "other";
+        return yield* effect.pipe(
+          Effect.onExit((exit) => {
+            if (Exit.isFailure(exit))
+              return Effect.forEach(
+                exit.cause.reasons,
+                (reason) =>
+                  Cause.isInterruptReason(reason)
+                    ? Effect.void
+                    : recordIfAvailable("$exception", {
+                        ...exceptionProperties(
+                          Cause.isFailReason(reason)
+                            ? reason.error
+                            : reason.defect,
+                          "server_request",
+                          "Server request failed",
+                        ),
+                        operation,
+                      }),
+                { discard: true },
+              );
+            return exit.value.status >= 400 &&
+              (operation !== "other" || exit.value.status >= 500)
+              ? recordIfAvailable("$exception", {
+                  ...exceptionProperties(
+                    new Error("Server request failed"),
+                    "server_http",
+                  ),
+                  operation,
+                  status: exit.value.status,
+                })
+              : Effect.void;
+          }),
+        );
+      }),
+    { global: true },
+  );
   yield* Layer.build(
-    HttpRouter.serve(Layer.mergeAll(ApiRoutes, Live, Static, SocketOwnership), {
-      disableLogger: true,
-      disableListenLog: true,
-    }).pipe(
+    HttpRouter.serve(
+      Layer.mergeAll(ApiRoutes, Live, Static, SocketOwnership, TelemetryErrors),
+      {
+        disableLogger: true,
+        disableListenLog: true,
+      },
+    ).pipe(
       Layer.provide(Layer.succeed(HttpServer.HttpServer, server)),
       Layer.provide(BunHttpServer.layerHttpServices),
     ),

@@ -1,3 +1,4 @@
+import { reportError, track } from "./analytics";
 import * as Semaphore from "effect/Semaphore";
 import { UpdateFailure, type UpdateAction } from "../../contracts/update";
 import { reconcileSnapshot } from "../snapshot-reconciliation";
@@ -56,7 +57,8 @@ const make = Effect.gen(function* () {
         ),
       ),
     onError: (error) =>
-      Effect.logError("Could not save canvas state", error).pipe(
+      Effect.sync(() => reportError("canvas_save")).pipe(
+        Effect.andThen(Effect.logError("Could not save canvas state", error)),
         Effect.andThen(
           SubscriptionRef.update(state, (current) => ({
             ...current,
@@ -91,10 +93,16 @@ const make = Effect.gen(function* () {
     }).pipe(Effect.provide(Protocol)),
   ).pipe(
     Effect.onExit(() =>
-      SubscriptionRef.update(state, (current) => ({
-        ...current,
-        connected: false,
-      })),
+      SubscriptionRef.modify(state, (current) => [
+        current.connected,
+        { ...current, connected: false },
+      ]).pipe(
+        Effect.flatMap((wasConnected) =>
+          wasConnected
+            ? Effect.sync(() => track("studio disconnected"))
+            : Effect.void,
+        ),
+      ),
     ),
     Effect.retry(Schedule.spaced("1 second")),
     Effect.forkScoped,
