@@ -9,7 +9,14 @@
       "outputs": ["src/generated/**"]
     },
     "build:binary": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": [
+        "FRAMIO_POSTHOG_SOURCEMAPS",
+        "GITHUB_REF_NAME",
+        "POSTHOG_CLI_API_KEY",
+        "POSTHOG_CLI_PROJECT_ID",
+        "POSTHOG_CLI_HOST"
+      ]
     },
     "dev": {
       "cache": false,
