@@ -55,6 +55,8 @@ Effect.scoped(
       return yield* new InvalidInput({
         message: result.logs.map((log) => log.message).join("\n"),
       });
+    // The executable embeds its source map; the linked copy is not shipped.
+    yield* fs.remove(`${outfile}.map`, { force: true });
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const tar = yield* spawner.spawn(
       ChildProcess.make(
