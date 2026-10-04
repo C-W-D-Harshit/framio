@@ -56,7 +56,10 @@ Effect.scoped(
         message: result.logs.map((log) => log.message).join("\n"),
       });
     // The executable embeds its source map; the linked copy is not shipped.
-    yield* fs.remove(`${outfile}.map`, { force: true });
+    // Windows names it without the .exe suffix, so match any map here.
+    for (const name of yield* fs.readDirectory(outDir))
+      if (name.endsWith(".map"))
+        yield* fs.remove(join(outDir, name), { force: true });
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const tar = yield* spawner.spawn(
       ChildProcess.make(
