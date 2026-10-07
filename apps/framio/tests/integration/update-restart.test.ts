@@ -12,6 +12,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+const appRoot = resolve(import.meta.dir, "../..");
+// Resolve imports in the workspace before writing an owner into a temp directory.
+const ownerImports = {
+  effect: Bun.resolveSync("effect", appRoot),
+  platformBun: Bun.resolveSync("@effect/platform-bun", appRoot),
+  http: Bun.resolveSync("effect/http", appRoot),
+};
 const supervisor = resolve(
     import.meta.dir,
     "../../src/services/session-supervisor.ts",
@@ -89,24 +96,25 @@ for (const aliased of [false, true])
       });
       writeFileSync(
         program,
-        `import {Effect,Layer} from "effect"; import {BunServices,BunRuntime} from "@effect/platform-bun"; import {FetchHttpClient} from "effect/http"; import {supervise} from ${JSON.stringify(supervisor)}; import {ServerRegistry} from ${JSON.stringify(registry)}; supervise(process.argv[2],false,{host:"127.0.0.1",readinessTimeout:"2 seconds",command:[process.execPath,${JSON.stringify(fixture)},process.argv[2],"1.0.0","--host","127.0.0.1"],updater:{target:${JSON.stringify(target)},directory:${JSON.stringify(join(dir, "updates"))},development:false,version:"1.0.0",platform:"darwin-arm64"}}).pipe(Effect.scoped,Effect.provide(ServerRegistry.layer.pipe(Layer.provideMerge(Layer.mergeAll(BunServices.layer,FetchHttpClient.layer)))),BunRuntime.runMain);`,
+        `import {Effect,Layer} from ${JSON.stringify(ownerImports.effect)}; import {BunServices,BunRuntime} from ${JSON.stringify(ownerImports.platformBun)}; import {FetchHttpClient} from ${JSON.stringify(ownerImports.http)}; import {supervise} from ${JSON.stringify(supervisor)}; import {ServerRegistry} from ${JSON.stringify(registry)}; supervise(process.argv[2],false,{host:"127.0.0.1",readinessTimeout:"2 seconds",command:[process.execPath,${JSON.stringify(fixture)},process.argv[2],"1.0.0","--host","127.0.0.1"],updater:{target:${JSON.stringify(target)},directory:${JSON.stringify(join(dir, "updates"))},development:false,version:"1.0.0",platform:"darwin-arm64"}}).pipe(Effect.scoped,Effect.provide(ServerRegistry.layer.pipe(Layer.provideMerge(Layer.mergeAll(BunServices.layer,FetchHttpClient.layer)))),BunRuntime.runMain);`,
       );
-      const children = roots.map((root) =>
+      const spawnOwner = (root: string) =>
         Bun.spawn([process.execPath, program, root], {
-          cwd: resolve(import.meta.dir, "../.."),
+          cwd: appRoot,
           env: {
             ...process.env,
-            NODE_PATH: resolve(import.meta.dir, "../../node_modules"),
+            NODE_PATH: "",
           },
           stdout: "pipe",
           stderr: "pipe",
           detached: background,
-        }),
-      );
-      const output = children.map((child) => ({
+        });
+      const captureOutput = (child: ReturnType<typeof spawnOwner>) => ({
         stdout: new Response(child.stdout).text(),
         stderr: new Response(child.stderr).text(),
-      }));
+      });
+      const children = [spawnOwner(roots[0]!)];
+      const output = children.map(captureOutput);
       try {
         const read = (root: string) => {
           try {
@@ -117,8 +125,12 @@ for (const aliased of [false, true])
             return null;
           }
         };
-        const first = await waitFor(() => read(roots[0]!)),
-          other = await waitFor(() => read(roots[1]!));
+        const first = await waitFor(() => read(roots[0]!));
+        // Wait for the first owner before starting another cold Bun process.
+        const second = spawnOwner(roots[1]!);
+        children.push(second);
+        output.push(captureOutput(second));
+        const other = await waitFor(() => read(roots[1]!));
         await fetch(first.url + "/restart").catch(() => {});
         // Read after lock release so a server scoped to the lock cannot pass by racing cleanup.
         await waitFor(() => {
