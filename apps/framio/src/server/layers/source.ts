@@ -21,6 +21,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Semaphore from "effect/Semaphore";
 import { resolve, relative, sep } from "node:path";
 import { randomUUID } from "node:crypto";
+import { relativeSourceFile } from "../../lib/source-paths";
 const Location = Schema.Struct({
   file: Schema.String,
   start: Schema.Int,
@@ -55,7 +56,7 @@ export function injectLayerSources(text: string, file: string) {
   const { ast, elements, layerAttributes } = parseSource(text, file);
   const revision = sourceRevision(text);
   const edits: { offset: number; text: string }[] = [];
-  const relativeFile = file.replace(/\\/g, "/").replace(/^.*\/\.framio\//, "");
+  const relativeFile = relativeSourceFile(file);
   const escape = (value: string) =>
     value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   if (/^(pages|components)\//.test(relativeFile)) {

@@ -1,6 +1,7 @@
 import ts from "typescript";
 import { createHash } from "node:crypto";
 import { twMerge } from "tailwind-merge";
+import { relativeSourceFile } from "../lib/source-paths";
 import {
   formatSourceRef,
   parseSourceRef,
@@ -96,12 +97,7 @@ export function elementCapabilities(
     "remove",
     "duplicate",
   ];
-  if (
-    file
-      .replace(/\\/g, "/")
-      .replace(/^.*\/\.framio\//, "")
-      .startsWith("components/")
-  )
+  if (relativeSourceFile(file).startsWith("components/"))
     return {
       allowed: [],
       locks: capabilities.map((capability) => ({

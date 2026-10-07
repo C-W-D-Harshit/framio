@@ -4,10 +4,15 @@ import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { makeSourceEdits } from "../../src/services/source-edits";
 import { parseSource, sourceRevision } from "../../src/server/source-edits";
 import { formatSourceRef, type EditOperation } from "../../src/contracts/edits";
+import { basename, resolve, win32 } from "node:path";
 
 const state = vi.hoisted(() => ({
   files: new Map<string, string>(),
   published: [] as string[],
+  symlinks: new Set<string>(),
+}));
+vi.mock("../../src/platform/source-file", () => ({
+  isSourceSymlink: (path: string) => Effect.succeed(state.symlinks.has(path)),
 }));
 vi.mock("../../src/platform/atomic-file", () => ({
   publishIfUnchanged: (file: string, temporary: string, expected: string) =>
@@ -22,8 +27,9 @@ vi.mock("../../src/platform/atomic-file", () => ({
       return true;
     }),
 }));
-const root = "/workspace/.framio";
+const root = resolve("/workspace/.framio");
 const file = "pages/home/frame.tsx";
+const absolute = resolve(root, file);
 const original = "<div><p>Hi 🌏</p><p>Anchor</p></div>";
 const op = (type: EditOperation["type"] = "text"): EditOperation => {
   const node = parseSource(original, file).elements[1]!;
@@ -40,13 +46,19 @@ const op = (type: EditOperation["type"] = "text"): EditOperation => {
 function fixture(overrides: Partial<FileSystem.FileSystem> = {}) {
   state.files.clear();
   state.published.length = 0;
-  state.files.set(`${root}/${file}`, original);
+  state.symlinks.clear();
+  state.files.set(absolute, original);
   return FileSystem.makeNoop({
     realPath: (path) =>
-      state.files.has(path)
+      state.files.has(path) || path === root || path === resolve(root, "pages")
         ? Effect.succeed(path)
         : FileSystem.makeNoop({}).realPath(path),
-    readFileString: (path) => Effect.sync(() => state.files.get(path)!),
+    readFileString: (path) => {
+      const text = state.files.get(path);
+      return text === undefined
+        ? FileSystem.makeNoop({}).readFileString(path)
+        : Effect.succeed(text);
+    },
     writeFileString: (path, text) =>
       Effect.sync(() => {
         state.files.set(path, text);
@@ -60,6 +72,114 @@ function fixture(overrides: Partial<FileSystem.FileSystem> = {}) {
 }
 describe("source edit writes", () => {
   it.effect(
+    "uses canonical Windows paths through edits, undo, and redo",
+    () => {
+      const alias = "D:\\RUNNER~1\\project\\.framio";
+      const canonical = "d:\\Runner Name\\project\\.framio";
+      const target = win32.resolve(canonical, file);
+      const fs = fixture({
+        realPath: (path) =>
+          Effect.succeed(
+            path === alias
+              ? canonical
+              : path.replace(/^d:/, "D:").replace(/\\/g, "/"),
+          ),
+        writeFileString: (path, text) =>
+          Effect.sync(() => {
+            state.files.set(path, text);
+          }),
+      });
+      state.files.clear();
+      // The native adapter returns the canonical filename used for publication.
+      const nativeTarget = target.replace(/^d:/, "D:").replace(/\\/g, "/");
+      state.files.set(nativeTarget, original);
+      return Effect.gen(function* () {
+        const service = yield* makeSourceEdits(alias, win32);
+        const result = yield* service.edit(op());
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        const undo = yield* service.patch(result.undo);
+        expect(undo.ok).toBe(true);
+        if (undo.ok) expect((yield* service.patch(undo.inverse)).ok).toBe(true);
+        expect(state.published).toEqual([
+          nativeTarget,
+          nativeTarget,
+          nativeTarget,
+        ]);
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          readFileString: (path) => {
+            const text = state.files.get(path);
+            return text === undefined
+              ? FileSystem.makeNoop({}).readFileString(path)
+              : Effect.succeed(text);
+          },
+        }),
+      );
+    },
+  );
+  it.effect(
+    "rejects canonical paths that escape pages even without a reported link",
+    () => {
+      const fs = fixture({
+        realPath: (path) =>
+          Effect.succeed(
+            path === absolute ? resolve(root, "pages-other/frame.tsx") : path,
+          ),
+      });
+      return Effect.gen(function* () {
+        const service = yield* makeSourceEdits(root);
+        expect(yield* service.edit(op())).toMatchObject({
+          ok: false,
+          reason: "invalid",
+        });
+        expect(state.published).toEqual([]);
+      }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+    },
+  );
+  it.effect(
+    "rejects links at pages, parent, and target, including in-tree links",
+    () => {
+      const fs = fixture();
+      return Effect.gen(function* () {
+        const service = yield* makeSourceEdits(root);
+        for (const link of [
+          resolve(root, "pages"),
+          resolve(root, "pages/home"),
+          absolute,
+        ]) {
+          state.symlinks.add(link);
+          expect(yield* service.edit(op())).toMatchObject({
+            ok: false,
+            reason: "invalid",
+          });
+          state.symlinks.delete(link);
+        }
+        expect(state.published).toEqual([]);
+      }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+    },
+  );
+  it.effect("rechecks parent links after preparing the temporary file", () => {
+    const fs = fixture({
+      writeFileString: (path, text) =>
+        Effect.sync(() => {
+          state.files.set(path, text);
+          state.symlinks.add(resolve(root, "pages/home"));
+        }),
+    });
+    return Effect.gen(function* () {
+      const service = yield* makeSourceEdits(root);
+      expect(yield* service.edit(op())).toMatchObject({
+        ok: false,
+        reason: "invalid",
+      });
+      expect([...state.files.keys()]).toEqual([absolute]);
+      expect(state.files.get(absolute)).toBe(original);
+      expect(state.published).toEqual([]);
+    }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+  });
+  it.effect(
     "writes edits and supports exact undo and redo with full revision checks",
     () => {
       const fs = fixture();
@@ -68,11 +188,11 @@ describe("source edit writes", () => {
         const result = yield* service.edit(op());
         expect(result.ok).toBe(true);
         if (!result.ok) return;
-        const edited = state.files.get(`${root}/${file}`);
+        const edited = state.files.get(absolute);
         expect(edited).toBe("<div><p>Hello</p><p>Anchor</p></div>");
         const undo = yield* service.patch(result.undo);
         expect(undo.ok).toBe(true);
-        expect(state.files.get(`${root}/${file}`)).toBe(original);
+        expect(state.files.get(absolute)).toBe(original);
         expect(yield* service.patch(result.undo)).toMatchObject({
           ok: false,
           reason: "conflict",
@@ -80,9 +200,9 @@ describe("source edit writes", () => {
             "The file changed since this edit, so it can't be undone here.",
         });
         if (undo.ok) expect((yield* service.patch(undo.inverse)).ok).toBe(true);
-        expect(state.files.get(`${root}/${file}`)).toBe(edited);
+        expect(state.files.get(absolute)).toBe(edited);
         expect(state.published).toHaveLength(3);
-        expect([...state.files.keys()]).toEqual([`${root}/${file}`]);
+        expect([...state.files.keys()]).toEqual([absolute]);
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
     },
   );
@@ -92,9 +212,12 @@ describe("source edit writes", () => {
       const fs = fixture({
         realPath: (path) =>
           Effect.succeed(
-            path.endsWith("/link.tsx") ? "/outside/frame.tsx" : path,
+            basename(path) === "link.tsx"
+              ? resolve("/outside/frame.tsx")
+              : path,
           ),
       });
+      state.symlinks.add(resolve(root, "pages/link.tsx"));
       return Effect.gen(function* () {
         const service = yield* makeSourceEdits(root);
         for (const unsafe of [
@@ -164,7 +287,7 @@ describe("source edit writes", () => {
         writeFileString: (path, text) =>
           Effect.sync(() => {
             state.files.set(path, text);
-            state.files.set(`${root}/${file}`, original + "\n// Agent edit");
+            state.files.set(absolute, original + "\n// Agent edit");
           }),
       });
       return Effect.gen(function* () {
@@ -173,10 +296,8 @@ describe("source edit writes", () => {
           ok: false,
           reason: "conflict",
         });
-        expect(state.files.get(`${root}/${file}`)).toBe(
-          original + "\n// Agent edit",
-        );
-        expect([...state.files.keys()]).toEqual([`${root}/${file}`]);
+        expect(state.files.get(absolute)).toBe(original + "\n// Agent edit");
+        expect([...state.files.keys()]).toEqual([absolute]);
         expect(state.published).toEqual([]);
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
     },
@@ -191,7 +312,7 @@ describe("source edit writes", () => {
         const fs = fixture({
           writeFileString: (path, text) =>
             Effect.gen(function* () {
-              if (path.startsWith(`${root}/${file}.`)) {
+              if (path.startsWith(`${absolute}.`)) {
                 writes++;
                 yield* Deferred.succeed(entered, undefined);
                 yield* Deferred.await(release);
@@ -199,7 +320,7 @@ describe("source edit writes", () => {
               state.files.set(path, text);
             }),
         });
-        state.files.set(`${root}/pages/other.jsx`, original);
+        state.files.set(resolve(root, "pages/other.jsx"), original);
         yield* Effect.gen(function* () {
           const service = yield* makeSourceEdits(root);
           const first = yield* service.edit(op()).pipe(Effect.forkScoped);

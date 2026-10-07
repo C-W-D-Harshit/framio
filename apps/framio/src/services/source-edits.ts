@@ -4,7 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { resolve, relative, sep } from "node:path";
+import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   parseSourceRef,
@@ -21,6 +21,12 @@ import {
   patchConflict,
 } from "../server/source-edits";
 import { publishIfUnchanged } from "../platform/atomic-file";
+import { isSourceSymlink } from "../platform/source-file";
+import {
+  isWithinSourceDirectory,
+  sourcePathSegments,
+  type SourcePaths,
+} from "../lib/source-paths";
 
 class SourceEditFailed extends Schema.TaggedError<SourceEditFailed>()(
   "SourceEditFailed",
@@ -43,6 +49,7 @@ export class SourceEdits extends Context.Service<
 }
 export const makeSourceEdits = Effect.fn("SourceEdits.make")(function* (
   framio: string,
+  paths: SourcePaths = path,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const locks = new Map<
@@ -50,31 +57,37 @@ export const makeSourceEdits = Effect.fn("SourceEdits.make")(function* (
     { semaphore: Semaphore.Semaphore; users: number }
   >();
   const safeFile = Effect.fn("SourceEdits.safeFile")(function* (file: string) {
-    const absolute = resolve(framio, file);
-    const rel = relative(resolve(framio), absolute);
-    if (
-      !file.startsWith("pages/") ||
-      file.includes("\\") ||
-      file
-        .split("/")
-        .some((part) => part === ".." || part === "." || part === "") ||
-      !rel.startsWith(`pages${sep}`) ||
-      !/\.(tsx|jsx)$/.test(file)
-    )
+    if (!sourcePathSegments(framio, file, paths))
       return yield* failed(
         "invalid",
         "Source edits must be inside .framio/pages and use .tsx or .jsx files.",
       );
+    const notFound = () =>
+      failed("not-found", "The source file could not be found.");
+    const canonicalRoot = yield* fs
+      .realPath(framio)
+      .pipe(Effect.mapError(notFound));
+    const segments = sourcePathSegments(canonicalRoot, file, paths)!;
+    // Inspect every segment, including pages, without following links or junctions.
+    for (const segment of segments) {
+      if (yield* isSourceSymlink(segment).pipe(Effect.mapError(notFound)))
+        return yield* failed("invalid", "Refusing to edit a symlinked source.");
+    }
+    const pages = yield* fs
+      .realPath(segments[0]!)
+      .pipe(Effect.mapError(notFound));
     const canonical = yield* fs
-      .realPath(absolute)
-      .pipe(
-        Effect.mapError(() =>
-          failed("not-found", "The source file could not be found."),
-        ),
+      .realPath(segments.at(-1)!)
+      .pipe(Effect.mapError(notFound));
+    if (
+      !isWithinSourceDirectory(canonicalRoot, pages, paths) ||
+      !isWithinSourceDirectory(pages, canonical, paths)
+    )
+      return yield* failed(
+        "invalid",
+        "Refusing to edit a source outside .framio/pages.",
       );
-    if (canonical !== absolute)
-      return yield* failed("invalid", "Refusing to edit a symlinked source.");
-    return absolute;
+    return canonical;
   });
   const serialized = <A, E, R>(file: string, effect: Effect.Effect<A, E, R>) =>
     Effect.scoped(
@@ -97,6 +110,7 @@ export const makeSourceEdits = Effect.fn("SourceEdits.make")(function* (
       }),
     );
   const write = Effect.fn("SourceEdits.write")(function* (
+    source: string,
     file: string,
     text: string,
     next: string,
@@ -111,8 +125,8 @@ export const makeSourceEdits = Effect.fn("SourceEdits.make")(function* (
             .pipe(Effect.catch(() => Effect.void)),
         );
         yield* fs.writeFileString(temporary, next);
-        // Re-check canonical location after preparing the temporary file as well.
-        if ((yield* fs.realPath(file)) !== file)
+        // Repeat containment and link checks after preparing the temporary file.
+        if (paths.relative(file, yield* safeFile(source)) !== "")
           return yield* failed(
             "invalid",
             "Refusing to edit a symlinked source.",
@@ -148,7 +162,7 @@ export const makeSourceEdits = Effect.fn("SourceEdits.make")(function* (
         const text = yield* fs.readFileString(file);
         const result = transformSource(text, location.file, op);
         if (!result.ok) return result;
-        yield* write(file, text, result.next, editConflict);
+        yield* write(location.file, file, text, result.next, editConflict);
         return {
           ok: true as const,
           ref: result.ref,
@@ -168,7 +182,7 @@ export const makeSourceEdits = Effect.fn("SourceEdits.make")(function* (
         const text = yield* fs.readFileString(file);
         const result = applySourcePatch(text, patch);
         if (!result.ok) return result;
-        yield* write(file, text, result.next, patchConflict);
+        yield* write(patch.file, file, text, result.next, patchConflict);
         return { ok: true as const, inverse: result.inverse };
       }),
     ).pipe(Effect.catch(recover));

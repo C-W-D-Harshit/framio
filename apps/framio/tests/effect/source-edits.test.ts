@@ -216,6 +216,33 @@ describe("source edit policy", () => {
 
 describe("source stamping", () => {
   it.effect(
+    "stamps Windows drive and UNC paths with relative forward-slash refs",
+    () =>
+      Effect.sync(() => {
+        const text = "<div><p>Hello</p></div>";
+        for (const root of [
+          "D:\\RUNNER~1\\project\\.framio\\",
+          "d:/Runner Name/project/.FRAMIO/",
+          "\\\\server\\share\\project\\.framio\\",
+        ]) {
+          const stamped = injectLayerSources(
+            text,
+            root + "pages\\home\\frame.tsx",
+          );
+          const refs = [...stamped.matchAll(/data-framio-src="([^"]+)"/g)].map(
+            (match) => parseSourceRef(match[1]!)!,
+          );
+          expect(refs).toHaveLength(2);
+          expect(refs.every((ref) => ref.file === file)).toBe(true);
+          const sharedFile = root + "components\\Button.tsx";
+          const shared = injectLayerSources(text, sharedFile);
+          expect(shared).toContain('data-framio-edit=""');
+          expect(policy(text, 1, sharedFile).allowed).toEqual([]);
+          expect(policy(text, 1, sharedFile).locks).toHaveLength(5);
+        }
+      }),
+  );
+  it.effect(
     "inserts call site stamps before every attribute and keeps original spans and revision",
     () =>
       Effect.sync(() => {

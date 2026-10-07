@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { ServerRegistry } from "./server-registry";
 import { makeUpdater } from "./update/updater";
@@ -56,25 +57,29 @@ export const supervise = Effect.fn("SessionSupervisor.run")(function* (
   while (true) {
     const outcome = yield* Effect.scoped(
       Effect.gen(function* () {
+        const childScope = yield* Scope.Scope;
         const launch = Effect.gen(function* () {
-          const child = yield* spawner.spawn(
-            ChildProcess.make(command[0]!, command.slice(1), {
-              cwd: root,
-              stdin: "inherit",
-              stdout: "inherit",
-              stderr: "inherit",
-              detached: false,
-              forceKillAfter: "10 seconds",
-              env: {
-                ...process.env,
-                FRAMIO_SUPERVISOR_PID: String(process.pid),
-                FRAMIO_INSTALLATION_TARGET: updater.target,
-                ...(restarting
-                  ? { FRAMIO_SERVER_PORT: String(restarting.port) }
-                  : {}),
-              },
-            }),
-          );
+          // Releasing the updater lock must not close the server's lifetime.
+          const child = yield* spawner
+            .spawn(
+              ChildProcess.make(command[0]!, command.slice(1), {
+                cwd: root,
+                stdin: "inherit",
+                stdout: "inherit",
+                stderr: "inherit",
+                detached: false,
+                forceKillAfter: "10 seconds",
+                env: {
+                  ...process.env,
+                  FRAMIO_SUPERVISOR_PID: String(process.pid),
+                  FRAMIO_INSTALLATION_TARGET: updater.target,
+                  ...(restarting
+                    ? { FRAMIO_SERVER_PORT: String(restarting.port) }
+                    : {}),
+                },
+              }),
+            )
+            .pipe(Effect.provideService(Scope.Scope, childScope));
           if (restarting) {
             const expected = restarting.version;
             const ready = yield* Effect.gen(function* () {
