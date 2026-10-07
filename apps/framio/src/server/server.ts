@@ -7,6 +7,7 @@ import { studioTelemetry } from "../services/telemetry";
 import { RestartJournal } from "../contracts/restart";
 import { UpdateFailure } from "../contracts/update";
 import { isAlive } from "../services/server-registry";
+import { SourceEdits } from "../services/source-edits";
 import { makeLayersApi } from "./layers/api";
 import { createHash, randomUUID } from "node:crypto";
 import { gzipSync } from "node:zlib";
@@ -139,10 +140,10 @@ export const runServer = Effect.fn("Server.start")(function* (
   host = defaultHost,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const p = projectPaths(root);
-  const projectId = createHash("sha256")
-    .update(yield* fs.realPath(root))
-    .digest("hex");
+  // Source plugins and source writes must share Bun's canonical filesystem paths.
+  const canonicalRoot = yield* fs.realPath(root);
+  const p = projectPaths(canonicalRoot);
+  const projectId = createHash("sha256").update(canonicalRoot).digest("hex");
   const telemetry = yield* studioTelemetry();
   const telemetryMeta = telemetry
     ? `<meta name="framio-telemetry" content="${escapeAttribute(JSON.stringify(telemetry))}">`
@@ -242,6 +243,10 @@ export const runServer = Effect.fn("Server.start")(function* (
   );
 
   const layers = yield* makeLayersApi(p.framio, project, shots);
+  const sourceEdits = Context.get(
+    yield* Layer.build(SourceEdits.layer(p.framio)),
+    SourceEdits,
+  );
   const recordCaptures = yield* makeCaptureEvidence(p, project);
   const screenshot = yield* makeScreenshotHandler(
     root,
@@ -412,6 +417,22 @@ export const runServer = Effect.fn("Server.start")(function* (
               ),
             ),
       renameLayer: ({ payload }) => layers.renameLayer(payload),
+      edit: ({ payload }) =>
+        sourceEdits
+          .edit(payload)
+          .pipe(
+            Effect.tap((result) =>
+              result.ok ? project.notify(result.undo.file) : Effect.void,
+            ),
+          ),
+      patch: ({ payload }) =>
+        sourceEdits
+          .patch(payload)
+          .pipe(
+            Effect.tap((result) =>
+              result.ok ? project.notify(result.inverse.file) : Effect.void,
+            ),
+          ),
       inspect: ({ payload }) => layers.inspect(payload),
       health: () =>
         Effect.succeed({

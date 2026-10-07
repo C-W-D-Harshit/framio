@@ -8,6 +8,8 @@ description: Design and review UI in Framio's .framio canvas. Use for screens, f
 Framio is a local canvas for React + Tailwind designs, currently in alpha. A frame is a file at
 `.framio/pages/<page>/<frame>.tsx`, with realistic static content and a default React export.
 Frames have no data fetching, backend logic, or Effect imports.
+Write text and `className` as string literals where practical so users can edit them directly on the canvas.
+Prefer static JSX children and `cn()` with literal arguments for content and classes that do not need computation.
 
 ```tsx
 import { Button } from "@/components/ui/button";

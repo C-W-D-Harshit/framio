@@ -47,6 +47,7 @@ import {
 import { MOD } from "./toolbar";
 import { viewportId, viewports } from "../domain/viewports";
 import { InspectPanel } from "./inspect-panel";
+import { EditNotice } from "./edit-notice";
 import { flattenLayers } from "../domain/layers";
 import { LayersPanel } from "./layers-panel";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -153,6 +154,10 @@ export function App() {
     if (rightPanel) track("panel opened", { panel: rightPanel });
   }, [rightPanel]);
   useEffect(() => {
+    if (selection.sourceSelection)
+      setRightPanel((panel) => (panel === null ? "inspect" : panel));
+  }, [selection.sourceSelection]);
+  useEffect(() => {
     if (finder) track("finder opened");
   }, [finder]);
   const [focusFrame, setFocusFrame] = useState<{
@@ -204,6 +209,7 @@ export function App() {
     : undefined;
   return (
     <TooltipProvider delay={300}>
+      <EditNotice />
       <SidebarProvider
         className="h-full min-h-0 overflow-hidden"
         style={{ "--sidebar-width": "248px" } as CSSProperties}
@@ -441,15 +447,19 @@ export function App() {
             )}
           </div>
         </main>
-        {rightPanel === "inspect" && inspectNode && layerFrame && (
-          <InspectPanel
-            key={`${layerFrame.id}/${inspectNode.path}`}
-            node={inspectNode}
-            selector={selection.element?.selector ?? inspectNode.path}
-            frame={layerFrame}
-            onClose={() => setRightPanel(null)}
-          />
-        )}
+        {rightPanel === "inspect" &&
+          (inspectNode || selection.sourceSelection) &&
+          layerFrame && (
+            <InspectPanel
+              key={`${layerFrame.id}/${inspectNode?.path ?? selection.sourceSelection?.ref}`}
+              node={inspectNode}
+              selector={selection.element?.selector ?? inspectNode?.path ?? ""}
+              frame={layerFrame}
+              sourceSelection={selection.sourceSelection}
+              element={selection.element}
+              onClose={() => setRightPanel(null)}
+            />
+          )}
         {rightPanel === "evidence" && snapshot && (
           <EvidencePanel
             snapshot={snapshot}

@@ -3,6 +3,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -14,7 +15,9 @@ import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { runServer } from "../../src/server/server";
 
 test("selection readers see complete JSON while a replacement is being written", async () => {
-  const root = mkdtempSync(join(tmpdir(), "framio-selection-publication-"));
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "framio-selection-publication-")),
+  );
   mkdirSync(join(root, ".framio/pages"), { recursive: true });
   mkdirSync(join(root, ".framio/.state"), { recursive: true });
   writeFileSync(join(root, ".framio/theme.css"), "");

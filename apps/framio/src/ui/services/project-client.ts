@@ -158,6 +158,37 @@ const make = Effect.gen(function* () {
   );
   return {
     comment,
+    edit: Effect.fn("ProjectClient.edit")(
+      function* (payload: import("../../contracts/edits").EditOperation) {
+        if (frozen)
+          return yield* new UpdateFailure({
+            message: "Project restarting. Edits are paused.",
+          });
+        switch (payload.type) {
+          case "text":
+            return yield* api.project.edit({ payload });
+          case "size":
+            return yield* api.project.edit({ payload });
+          case "move":
+            return yield* api.project.edit({ payload });
+          case "remove":
+            return yield* api.project.edit({ payload });
+          case "duplicate":
+            return yield* api.project.edit({ payload });
+        }
+      },
+      Semaphore.withPermits(mutations, 1),
+    ),
+    patch: Effect.fn("ProjectClient.patch")(
+      function* (payload: import("../../contracts/edits").SourcePatch) {
+        if (frozen)
+          return yield* new UpdateFailure({
+            message: "Project restarting. Edits are paused.",
+          });
+        return yield* api.project.patch({ payload });
+      },
+      Semaphore.withPermits(mutations, 1),
+    ),
     changes: SubscriptionRef.changes(state),
     ...persistence,
     updateChanges: SubscriptionRef.changes(updates),

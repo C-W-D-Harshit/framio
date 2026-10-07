@@ -1,5 +1,11 @@
 import { projectSession } from "./project-session";
-import { sourceFrame } from "./frame-bridge";
+import { sourceFrame, displayedFrame, frameTextEditing } from "./frame-bridge";
+import {
+  editShortcut,
+  isStudioInput,
+  shortcutsAllowed,
+} from "./edit-shortcuts";
+import { lockMessages } from "../contracts/edits";
 import { copyText } from "./clipboard";
 import { runPreviewController } from "./services/preview-controller";
 import {
@@ -56,6 +62,8 @@ import {
   selectionAtom,
   saveSelectionAtom,
   saveCanvasAtom,
+  editHistoryAtom,
+  editNoticeAtom,
 } from "./state";
 import type { ElementInfo as ElementContract } from "../contracts/requests";
 import type { Snapshot } from "../contracts/snapshot";
@@ -71,6 +79,7 @@ export type CanvasSelection = {
   readonly frames: readonly string[];
   readonly element: ElementInfo | null;
   readonly layer?: { readonly path: string; readonly name: string };
+  readonly sourceSelection?: import("../contracts/edits").SourceSelection;
 };
 
 const nodeTypes: NodeTypes = { frame: FrameNode };
@@ -399,6 +408,8 @@ function CanvasInner({
 
   // --- Selection ------------------------------------------------------------
   const [selection, setSelection] = useAtom(selectionAtom);
+  const editHistory = useAtomSet(editHistoryAtom);
+  const editNotice = useAtomSet(editNoticeAtom);
   // Ignore React Flow's old selection until it acknowledges an iframe selection.
   const pendingSelection = useRef<readonly string[] | null>(null);
   const selectFrames = useCallback(
@@ -547,10 +558,43 @@ function CanvasInner({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
+        !shortcutsAllowed(
+          frameTextEditing(),
+          isStudioInput(e.target) || isStudioInput(document.activeElement),
+        )
       )
         return;
+      const forwardedFrame = (e as KeyboardEvent & { framioFrameId?: string })
+        .framioFrameId;
+      const source = selection.sourceSelection;
+      const sourceActive =
+        !!source &&
+        !!selection.sourceFrameId &&
+        (!forwardedFrame || forwardedFrame === selection.sourceFrameId);
+      const shortcut = editShortcut(e, sourceActive);
+      if (shortcut) {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (shortcut.type === "history") editHistory(shortcut.direction);
+        else if (source && selection.sourceFrameId) {
+          if (source.allowed.includes(shortcut.capability))
+            displayedFrame(selection.sourceFrameId)?.contentWindow?.postMessage(
+              {
+                source: "framio-canvas",
+                type: "command",
+                command: shortcut.command,
+              },
+              location.origin,
+            );
+          else {
+            const lock = source.locks.find(
+              (lock) => lock.capability === shortcut.capability,
+            );
+            if (lock) editNotice(lockMessages[lock.reason]);
+          }
+        }
+        return;
+      }
       const mod = e.metaKey || e.ctrlKey;
       if (e.code === "Space") {
         e.preventDefault();
@@ -609,13 +653,21 @@ function CanvasInner({
       setSpaceHeld(false);
       endPan();
     };
+    const onFrameDocuments = () => {
+      if (frameTextEditing()) {
+        setSpaceHeld(false);
+        endPan();
+      }
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
+    window.addEventListener("framio:frame-documents", onFrameDocuments);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+      window.removeEventListener("framio:frame-documents", onFrameDocuments);
     };
   }, [
     flow,
@@ -628,6 +680,10 @@ function CanvasInner({
     setDraft,
     setSelection,
     onCommentsChange,
+    selection.sourceSelection,
+    selection.sourceFrameId,
+    editHistory,
+    editNotice,
   ]);
 
   // --- Messages from frame iframes ------------------------------------------
@@ -660,6 +716,19 @@ function CanvasInner({
     const msg = decoded.success;
     const iframe = sourceFrame(e.source, msg.frame);
     if (!iframe || e.origin !== location.origin) return;
+    if (
+      iframe.dataset.shown !== "true" &&
+      [
+        "select",
+        "dblclick",
+        "contextmenu",
+        "pan-start",
+        "pan-move",
+        "pan-end",
+        "key",
+      ].includes(msg.type)
+    )
+      return;
     const frame: string = msg.frame;
     switch (msg.type) {
       case "layers":
@@ -716,6 +785,8 @@ function CanvasInner({
           frames: [viewport?.frameId ?? frame],
           element: msg.element,
           layer: msg.layer,
+          sourceSelection: msg.sourceSelection,
+          sourceFrameId: msg.sourceSelection ? frame : undefined,
           ...(viewport?.meta.widths ? { width: viewport.meta.width } : {}),
         });
         break;
@@ -738,15 +809,18 @@ function CanvasInner({
       case "key":
         // Keys pressed while a frame has focus drive the canvas too.
         window.dispatchEvent(
-          new KeyboardEvent(msg.phase, {
-            key: msg.key,
-            code: msg.code,
-            repeat: msg.repeat,
-            shiftKey: msg.shiftKey,
-            metaKey: msg.metaKey,
-            ctrlKey: msg.ctrlKey,
-            altKey: msg.altKey,
-          }),
+          Object.assign(
+            new KeyboardEvent(msg.phase, {
+              key: msg.key,
+              code: msg.code,
+              repeat: msg.repeat,
+              shiftKey: msg.shiftKey,
+              metaKey: msg.metaKey,
+              ctrlKey: msg.ctrlKey,
+              altKey: msg.altKey,
+            }),
+            { framioFrameId: frame },
+          ),
         );
         break;
     }
@@ -844,6 +918,12 @@ function CanvasInner({
                 frames: ids,
                 element: keep ? prev.element : null,
                 ...(width ? { width } : {}),
+                ...(keep
+                  ? {
+                      sourceSelection: prev.sourceSelection,
+                      sourceFrameId: prev.sourceFrameId,
+                    }
+                  : {}),
                 ...(ids.length === 1 &&
                 ids[0] === prev.frames[0] &&
                 prev.width === width &&

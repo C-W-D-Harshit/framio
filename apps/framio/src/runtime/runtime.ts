@@ -1,4 +1,5 @@
-import { measureLayers, pathForElement, findLayerElement } from "./layers";
+import { measureLayers } from "./layers";
+import { installCanvasEdits } from "./canvas-edits";
 import type { LayerReport } from "../contracts/layers";
 /**
  * Injected into every frame document (classic script, runs before the frame bundle).
@@ -9,8 +10,6 @@ import type { LayerReport } from "../contracts/layers";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
-import * as Result from "effect/Result";
-import { CanvasMessage } from "../contracts/frame-message";
 const BootSchema = Schema.Struct({
   id: Schema.String,
   canvas: Schema.Boolean,
@@ -149,6 +148,7 @@ Effect.runFork(
       }
 
       let latestReport: LayerReport | undefined;
+      let canvasEdits: ReturnType<typeof installCanvasEdits> | undefined;
       function reportStatus(error: string | null) {
         if (boot.preview) return;
         Queue.offerUnsafe(statuses, error);
@@ -265,6 +265,7 @@ Effect.runFork(
         if (!window.__framio.error) {
           window.__framio.ready = true;
           postParent({ type: "ready", height: contentHeight() });
+          canvasEdits?.ready();
           publishLayers();
         }
       }).pipe(
@@ -377,206 +378,21 @@ Effect.runFork(
           { passive: false, capture: true },
         );
 
-        // Canvas shortcuts (V, H, Space, Shift+1, Cmd+=...) must work while the pointer is over a frame.
-        for (const phase of ["keydown", "keyup"] as const) {
-          windowEvents.addEventListener(phase, (e) => {
-            const zoomKey =
-              (e.metaKey || e.ctrlKey) && ["=", "+", "-", "0"].includes(e.key);
-            if (e.code === "Space" || zoomKey || (e.metaKey && e.key === "a"))
-              e.preventDefault();
-            postParent({
-              type: "key",
-              phase,
-              key: e.key,
-              code: e.code,
-              repeat: e.repeat,
-              shiftKey: e.shiftKey,
-              metaKey: e.metaKey,
-              ctrlKey: e.ctrlKey,
-              altKey: e.altKey,
-            });
-          });
-        }
-
-        // Middle-button drag pans the canvas, even when it starts over a frame.
-        let middleDown = false;
-        windowEvents.addEventListener("pointermove", (e) => {
-          if (middleDown)
-            postParent({
-              type: "pan-move",
-              screenX: e.screenX,
-              screenY: e.screenY,
-            });
-        });
-        windowEvents.addEventListener("pointerup", (e) => {
-          if (middleDown && e.button === 1) {
-            middleDown = false;
-            postParent({ type: "pan-end" });
-          }
-        });
-
-        // Element hover + selection. Mockups are static, so clicks never reach the frame's own handlers.
-        const hover = makeOverlay("1px solid #3b82f6", "transparent");
-        const selected = makeOverlay(
-          "2px solid #3b82f6",
-          "rgba(59,130,246,0.06)",
-        );
-        let selectedEl: Element | null = null;
-
-        function makeOverlay(border: string, background: string) {
-          const el = document.createElement("div");
-          el.setAttribute(
-            "style",
-            `position:absolute;pointer-events:none;z-index:2147483646;box-sizing:border-box;border:${border};background:${background};display:none`,
-          );
-          documentEvents.addEventListener("DOMContentLoaded", () =>
-            document.documentElement.appendChild(el),
-          );
-          return el;
-        }
-
-        function place(overlay: HTMLElement, el: Element | null) {
-          if (!el) {
-            overlay.style.display = "none";
-            return;
-          }
-          const r = el.getBoundingClientRect();
-          Object.assign(overlay.style, {
-            display: "block",
-            left: `${r.left + window.scrollX}px`,
-            top: `${r.top + window.scrollY}px`,
-            width: `${r.width}px`,
-            height: `${r.height}px`,
-          });
-        }
-
-        const isOwn = (el: Element | null) =>
-          !el ||
-          el === document.documentElement ||
-          el === document.body ||
-          el.id === "root";
-
-        documentEvents.addEventListener("mousemove", (e) => {
-          const el = document.elementFromPoint(e.clientX, e.clientY);
-          place(hover, isOwn(el) ? null : el);
-        });
-        documentEvents.addEventListener("mouseleave", () => place(hover, null));
-
-        for (const type of [
-          "pointerdown",
-          "mousedown",
-          "pointerup",
-          "mouseup",
-          "submit",
-          "auxclick",
-        ]) {
-          windowEvents.addEventListener(
-            type as
-              | "pointerdown"
-              | "mousedown"
-              | "pointerup"
-              | "mouseup"
-              | "submit"
-              | "auxclick",
-            (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            },
-            true,
-          );
-        }
-        windowEvents.addEventListener(
-          "pointerdown",
-          (e) => {
-            if (e.button !== 1) return;
-            middleDown = true;
-            postParent({
-              type: "pan-start",
-              screenX: e.screenX,
-              screenY: e.screenY,
-            });
+        canvasEdits = installCanvasEdits({
+          events: windowEvents,
+          observe,
+          registerObserver: (observer) => observers.push(observer),
+          post: postParent,
+          describe,
+          toParent,
+          updateCss(version) {
+            if (version <= latestCssVersion) return;
+            latestCssVersion = version;
+            Queue.offerUnsafe(cssVersions, version);
           },
-          true,
-        );
-        windowEvents.addEventListener(
-          "dblclick",
-          (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            postParent({ type: "dblclick" });
-          },
-          true,
-        );
-        windowEvents.addEventListener(
-          "contextmenu",
-          (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const at = toParent(e.clientX, e.clientY);
-            postParent({ type: "contextmenu", clientX: at.x, clientY: at.y });
-          },
-          true,
-        );
-        windowEvents.addEventListener(
-          "click",
-          (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.button !== 0) return;
-            const el = document.elementFromPoint(e.clientX, e.clientY);
-            const clickedEl = isOwn(el) ? null : el;
-            selectedEl = clickedEl?.closest("[data-layer]") ?? clickedEl;
-            place(selected, selectedEl);
-            postParent({
-              type: "select",
-              element: clickedEl ? describe(clickedEl) : null,
-              layer:
-                selectedEl && pathForElement(selectedEl)
-                  ? {
-                      path: pathForElement(selectedEl),
-                      name: selectedEl.getAttribute("data-layer"),
-                    }
-                  : undefined,
-              x: e.clientX,
-              y: e.clientY,
-            });
-          },
-          true,
-        );
-        windowEvents.addEventListener("message", (e) => {
-          if (e.source !== window.parent || e.origin !== location.origin)
-            return;
-          const decoded = Schema.decodeUnknownResult(CanvasMessage)(e.data);
-          if (Result.isFailure(decoded)) return;
-          const message = decoded.success;
-          if (message.type === "layer-hover")
-            place(hover, message.path ? findLayerElement(message.path) : null);
-          if (message.type === "layer-select") {
-            selectedEl = findLayerElement(message.path);
-            place(selected, selectedEl);
-            postParent({
-              type: "select",
-              element: selectedEl ? describe(selectedEl) : null,
-              layer: selectedEl
-                ? {
-                    path: pathForElement(selectedEl),
-                    name: selectedEl.getAttribute("data-layer"),
-                  }
-                : undefined,
-            });
-          }
-          if (message.type === "clear-selection") {
-            selectedEl = null;
-            place(selected, null);
-          }
-          if (message.type === "css") {
-            if (message.version <= latestCssVersion) return;
-            latestCssVersion = message.version;
-            Queue.offerUnsafe(cssVersions, message.version);
-          }
         });
-        observe(() => place(selected, selectedEl)).observe(
-          document.documentElement,
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => canvasEdits?.dispose()),
         );
       }
 

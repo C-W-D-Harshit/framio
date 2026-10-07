@@ -11,9 +11,14 @@ import { Atom } from "effect/reactivity";
 import type { CanvasRequest, SelectionRequest } from "../contracts/requests";
 import type { Tool } from "./toolbar";
 import { ProjectClient, type LiveState } from "./services/project-client";
+import { EditController } from "./services/edit-controller";
+import type { SourceSelection } from "../contracts/edits";
 
 export const runtime = Atom.runtime(
-  Layer.merge(ProjectClient.layer, studioInputLayer),
+  Layer.merge(
+    EditController.layer.pipe(Layer.provideMerge(ProjectClient.layer)),
+    studioInputLayer,
+  ),
 );
 export const liveAtom = runtime.atom(
   Stream.unwrap(Effect.map(ProjectClient, (client) => client.changes)),
@@ -35,10 +40,25 @@ export const saveCanvasAtom = runtime.fn((payload: typeof CanvasRequest.Type) =>
 const storedSelection = Schema.decodeUnknownResult(
   Schema.fromJsonString(SelectionSchema),
 )(projectSession.getItem("selection") ?? "{}");
-export const selectionAtom = Atom.make<typeof SelectionRequest.Type>(
+export const selectionAtom = Atom.make<
+  typeof SelectionRequest.Type & {
+    readonly sourceSelection?: SourceSelection;
+    readonly sourceFrameId?: string;
+  }
+>(
   storedSelection._tag === "Success"
     ? storedSelection.success
     : { frames: [], element: null },
+);
+export const editHistoryAtom = runtime.fn((direction: "undo" | "redo") =>
+  Effect.flatMap(EditController, (controller) => controller.history(direction)),
+);
+export const editNoticeAtom = runtime.fn((message: string) =>
+  Effect.flatMap(EditController, (controller) => controller.notice(message)),
+);
+export const editNoticesAtom = runtime.atom(
+  Stream.unwrap(Effect.map(EditController, (controller) => controller.changes)),
+  { initialValue: null },
 );
 export const heightsAtom = Atom.family((page: string) =>
   Atom.make<Record<string, number>>({}),

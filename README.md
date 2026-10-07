@@ -227,6 +227,15 @@ comments": it reads the file, fixes the frames, replies as `agent`, and resolves
 File edits appear live. Invalid comments are reported in the canvas and `.state/errors.json`;
 the server preserves the broken file and refuses UI writes until it is fixed.
 
+## Quick edits
+
+Double-click text to edit it on the canvas. Drag resize handles for 4px snapping, or hold Shift
+for free sizing. Drag an element to reorder it among its static siblings.
+Use Delete to remove, ⌘D to duplicate, and ⌘Z / ⇧⌘Z to undo or redo.
+
+Edits are written to the TSX source as minimal changes. Values computed in code are locked,
+with a reason shown in the inspect panel.
+
 ## Building your app
 
 Ask your agent to build the chosen design in your real app. The Framio skill guides it to port

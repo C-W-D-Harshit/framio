@@ -197,6 +197,9 @@ export const FrameNode = memo(function FrameNode({
         }),
       );
   }, [live, pending, shown, frame.id]);
+  useEffect(() => {
+    window.dispatchEvent(new Event("framio:frame-documents"));
+  }, [live, pending, shown, frame.id, frame.version]);
   const versions = pending === null ? [shown] : [shown, pending];
 
   return (
@@ -347,6 +350,9 @@ export const FrameNode = memo(function FrameNode({
               }}
               title={frame.meta.name}
               data-frame={frame.id}
+              data-version={v}
+              data-current-version={frame.version}
+              data-shown={v === shown}
               onLoad={enableFrameInput}
               src={frameUrl(frame, v)}
               className="absolute inset-0 block border-0"

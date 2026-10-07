@@ -2,6 +2,7 @@ import { LayerSelection, LayerReport } from "./layers";
 import * as Schema from "effect/Schema";
 import { PositiveNumber } from "../domain/project";
 import { ElementInfo } from "./requests";
+import { EditOperation, SourceRef, SourceSelection } from "./edits";
 const base = { source: Schema.Literal("framio"), frame: Schema.String };
 export const FrameMessage = Schema.Union([
   Schema.Struct({
@@ -24,8 +25,20 @@ export const FrameMessage = Schema.Union([
     type: Schema.Literal("select"),
     element: Schema.NullOr(ElementInfo),
     layer: Schema.optional(LayerSelection),
+    sourceSelection: Schema.optional(SourceSelection),
     x: Schema.optional(Schema.Finite),
     y: Schema.optional(Schema.Finite),
+  }),
+  Schema.Struct({
+    ...base,
+    type: Schema.Literal("edit"),
+    id: Schema.String,
+    edit: EditOperation,
+  }),
+  Schema.Struct({
+    ...base,
+    type: Schema.Literal("text-editing"),
+    active: Schema.Boolean,
   }),
   Schema.Struct({ ...base, type: Schema.Literals(["dblclick", "pan-end"]) }),
   Schema.Struct({
@@ -54,6 +67,23 @@ export const FrameMessage = Schema.Union([
   }),
 ]);
 export const CanvasMessage = Schema.Union([
+  Schema.Struct({
+    source: Schema.Literal("framio-canvas"),
+    type: Schema.Literal("select-source"),
+    ref: SourceRef,
+    index: Schema.Int,
+  }),
+  Schema.Struct({
+    source: Schema.Literal("framio-canvas"),
+    type: Schema.Literal("command"),
+    command: Schema.Literals(["remove", "duplicate", "edit-text"]),
+  }),
+  Schema.Struct({
+    source: Schema.Literal("framio-canvas"),
+    type: Schema.Literal("edit-result"),
+    id: Schema.String,
+    ok: Schema.Boolean,
+  }),
   Schema.Struct({
     source: Schema.Literal("framio-canvas"),
     type: Schema.Literal("layer-select"),

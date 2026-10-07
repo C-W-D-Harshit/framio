@@ -42,7 +42,7 @@ export const buildThemeCss = Effect.fn("Theme.build")(function* (
               sources: [
                 ...SOURCE_DIRS.map((dir) => ({
                   base: join(p.framio, dir),
-                  pattern: "**/*.{ts,tsx}",
+                  pattern: "**/*.{ts,tsx,js,jsx}",
                   negated: false,
                 })),
                 ...compiler.sources,

@@ -1,5 +1,19 @@
 import { publishIfUnchanged } from "../../platform/atomic-file";
 import ts from "typescript";
+import {
+  parseSource,
+  openingOf,
+  elementCapabilities,
+  sourceRevision,
+} from "../source-edits";
+import {
+  SOURCE_ATTRIBUTE,
+  EDIT_ATTRIBUTE,
+  LOCK_ATTRIBUTE,
+  formatSourceRef,
+  encodeCapabilities,
+  encodeLocks,
+} from "../../contracts/edits";
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -38,9 +52,28 @@ function attributes(text: string, file: string) {
   return { ast, found };
 }
 export function injectLayerSources(text: string, file: string) {
-  const { ast, found } = attributes(text, file);
-  let result = text;
-  for (const attr of found.reverse()) {
+  const { ast, elements, layerAttributes } = parseSource(text, file);
+  const revision = sourceRevision(text);
+  const edits: { offset: number; text: string }[] = [];
+  const relativeFile = file.replace(/\\/g, "/").replace(/^.*\/\.framio\//, "");
+  const escape = (value: string) =>
+    value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  if (/^(pages|components)\//.test(relativeFile)) {
+    for (const node of elements) {
+      const { allowed, locks } = elementCapabilities(node, relativeFile);
+      const ref = formatSourceRef({
+        file: relativeFile,
+        start: node.getStart(ast),
+        end: node.end,
+        rev: revision,
+      });
+      edits.push({
+        offset: openingOf(node).tagName.end,
+        text: ` ${SOURCE_ATTRIBUTE}="${escape(ref)}" ${EDIT_ATTRIBUTE}="${encodeCapabilities(allowed)}" ${LOCK_ATTRIBUTE}="${encodeLocks(locks)}"`,
+      });
+    }
+  }
+  for (const attr of layerAttributes) {
     const peers = (attr.parent as ts.JsxAttributes).properties;
     if (
       peers.filter(
@@ -50,26 +83,32 @@ export function injectLayerSources(text: string, file: string) {
         (p) =>
           ts.isJsxAttribute(p) &&
           p.name.getText(ast) === "data-framio-layer-source",
-      )
+      ) ||
+      peers.some((p) => ts.isJsxSpreadAttribute(p) && p.pos > attr.pos)
     )
       continue;
-    if (peers.some((p) => ts.isJsxSpreadAttribute(p) && p.pos > attr.pos))
-      continue;
     const init = attr.initializer;
-    const value = init && ts.isStringLiteral(init) ? init.text : null;
     const source = JSON.stringify({
       file,
       start: init?.getStart(ast) ?? attr.end,
       end: init?.end ?? attr.end,
-      revision: revision(text),
-      value,
+      revision,
+      value: init && ts.isStringLiteral(init) ? init.text : null,
     });
-    result =
-      result.slice(0, attr.end) +
-      ` data-framio-layer-source={${JSON.stringify(source)}}` +
-      result.slice(attr.end);
+    edits.push({
+      offset: attr.end,
+      text: ` data-framio-layer-source={${JSON.stringify(source)}}`,
+    });
   }
-  return result;
+  // Descending offsets keep every location tied to the unmodified input.
+  const chunks: string[] = [];
+  let cursor = text.length;
+  for (const edit of edits.sort((a, b) => b.offset - a.offset)) {
+    chunks.push(text.slice(edit.offset, cursor), edit.text);
+    cursor = edit.offset;
+  }
+  chunks.push(text.slice(0, cursor));
+  return chunks.reverse().join("");
 }
 export const editLayerSource = Effect.fn("Layers.editSource")(function* (
   text: string,

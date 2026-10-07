@@ -5,6 +5,12 @@ import {
   RenameResponse,
 } from "./layers";
 import { CommentOperation, CommentResponse } from "./comments";
+import {
+  EditOperation,
+  EditResponse,
+  SourcePatch,
+  PatchResponse,
+} from "./edits";
 import * as Schema from "effect/Schema";
 import {
   HttpApi,
@@ -47,6 +53,14 @@ export class ProjectApi extends HttpApiGroup.make("project").add(
   HttpApiEndpoint.post("renameLayer", "/api/layers/rename", {
     payload: RenameRequest,
     success: RenameResponse,
+  }),
+  HttpApiEndpoint.post("edit", "/api/edits", {
+    payload: EditOperation,
+    success: EditResponse,
+  }),
+  HttpApiEndpoint.post("patch", "/api/edits/patch", {
+    payload: SourcePatch,
+    success: PatchResponse,
   }),
   HttpApiEndpoint.get("health", "/api/health", { success: Health }),
   HttpApiEndpoint.get("snapshot", "/api/project", { success: Snapshot }),
